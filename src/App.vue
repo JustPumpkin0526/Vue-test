@@ -1,7 +1,7 @@
 <script setup>
-import VSSUI from "./components/VSSUI.vue"
+import Vue-test from "./components/Vue-test.vue"
 </script>
 
 <template>
-  <VSSUI />
+  <Vue-test />
 </template>
