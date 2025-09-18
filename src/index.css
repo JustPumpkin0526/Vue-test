@@ -1,3 +1,26 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+html, body {
+    background-color: #F5F5F5;
+    margin: 0;
+    padding: 0;
+}
+
+header {
+    display: flex;
+    width: 99.2%;
+    height : 48px;
+    background-color: lightblue;
+    margin: 11px;
+    align-items: center;
+}
+header h1 {
+    font-size: 20px;
+    
+}
+header img {
+    width: 150px;
+    height: auto;
+}
