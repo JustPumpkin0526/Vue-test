@@ -7,7 +7,7 @@
       <div
         class="relative border border-gray-400 rounded-lg p-8 transition-colors duration-300"
         :class="videoUrl
-                  ? 'bg-gray-200 cursor-not-allowed opacity-70'
+                  ? 'bg-gray-200 cursor-not-allowed'
                   : 'bg-white cursor-pointer hover:bg-gray-100'"
         @dragover.prevent="!videoUrl && handleDragOver($event)"
         @drop.prevent="!videoUrl && handleDrop($event)"
@@ -29,12 +29,13 @@
           accept="video/*"
         >
 
-        <!-- 안내 글씨 (정렬 없음) -->
-        <p v-if="!videoUrl">
+        <!-- 안내 글씨 -->
+        <p v-if="!videoUrl" class="flex flex-col text-center">
           <span class="text-[#00008B]">Drop Video Here</span> <br>
           <span class="text-[#A0A0A0]">- or -</span> <br>
           <span class="text-[#00008B]">Click to Upload</span>
         </p>
+        
 
         <!-- 업로드된 동영상 -->
         <video 
@@ -46,7 +47,7 @@
         ></video>
       </div>
 
-      <!-- 삭제 버튼 (항상 존재) -->
+      <!-- Delete / Reset 버튼 -->
       <button 
         class="mt-2 px-4 py-2 rounded text-white w-full"
         :class="videoUrl ? 'bg-red-500 hover:bg-red-600 cursor-pointer' : 'bg-gray-400 cursor-not-allowed'"
@@ -56,32 +57,41 @@
         Delete / Reset
       </button>
 
-      <!-- 라우터 버튼 3개 (업로드 박스 아래) -->
-        <div class="flex gap-4 mt-2">
-          <button
-            class="menu-button"
-            :class="{ active: $route.path === '/prompt' }"
-            @click="$router.push('/prompt')"
-          >
-            Prompt
-          </button>
-          <button
-            class="menu-button"
-            :class="{ active: $route.path === '/samples' }"
-            @click="$router.push('/samples')"
-          >
-            Samples
-          </button>
-          <button
-            class="menu-button"
-            :class="{ active: $route.path === '/create-alerts' }"
-            @click="$router.push('/create-alerts')"
-          >
-            Create Alerts
-          </button>
-        </div>
+      <!-- 라우터 버튼 3개 (가로 정렬, 상단 메뉴 스타일 재사용) -->
+      <div class="flex gap-4 mt-2">
+        <button
+          class="menu-button"
+          :class="{ active: $route.path === '/prompt' }"
+          @click="prompt_menu()"
+        >
+          Prompt
+        </button>
+        <button
+          class="menu-button"
+          :class="{ active: $route.path === '/samples' }"
+          @click="$router.push('/samples')"
+        >
+          Samples
+        </button>
+        <button
+          class="menu-button"
+          :class="{ active: $route.path === '/create-alerts' }"
+          @click="$router.push('/create-alerts')"
+        >
+          Create Alerts
+        </button>
+      </div>
 
+      <div class="flex w-96 h-16 bg-white">
+        <h3>chunk size</h3>
+        <select class="w-1/1">
+          <option value="None">No chunking</option>
+        </select>
+      
+        </input>
+      </div>
     </div>
+
   </div>
 </template>
 
@@ -122,4 +132,47 @@ const resetVideo = () => {
   files.value = []
   fileInput.value.value = null
 }
+
+function prompt_menu(){
+
+}
 </script>
+
+<style scoped>
+/* 기존 상단 메뉴 스타일 재사용 */
+.menu-button {
+  background: none;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+  padding: 6px 0;
+  position: relative;
+  color: #333;
+  transition: color 0.3s ease;
+}
+
+.menu-button:hover {
+  color: #000;
+}
+
+.menu-button::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: darkblue;
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.3s ease;
+}
+
+.menu-button.active {
+  color: darkblue;
+}
+
+.menu-button.active::after {
+  transform: scaleX(1);
+}
+</style>
