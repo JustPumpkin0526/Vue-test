@@ -1,5 +1,5 @@
 <script setup>
-import VSSUI from "./components/VSSUI.vue"
+import VSSUI from "./UI/VSSUI.vue"
 </script>
 
 <template>
