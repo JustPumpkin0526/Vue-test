@@ -5,7 +5,7 @@
       <img
         src="https://i.namu.wiki/i/lQVjIft7_aibqvMFpd7jJVgaccD646_WL0QrXFVbNlsdd2LDnt6YW1rCeVcdDu5BQCKxxOy24yv9mKoE8BMmCymasJfDN0royjxiG-8wr7qr6ak_AWmNyEIkXf1sEg0Qd8laY797q9uIYKzN8fznTg.webp"
         alt="logo"
-        class="w-32 h-18 mr-4"
+        class="w-32 h-18 mr-4 rounded-lg shadow"
       />
       <span class="font-bold text-2xl text-white drop-shadow-md">
         | VIDEO SEARCH AND SUMMARIZATION
@@ -19,7 +19,7 @@
         :key="tab"
         @click="activeTab = tab"
         :class="activeTab === tab
-          ? 'bg-blue-100 text-blue-700 rounded-t-lg font-semibold border-b-2 border-blue-600'
+          ? 'bg-green-100 text-green-700 rounded-t-lg font-semibold border-b-2 border-green-600'
           : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-t-lg'"
         class="py-2 px-5 transition"
       >

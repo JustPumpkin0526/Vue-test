@@ -232,7 +232,7 @@ class PromptWizard:
 #        print(f"Question: {q} \n Answer: {a}\n")
 
 
-@app.post("/gradio_api/queue/join")
+@app.post("/vss-summarize")
 async def gradio_api(
     file: UploadFile,
     prompt: str = Form(...),
