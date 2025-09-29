@@ -6,7 +6,7 @@ Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://
 
 # 종속성
 
-- nodejs version : v22.19.0
+- nodejs version : v22.19.0 (최소 요구 버전)
 - npm version : 10.9.3
 - vue version : 3.5.21
 
