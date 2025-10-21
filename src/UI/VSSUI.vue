@@ -2,11 +2,7 @@
   <div class="min-h-screen bg-gray-50 flex flex-col">
     <!-- Header -->
     <header class="m-2 bg-gradient-to-r from-blue-400 to-blue-600 text-white flex items-center px-6 py-3 rounded-xl shadow-md">
-      <img
-        src="https://i.namu.wiki/i/lQVjIft7_aibqvMFpd7jJVgaccD646_WL0QrXFVbNlsdd2LDnt6YW1rCeVcdDu5BQCKxxOy24yv9mKoE8BMmCymasJfDN0royjxiG-8wr7qr6ak_AWmNyEIkXf1sEg0Qd8laY797q9uIYKzN8fznTg.webp"
-        alt="logo"
-        class="w-32 h-18 mr-4"
-      />
+      <img :src="intvixLogo" alt="logo" class="w-32 h-18 mr-4" />
       <span class="font-bold text-2xl text-white drop-shadow-md">
         | VIDEO SEARCH AND SUMMARIZATION
       </span>
@@ -310,6 +306,7 @@
 </template>
 
 <script setup>
+import intvixLogo from '../logo-img/intvix_logo.png' // 파일 위치에 따라 경로 조정
 import { useVssUi } from '../script/VSS_script.js'
 
 const {

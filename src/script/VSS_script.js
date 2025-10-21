@@ -118,7 +118,7 @@ export function useVssUi() {
     formData.append('saprompt', accordionItems[2].model)
     formData.append('chunk_duration', selected.value)
 
-    response.value = '⏳ Sending video + prompt to backend for summarization...'
+    response.value = '⏳ Video summarizing...'
 
     try {
       const res = await fetch(VSS_API_URL, { method: 'POST', body: formData })
