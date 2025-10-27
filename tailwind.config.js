@@ -1,8 +1,23 @@
-export default {
+/***************************************************
+ * tailwind.config.cjs
+ **************************************************/
+module.exports = {
   content: [
     "./index.html",
-    "./src/**/*.{vue,js,ts,jsx,tsx}",
+    "./src/**/*.{vue,js,ts}"
   ],
-  theme: { extend: {} },
-  plugins: [],
-}
+  theme: {
+    extend: {
+      colors: {
+        vix: {
+          primary: "#2d6cdf",
+          ring: "#7aa4ff"
+        }
+      },
+      borderRadius: {
+        xl2: "1rem"
+      }
+    }
+  },
+  plugins: []
+};

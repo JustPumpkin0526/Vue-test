@@ -1,0 +1,15 @@
+/***************************************************
+ * src/assets/tailwind.css
+ **************************************************/
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ring: theme(colors.vix.ring);
+}
+
+input:focus, textarea:focus, select:focus, button:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ring, rgba(125, 180, 255, 0.6));
+}
