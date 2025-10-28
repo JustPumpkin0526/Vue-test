@@ -10,11 +10,8 @@
       <div
         class="aspect-video h-92 rounded-xl mb-3 flex items-center justify-center text-gray-600 transition border-2 cursor-pointer"
         :class="[isDragging ? 'bg-blue-100 border-blue-400' : 'bg-gray-300 border-transparent']"
-        @dragover.prevent="onDragOver"
-        @dragleave.prevent="onDragLeave"
-        @drop.prevent="onDrop"
-        @click="onVideoAreaClick"
-      >
+        @dragover.prevent="onDragOver" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop"
+        @click="onVideoAreaClick">
         <template v-if="!videoUrl">
           <span v-if="!isDragging">
             <span class="font-bold text-blue-500 flex flex-col items-center justify-center text-center w-full">
@@ -30,12 +27,8 @@
 
       <!-- 프롬프트 입력 블럭 -->
       <div class="mb-3">
-        <input
-          v-model="prompt"
-          type="text"
-          class="w-full border rounded-md px-3 py-2 mt-2"
-          placeholder="프롬프트를 입력하세요."
-        />
+        <input v-model="prompt" type="text" class="w-full border rounded-md px-3 py-2 mt-2"
+          placeholder="프롬프트를 입력하세요." />
       </div>
 
       <div class="flex items-center gap-3">
@@ -65,10 +58,7 @@
       </div>
 
       <div class="mt-4">
-        <PromptInput
-          v-model="prompt"
-          placeholder="typing ask here..."
-          @ask="onAsk" />
+        <PromptInput v-model="prompt" placeholder="typing ask here..." @ask="onAsk" />
       </div>
 
       <div class="mt-3 flex gap-2">
@@ -83,6 +73,7 @@
 import { ref } from "vue";
 import PromptInput from "@/components/PromptInput.vue";
 import api from "@/services/api";
+import axios from "axios";
 
 const videoFile = ref(null);
 const videoUrl = ref("");
@@ -126,8 +117,23 @@ function onDrop(e) {
 
 async function runInference() {
   if (!videoFile.value) return;
-  const res = await api.runVssInference({ fileName: videoFile.value.name });
-  result.value = res.summary;
+  const formData = new FormData();
+  formData.append("file", videoFile);
+  formData.append("purpose", "vision");
+  formData.append("media_type", "video");
+  const uploadRes = await axios.post("http://172.16.7.64:8100/files", formData);
+  const fileId = uploadRes.data.id;
+
+  const summarizeRes = await axios.post("http://172.16.7.64:8100/summarize", {
+    id: fileId,
+    prompt: "요약 프롬프트",
+    caption_summarization_prompt: "캡션 프롬프트",
+    summary_aggregation_prompt: "어그리게이션 프롬프트",
+    model: "모델명",
+    chunk_duration: 20,
+    enable_chat: true
+  });
+  console.log(summarizeRes.data);
 }
 
 async function onAsk(q) {
@@ -137,6 +143,19 @@ async function onAsk(q) {
 
 function saveResult() {
   api.saveSummary({ content: result.value });
+  // 썸네일/메타데이터를 localStorage에 저장
+  if (videoFile.value && videoUrl.value) {
+    const saved = JSON.parse(localStorage.getItem('vss_videos') || '[]');
+    const newItem = {
+      id: Date.now(),
+      title: videoFile.value.name,
+      date: new Date().toISOString().slice(0, 10),
+      url: videoUrl.value,
+      summary: result.value
+    };
+    saved.unshift(newItem);
+    localStorage.setItem('vss_videos', JSON.stringify(saved));
+  }
   alert("요약 결과를 저장했습니다.");
 }
 

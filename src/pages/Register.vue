@@ -32,7 +32,7 @@
 
 <script setup>
 import { ref } from "vue";
-import api from "@/services/api";
+import axios from "axios";
 
 const id = ref("");
 const pw = ref("");
@@ -46,8 +46,25 @@ function sendCode() {
   alert(`보안 코드가 ${email.value}로 전송되었습니다.`);
 }
 function resend() { alert("30초 이후 활성화됩니다."); }
-function register() {
-  const ok = api.register({ id: id.value, pw: pw.value, email: email.value, code: code.value });
-  alert(ok ? "가입 완료" : "조건 불충족 또는 기존 계정 존재");
+
+async function register() {
+  try {
+    const res = await axios.post("http://localhost:8001/register", {
+      username: id.value,
+      password: pw.value,
+      email: email.value
+    });
+    alert(res.data.message || "가입 완료");
+    id.value = "";
+    pw.value = "";
+    email.value = "";
+    code.value = "";
+  } catch (err) {
+    if (err.response && err.response.data && err.response.data.detail) {
+      alert(err.response.data.detail);
+    } else {
+      alert("회원가입 중 오류가 발생했습니다.");
+    }
+  }
 }
 </script>

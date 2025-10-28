@@ -2,7 +2,7 @@
   <div class="max-w-md mx-auto rounded-2xl border p-6 bg-gray-50">
     <h2 class="text-xl font-semibold mb-4">로그인</h2>
 
-    <label class="block text-sm mb-1">ID / Email</label>
+    <label class="block text-sm mb-1">ID</label>
     <input v-model="id" class="w-full border rounded-md px-3 py-2 mb-3" />
 
     <label class="block text-sm mb-1">비밀번호</label>
@@ -21,16 +21,33 @@
 <script setup>
 import { ref } from "vue";
 import { useRouter } from "vue-router";
-import api from "@/services/api";
+import axios from "axios";
 
 const router = useRouter();
 const id = ref("");
 const pw = ref("");
 
-function login() {
-  const ok = api.login({ id: id.value, pw: pw.value });
-  if (!ok) return alert("가입되지 않았거나 비밀번호가 올바르지 않습니다.");
-  router.push("/summary");
+async function login() {
+  try {
+    const res = await axios.post("http://localhost:8001/login", {
+      username: id.value,
+      password: pw.value
+    });
+    if (res.data && res.data.success) {
+      // 로그인 성공 시
+      localStorage.setItem("vss_user_id", id.value);
+      window.dispatchEvent(new Event("vss-login"));
+      router.push("/summary");
+    } else {
+      alert(res.data.message || "가입되지 않았거나 비밀번호가 올바르지 않습니다.");
+    }
+  } catch (err) {
+    if (err.response && err.response.data && err.response.data.detail) {
+      alert(err.response.data.detail);
+    } else {
+      alert("로그인 중 오류가 발생했습니다.");
+    }
+  }
 }
 function resetPw() {
   alert("사용자 인증 후 비밀번호 재설정 진행");

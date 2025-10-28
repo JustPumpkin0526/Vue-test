@@ -1,9 +1,68 @@
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, Form, UploadFile, Body, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 import requests
+import mariadb
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+# 로그인용 모델
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+# 로그인 엔드포인트
+@app.post("/login")
+def login(data: LoginRequest = Body(...)):
+    cursor.execute(
+        "SELECT PW FROM vss_user WHERE ID = ?",
+        (data.username,)
+    )
+    row = cursor.fetchone()
+    if row is None:
+        return {"success": False, "message": "가입되지 않은 ID입니다."}
+    db_pw = row[0]
+    if db_pw != data.password:
+        return {"success": False, "message": "비밀번호가 올바르지 않습니다."}
+    return {"success": True}
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # 또는 ["*"]로 모든 출처 허용(개발용)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# DB 연결 설정
+conn = mariadb.connect(
+    user="root",
+    password="pass0001!",
+    host="127.0.0.1",
+    port=3306,
+    database="vss"
+)
+cursor = conn.cursor()
+
+class User(BaseModel):
+    username: str
+    password: str
+    email: str
+
+@app.post("/register")
+def register(user: User):
+    try:
+        cursor.execute(
+            "INSERT INTO vss_user (ID, PW, EMAIL) VALUES (?, ?, ?)",
+            (user.username, user.password, user.email)
+        )
+        conn.commit()
+        return {"message": "회원가입 성공"}
+    except mariadb.IntegrityError:
+        raise HTTPException(status_code=400, detail="이미 존재하는 사용자입니다.")
+
 
 # CORS 설정 (Vue와 통신 가능하게)
 app.add_middleware(

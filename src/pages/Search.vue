@@ -12,8 +12,9 @@
 
     <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
       <div v-for="v in items" :key="v.id" class="border rounded-xl p-3 bg-gray-50">
-        <div class="aspect-video bg-gray-200 mb-2 rounded-md flex items-center justify-center text-gray-500">
-          썸네일
+        <div class="aspect-video bg-gray-200 mb-2 rounded-md flex items-center justify-center text-gray-500 overflow-hidden">
+          <video v-if="v.url" :src="v.url" class="w-full h-full object-cover rounded-md" />
+          <span v-else>썸네일</span>
         </div>
         <div class="font-semibold">{{ v.title }}</div>
         <div class="text-xs text-gray-500">업로드: {{ v.date }}</div>
@@ -41,13 +42,11 @@ const items = ref([]);
 const page = ref(1);
 const pages = ref(0);
 
-async function search() {
-  // 실제 API 연동 시 아래 주석 해제
-  // const res = await api.searchVideos({ q: q.value, filter: filter.value, page: page.value });
-  // items.value = res.items;
-  // pages.value = res.pages;
-  items.value = [];
-  pages.value = 0;
+function search() {
+  // localStorage에서 저장된 동영상 리스트 불러오기
+  const saved = JSON.parse(localStorage.getItem('vss_videos') || '[]');
+  items.value = saved;
+  pages.value = 1;
 }
 search();
 
@@ -58,6 +57,9 @@ function rerun(v) {
   // 실제 구현 필요
 }
 function remove(v) {
-  // 실제 구현 필요
+  const saved = JSON.parse(localStorage.getItem('vss_videos') || '[]');
+  const filtered = saved.filter(item => item.id !== v.id);
+  localStorage.setItem('vss_videos', JSON.stringify(filtered));
+  search();
 }
 </script>

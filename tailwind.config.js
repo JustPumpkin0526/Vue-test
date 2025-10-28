@@ -8,6 +8,9 @@ module.exports = {
   ],
   theme: {
     extend: {
+      transitionProperty: {
+        'width': 'width'
+      },
       colors: {
         vix: {
           primary: "#2d6cdf",

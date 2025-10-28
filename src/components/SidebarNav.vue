@@ -1,44 +1,49 @@
 <template>
-  <aside class="w-56 shrink-0 border-r bg-gray-100 p-4 flex flex-col justify-between">
+  <aside :class="[collapsed ? 'w-18 text-center' : 'w-56', 'shrink-0 border-r bg-gray-100 p-4 flex flex-col justify-between transition-all duration-200']">
     <nav class="space-y-2">
       <RouterLink
         to="/summary"
         class="block rounded-md px-3 py-2 hover:bg-white hover:shadow"
         :class="isActive('/summary')">
-        Summary
+        {{collapsed ? '✦' : 'Summary'}}
       </RouterLink>
       <RouterLink
         to="/search"
         class="block rounded-md px-3 py-2 hover:bg-white hover:shadow"
         :class="isActive('/search')">
-        Search
+        {{collapsed ? '🔎' : 'Search'}}
       </RouterLink>
       <RouterLink
         to="/report"
         class="block rounded-md px-3 py-2 hover:bg-white hover:shadow"
         :class="isActive('/report')">
-        Report
+        {{collapsed ? '📄' : 'Report'}}
       </RouterLink>
       <RouterLink
         to="/setting"
         class="block rounded-md px-3 py-2 hover:bg-white hover:shadow"
         :class="isActive('/setting')">
-        Setting
+        {{collapsed ? '⚙' : 'Setting'}}
       </RouterLink>
     </nav>
 
-    <div class="space-y-2">
-      <button class="w-full rounded-md px-3 py-2 bg-white hover:shadow text-left">Collapse</button>
+    <div class="space-y-2 flex flex-col items-center">
+      <button :class="[collapsed ? 'text-center' : 'w-full', 'rounded-md px-3 py-2 bg-white hover:shadow text-left ml-auto']" @click="toggleCollapse">
+        {{ collapsed ? '>>' : 'Collapse' }}
+      </button>
     </div>
   </aside>
 </template>
 
 <script setup>
+import { ref } from 'vue';
 import { useRoute } from "vue-router";
 const route = useRoute();
 const isActive = (path) =>
   route.path.startsWith(path) ? "bg-white shadow text-vix-primary font-medium" : "text-gray-700";
 
-import { ref } from "vue";
-const activeTab = ref("summary");
+const collapsed = ref(false);
+function toggleCollapse() {
+  collapsed.value = !collapsed.value;
+}
 </script>

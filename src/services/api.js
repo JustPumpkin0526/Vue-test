@@ -48,11 +48,4 @@ export default {
     }));
     return { items, pages: 3 };
   },
-
-  saveSetting(payload) { console.log("Saved settings:", payload); },
-  login({ id, pw }) { return !!(id && pw && pw.length >= 4); },
-  register({ id, pw, email, code }) {
-    const pwOk = /(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}/.test(pw || "");
-    return !!(id && pwOk && email && code);
-  }
 };
