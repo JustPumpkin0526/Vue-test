@@ -2,16 +2,16 @@
   <aside :class="[collapsed ? 'w-18 text-center' : 'w-56', 'shrink-0 border-r bg-gray-100 p-4 flex flex-col justify-between transition-all duration-200']">
     <nav class="space-y-2">
       <RouterLink
+        to="/video_list"
+        class="block rounded-md px-3 py-2 hover:bg-white hover:shadow"
+        :class="isActive('/video_list')">
+        {{collapsed ? '🔎' : 'Video List'}}
+      </RouterLink>
+      <RouterLink
         to="/summary"
         class="block rounded-md px-3 py-2 hover:bg-white hover:shadow"
         :class="isActive('/summary')">
         {{collapsed ? '✦' : 'Summary'}}
-      </RouterLink>
-      <RouterLink
-        to="/search"
-        class="block rounded-md px-3 py-2 hover:bg-white hover:shadow"
-        :class="isActive('/search')">
-        {{collapsed ? '🔎' : 'Search'}}
       </RouterLink>
       <RouterLink
         to="/report"
