@@ -70,10 +70,12 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, inject } from "vue";
 import PromptInput from "@/components/PromptInput.vue";
 import api from "@/services/api";
 import axios from "axios";
+
+const summaryParams = inject("summaryParams"); // Setting.vue에서 제공한 파라미터
 
 const videoFile = ref(null);
 const videoUrl = ref("");
@@ -81,8 +83,8 @@ const prompt = ref("");
 const result = ref("");
 const isDragging = ref(false);
 const fileInputRef = ref(null);
+
 function onVideoAreaClick() {
-  // 동영상이 이미 업로드된 경우에는 클릭 시 업로드창 열지 않음
   if (!videoUrl.value && fileInputRef.value) {
     fileInputRef.value.click();
   }
@@ -118,22 +120,47 @@ function onDrop(e) {
 async function runInference() {
   if (!videoFile.value) return;
   const formData = new FormData();
-  formData.append("file", videoFile);
+  formData.append("file", videoFile.value);
   formData.append("purpose", "vision");
   formData.append("media_type", "video");
+
+  // Setting.vue에서 가져온 파라미터 추가
+  if (summaryParams) {
+    formData.append("chunk_duration", summaryParams.chunk.value);
+    formData.append("caption_summarization_prompt", summaryParams.captionPrompt.value);
+    formData.append("summary_aggregation_prompt", summaryParams.aggregationPrompt.value);
+    formData.append("num_frames_per_chunk", summaryParams.nfmc.value);
+    formData.append("frame_width", summaryParams.frameWidth.value);
+    formData.append("frame_height", summaryParams.frameHeight.value);
+    formData.append("top_k", summaryParams.topk.value);
+    formData.append("top_p", summaryParams.topp.value);
+    formData.append("temperature", summaryParams.temp.value);
+    formData.append("max_tokens", summaryParams.maxTokens.value);
+    formData.append("seed", summaryParams.seed.value);
+    formData.append("batch_size", summaryParams.batch.value);
+    formData.append("rag_batch_size", summaryParams.RAG_batch.value);
+    formData.append("rag_top_k", summaryParams.RAG_topk.value);
+    formData.append("summary_top_p", summaryParams.S_TopP.value);
+    formData.append("summary_temperature", summaryParams.S_TEMPERATURE.value);
+    formData.append("summary_max_tokens", summaryParams.SMAX_TOKENS.value);
+    formData.append("chat_top_p", summaryParams.C_TopP.value);
+    formData.append("chat_temperature", summaryParams.C_TEMPERATURE.value);
+    formData.append("chat_max_tokens", summaryParams.C_MAX_TOKENS.value);
+    formData.append("alert_top_p", summaryParams.A_TopP.value);
+    formData.append("alert_temperature", summaryParams.A_TEMPERATURE.value);
+    formData.append("alert_max_tokens", summaryParams.A_MAX_TOKENS.value);
+  }
+
   const uploadRes = await axios.post("http://172.16.7.64:8100/files", formData);
   const fileId = uploadRes.data.id;
 
   const summarizeRes = await axios.post("http://172.16.7.64:8100/summarize", {
     id: fileId,
-    prompt: "요약 프롬프트",
-    caption_summarization_prompt: "캡션 프롬프트",
-    summary_aggregation_prompt: "어그리게이션 프롬프트",
-    model: "모델명",
-    chunk_duration: 20,
-    enable_chat: true
+    prompt: prompt.value || "요약 프롬프트",
+    // 나머지 파라미터도 필요시 추가
   });
-  console.log(summarizeRes.data);
+
+  result.value = summarizeRes.data.summary || JSON.stringify(summarizeRes.data);
 }
 
 async function onAsk(q) {

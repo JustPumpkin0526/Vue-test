@@ -379,8 +379,7 @@
 </template>
 
 <script setup>
-
-import { ref } from "vue";
+import { ref, provide } from "vue";
 
 //VLM parameters
 const showVlmParams = ref(true);
@@ -479,4 +478,29 @@ const resetA_MAX_TOKENS = () => {
   A_MAX_TOKENS.value = 2048;
 };
 
+provide("summaryParams", {
+  chunk,
+  captionPrompt,
+  aggregationPrompt,
+  nfmc,
+  frameWidth,
+  frameHeight,
+  topk,
+  topp,
+  temp,
+  maxTokens,
+  seed,
+  batch,
+  RAG_batch,
+  RAG_topk,
+  S_TopP,
+  S_TEMPERATURE,
+  SMAX_TOKENS,
+  C_TopP,
+  C_TEMPERATURE,
+  C_MAX_TOKENS,
+  A_TopP,
+  A_TEMPERATURE,
+  A_MAX_TOKENS
+});
 </script>
