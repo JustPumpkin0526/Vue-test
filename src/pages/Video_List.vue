@@ -17,9 +17,11 @@
       <div class="w-[100%] h-[90%] border-[1px] border-black bg-white rounded-[12px]">
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 p-6">
           <div v-for="video in items" :key="video.id"
-            class="flex flex-col items-center justify-center bg-gray-100 rounded-lg shadow hover:bg-blue-100 cursor-pointer p-3 border border-gray-300">
-            <div class="w-32 h-20 flex items-center justify-center bg-gray-300 rounded mb-2 overflow-hidden relative">
-              <video v-if="video.url" :src="video.url" class="w-32 h-20 object-cover rounded" controls preload="metadata"></video>
+            class="flex flex-col items-center justify-center bg-gray-100 rounded-lg shadow hover:bg-blue-100 cursor-pointer p-3 border border-gray-300"
+            @click="toggleSelect(video.id)">
+            <div class="w-[100%] h-[100%] flex items-center justify-center bg-gray-300 rounded mb-2 overflow-hidden relative">
+              <input type="checkbox" class="absolute top-1 left-1 z-10" v-model="selectedIds" :value="video.id" />
+              <video v-if="video.url" :src="video.url" class="object-cover rounded" controls preload="metadata"></video>
               <span v-else class="text-gray-400">No Thumbnail</span>
               <div v-if="video.title" class="absolute bottom-0 left-0 w-full bg-black bg-opacity-60 text-white text-xs px-1 py-0.5 truncate text-center pointer-events-none">
                 {{ video.title }}
@@ -37,9 +39,18 @@
 </template>
 
 <script setup>
+function toggleSelect(id) {
+  const idx = selectedIds.value.indexOf(id);
+  if (idx === -1) {
+    selectedIds.value.push(id);
+  } else {
+    selectedIds.value.splice(idx, 1);
+  }
+}
 import { ref } from "vue";
 
 const items = ref([]);
+const selectedIds = ref([]);
 
 // 페이지 로드 시 localStorage에서 동영상 목록 불러오기
 if (localStorage.getItem("videoItems")) {
