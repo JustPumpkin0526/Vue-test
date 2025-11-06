@@ -1,65 +1,75 @@
 <template>
-  <div class="space-y-4">
-    <div class="flex items-center gap-3">
-      <input v-model="q" placeholder="동영상명으로 검색" class="w-80 border rounded-md px-3 py-2" />
-      <select v-model="filter" class="border rounded-md px-3 py-2">
-        <option value="">필터 없음</option>
-        <option value="recent">최근 업로드</option>
-        <option value="large">대용량</option>
-      </select>
-      <button class="px-4 py-2 rounded-md bg-vix-primary text-white" @click="search">검색</button>
-    </div>
+  <div id="video_list" class="w-[100%] h-[90%]">
+    <header id="header" class="flex items-center justify-between">
+      <div class="w-[500px] bg-blue-400 text-white text-lg p-3 text-center rounded-lg shadow-md mt-6 ml-12">
+        <p>My Video Storage</p>
+      </div>
+      <div class="flex items-center h-12 mr-12 mt-auto ml-auto">
+        <label
+          class="bg-blue-400 hover:bg-blue-600 text-white px-4 py-2 rounded-lg shadow cursor-pointer flex items-center">
+          <span>Upload Video</span>
+          <input type="file" accept="video/*" class="hidden" @change="handleUpload" />
+        </label>
+      </div>
+    </header>
 
-    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div v-for="v in items" :key="v.id" class="border rounded-xl p-3 bg-gray-50">
-        <div class="aspect-video bg-gray-200 mb-2 rounded-md flex items-center justify-center text-gray-500 overflow-hidden">
-          <video v-if="v.url" :src="v.url" class="w-full h-full object-cover rounded-md" />
-          <span v-else>썸네일</span>
-        </div>
-        <div class="font-semibold">{{ v.title }}</div>
-        <div class="text-xs text-gray-500">업로드: {{ v.date }}</div>
-
-        <div class="mt-2 flex gap-2">
-          <button class="px-3 py-1 rounded bg-gray-100" @click="openItem(v)">열기</button>
-          <button class="px-3 py-1 rounded bg-gray-100" @click="rerun(v)">추가 추론</button>
-          <button class="px-3 py-1 rounded bg-gray-100" @click="remove(v)">삭제</button>
+    <div id="list" class="w-full h-full border-[1px] border-black bg-gray-300 rounded-[12px] p-6 mt-6">
+      <div class="w-[100%] h-[90%] border-[1px] border-black bg-white rounded-[12px]">
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 p-6">
+          <div v-for="video in items" :key="video.id"
+            class="flex flex-col items-center justify-center bg-gray-100 rounded-lg shadow hover:bg-blue-100 cursor-pointer p-3 border border-gray-300">
+            <div class="w-32 h-20 flex items-center justify-center bg-gray-300 rounded mb-2 overflow-hidden relative">
+              <video v-if="video.url" :src="video.url" class="w-32 h-20 object-cover rounded" controls preload="metadata"></video>
+              <span v-else class="text-gray-400">No Thumbnail</span>
+              <div v-if="video.title" class="absolute bottom-0 left-0 w-full bg-black bg-opacity-60 text-white text-xs px-1 py-0.5 truncate text-center pointer-events-none">
+                {{ video.title }}
+              </div>
+            </div>
+            <div class="flex gap-2 mt-1">
+              <button @click="openItem(video)" class="text-blue-500 hover:underline text-xs">열기</button>
+              <button @click="remove(video)" class="text-red-500 hover:underline text-xs">삭제</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-
-    <Pagination :page="page" :pages="pages" @update:page="(p)=>{page=p; search();}" />
   </div>
 </template>
 
 <script setup>
 import { ref } from "vue";
-import Pagination from "@/components/Pagination.vue";
-import api from "@/services/api";
 
-const q = ref("");
-const filter = ref("");
 const items = ref([]);
-const page = ref(1);
-const pages = ref(0);
 
-function search() {
-  // localStorage에서 저장된 동영상 리스트 불러오기
-  const saved = JSON.parse(localStorage.getItem('vss_videos') || '[]');
-  items.value = saved;
-  pages.value = 1;
+// 페이지 로드 시 localStorage에서 동영상 목록 불러오기
+if (localStorage.getItem("videoItems")) {
+  items.value = JSON.parse(localStorage.getItem("videoItems"));
 }
-search();
 
-function openItem(v) {
-  // 실제 구현 필요
+
+async function handleUpload(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith('video/')) {
+    alert('동영상 파일만 업로드할 수 있습니다.');
+    return;
+  }
+  // 동영상 미리보기 URL 생성
+  const url = URL.createObjectURL(file);
+  const video = {
+    id: Date.now(),
+    title: file.name,
+    url,
+    date: new Date().toISOString().slice(0, 10),
+    summary: ""
+  };
+  items.value.unshift(video);
+  localStorage.setItem("videoItems", JSON.stringify(items.value));
 }
-function rerun(v) {
-  // 실제 구현 필요
+
+function remove(video) {
+  items.value = items.value.filter(v => v.id !== video.id);
+  localStorage.setItem("videoItems", JSON.stringify(items.value));
 }
-function remove(v) {
-  const saved = JSON.parse(localStorage.getItem('vss_videos') || '[]');
-  const filtered = saved.filter(item => item.id !== v.id);
-  localStorage.setItem('vss_videos', JSON.stringify(filtered));
-  search();
-}
+
 </script>
