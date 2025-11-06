@@ -29,7 +29,7 @@ const pw = ref("");
 
 async function login() {
   try {
-    const res = await axios.post("http://localhost:8001/login", {
+    const res = await axios.post("http://localhost:8100/login", {
       username: id.value,
       password: pw.value
     });
@@ -37,7 +37,7 @@ async function login() {
       // 로그인 성공 시
       localStorage.setItem("vss_user_id", id.value);
       window.dispatchEvent(new Event("vss-login"));
-      router.push("/summary");
+      router.push("/Video_List");
     } else {
       alert(res.data.message || "가입되지 않았거나 비밀번호가 올바르지 않습니다.");
     }
