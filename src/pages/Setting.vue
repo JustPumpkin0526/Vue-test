@@ -380,6 +380,9 @@
 
 <script setup>
 import { ref, provide } from "vue";
+import { useSettingStore } from '@/stores/settingStore.js';
+const settingStore = useSettingStore();
+import { onMounted } from "vue";
 
 //VLM parameters
 const showVlmParams = ref(true);
@@ -401,6 +404,10 @@ const seed = ref(1);
 
 const reset_TopP = () => {
   topp.value = 1.0;
+onMounted(() => {
+  settingStore.captionPrompt = captionPrompt.value;
+  settingStore.aggregationPrompt = aggregationPrompt.value;
+});
 };
 const reset_Temperature = () => {
   temp.value = 0.4;
