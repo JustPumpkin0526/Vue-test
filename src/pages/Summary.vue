@@ -54,7 +54,7 @@
       <h2 class="font-semibold mb-3">요약 결과</h2>
 
       <div class="h-72 border rounded-xl p-3 bg-gray-50 overflow-auto whitespace-pre-wrap text-sm">
-        {{ result || "추론 결과가 여기에 표시됩니다." }}
+        <textarea v-model="response" readonly class="w-full h-full bg-transparent border-0 resize-none outline-none"></textarea>
       </div>
 
       <div class="mt-4">
@@ -70,17 +70,44 @@
 </template>
 
 <script setup>
-import { ref, inject } from "vue";
+import { ref, inject, onMounted, watch } from "vue";
 import PromptInput from "@/components/PromptInput.vue";
 import api from "@/services/api";
-import axios from "axios";
+import { useSettingStore } from '@/stores/settingStore';
 
 const summaryParams = inject("summaryParams"); // Setting.vue에서 제공한 파라미터
 
-const videoFile = ref(null);
-const videoUrl = ref("");
+const videoFiles = ref([]); // 여러 동영상 파일
+const videoUrls = ref([]); // 각 동영상 미리보기 URL
+// videoFiles가 변경될 때마다 videoUrls도 자동 갱신
+watch(videoFiles, (newFiles) => {
+  videoUrls.value = newFiles.map(f => f.url ? f.url : (f instanceof File ? URL.createObjectURL(f) : ''));
+});
+onMounted(() => {
+  // summarySelectedVideos가 있으면 자동 업로드
+  const selectedVideos = JSON.parse(localStorage.getItem('summarySelectedVideos') || 'null');
+  if (selectedVideos && Array.isArray(selectedVideos) && selectedVideos.length > 0) {
+    videoFiles.value = [];
+    videoUrls.value = [];
+    for (const v of selectedVideos) {
+      // File 객체 대신 미리보기 URL만 사용 (실제 업로드는 불가, 미리보기만)
+      videoFiles.value.push({ name: v.title, url: v.url });
+      videoUrls.value.push(v.url);
+    }
+    selectedIndex.value = 0;
+    // zoomedIndex에 해당하는 videoUrls 값도 세팅
+    if (videoUrls.value.length > 0) {
+      zoomedIndex.value = 0;
+    } else {
+      zoomedIndex.value = null;
+    }
+    // 사용 후 삭제 (원하면 유지 가능)
+    localStorage.removeItem('summarySelectedVideos');
+  }
+});
+const selectedIndex = ref(null); // 선택된 동영상 인덱스
 const prompt = ref("");
-const result = ref("");
+const response = ref("");
 const isDragging = ref(false);
 const fileInputRef = ref(null);
 
@@ -91,9 +118,17 @@ function onVideoAreaClick() {
 }
 
 function onUpload(e) {
-  videoFile.value = e.target.files?.[0] ?? null;
-  if (videoFile.value) {
-    videoUrl.value = URL.createObjectURL(videoFile.value);
+  const files = Array.from(e.target.files ?? []);
+  for (const file of files) {
+    if (file.type.startsWith('video/')) {
+      videoFiles.value.push(file);
+      videoUrls.value.push(URL.createObjectURL(file));
+    }
+  }
+  // input[type=file] value 초기화 (동일 파일 재업로드 가능)
+  if (fileInputRef.value) fileInputRef.value.value = '';
+  if (videoFiles.value.length > 0 && selectedIndex.value === null) {
+    selectedIndex.value = 0;
   }
 }
 
@@ -115,61 +150,104 @@ function onDrop(e) {
       alert('동영상 파일만 업로드할 수 있습니다.');
     }
   }
+  if (videoFiles.value.length > 0 && selectedIndex.value === null) {
+    selectedIndex.value = 0;
+  }
+}
+
+function selectVideo(idx) {
+  selectedIndex.value = idx;
+}
+
+function zoomVideo(idx) {
+  isZoomed.value = true;
+  zoomedIndex.value = idx;
+}
+
+function unzoomVideo() {
+  isZoomed.value = false;
+  zoomedIndex.value = null;
+}
+
+function removeVideo(idx) {
+  // 삭제 전 URL.revokeObjectURL로 메모리 해제
+  if (videoUrls.value[idx]) {
+    try { URL.revokeObjectURL(videoUrls.value[idx]); } catch (e) {}
+  }
+  videoFiles.value.splice(idx, 1);
+  videoUrls.value.splice(idx, 1);
+  if (videoFiles.value.length === 0) {
+    selectedIndex.value = null;
+    isZoomed.value = false;
+    zoomedIndex.value = null;
+  } else if (selectedIndex.value === idx) {
+    selectedIndex.value = 0;
+  } else if (selectedIndex.value > idx) {
+    selectedIndex.value--;
+  }
+  if (isZoomed.value && zoomedIndex.value === idx) {
+    isZoomed.value = false;
+    zoomedIndex.value = null;
+  } else if (isZoomed.value && zoomedIndex.value > idx) {
+    zoomedIndex.value--;
+  }
 }
 
 async function runInference() {
-  if (!videoFile.value) return;
+  const VSS_API_URL = 'http://localhost:8001/vss-summarize'
+  if (videoFiles.value.length === 0) return;
+  // 여러 파일을 서버에 업로드
   const formData = new FormData();
-  formData.append("file", videoFile.value);
-  formData.append("purpose", "vision");
-  formData.append("media_type", "video");
+  formData.append('file', videoFiles.value[0])
+  formData.append('prompt', prompt.value)
+  formData.append('csprompt', settingStore.captionPrompt)
+  formData.append('saprompt', settingStore.aggregationPrompt)
+  formData.append('chunk_duration', settingStore.chunk)
+  formData.append('model', "")
+  formData.append('num_frames_per_chunk', settingStore.nfmc)
+  formData.append('frame_width', settingStore.frameWidth)
+  formData.append('frame_height', settingStore.frameHeight)
+  formData.append('top_k', settingStore.topk)
+  formData.append('top_p', settingStore.topp)
+  formData.append('temperature', settingStore.temp)
+  formData.append('max_tokens', settingStore.maxTokens)
+  formData.append('seed', settingStore.seed)
+  formData.append('batch_size', settingStore.batch)
+  formData.append('rag_batch_size', settingStore.RAG_batch)
+  formData.append('rag_top_k', settingStore.RAG_topk)
+  formData.append('summary_top_p', settingStore.S_TopP)
+  formData.append('summary_temperature', settingStore.S_TEMPERATURE)
+  formData.append('summary_max_tokens', settingStore.SMAX_TOKENS)
+  formData.append('chat_top_p', settingStore.C_TopP)
+  formData.append('chat_temperature', settingStore.C_TEMPERATURE)
+  formData.append('chat_max_tokens', settingStore.C_MAX_TOKENS)
+  formData.append('alert_top_p', settingStore.A_TopP)
+  formData.append('alert_temperature', settingStore.A_TEMPERATURE)
+  formData.append('alert_max_tokens', settingStore.A_MAX_TOKENS)
+  
 
-  // Setting.vue에서 가져온 파라미터 추가
-  if (summaryParams) {
-    formData.append("chunk_duration", summaryParams.chunk.value);
-    formData.append("caption_summarization_prompt", summaryParams.captionPrompt.value);
-    formData.append("summary_aggregation_prompt", summaryParams.aggregationPrompt.value);
-    formData.append("num_frames_per_chunk", summaryParams.nfmc.value);
-    formData.append("frame_width", summaryParams.frameWidth.value);
-    formData.append("frame_height", summaryParams.frameHeight.value);
-    formData.append("top_k", summaryParams.topk.value);
-    formData.append("top_p", summaryParams.topp.value);
-    formData.append("temperature", summaryParams.temp.value);
-    formData.append("max_tokens", summaryParams.maxTokens.value);
-    formData.append("seed", summaryParams.seed.value);
-    formData.append("batch_size", summaryParams.batch.value);
-    formData.append("rag_batch_size", summaryParams.RAG_batch.value);
-    formData.append("rag_top_k", summaryParams.RAG_topk.value);
-    formData.append("summary_top_p", summaryParams.S_TopP.value);
-    formData.append("summary_temperature", summaryParams.S_TEMPERATURE.value);
-    formData.append("summary_max_tokens", summaryParams.SMAX_TOKENS.value);
-    formData.append("chat_top_p", summaryParams.C_TopP.value);
-    formData.append("chat_temperature", summaryParams.C_TEMPERATURE.value);
-    formData.append("chat_max_tokens", summaryParams.C_MAX_TOKENS.value);
-    formData.append("alert_top_p", summaryParams.A_TopP.value);
-    formData.append("alert_temperature", summaryParams.A_TEMPERATURE.value);
-    formData.append("alert_max_tokens", summaryParams.A_MAX_TOKENS.value);
+  response.value = '⏳ Sending video + prompt to backend for summarization...'
+  const startTime = Date.now();
+  try {
+    const res = await fetch(VSS_API_URL, { method: 'POST', body: formData })
+    const data = await res.json();
+    const endTime = Date.now();
+    const elapsed = ((endTime - startTime) / 1000).toFixed(2);
+    response.value = `✅ Summarization Completed!\n\n${data.summary || JSON.stringify(data, null, 2)}\n\n추론 시간: ${elapsed} seconds`;
+  } catch {
+    const endTime = Date.now();
+    const elapsed = ((endTime - startTime) / 1000).toFixed(2);
+    response.value = `❌ Failed to send video. Please check server.\n\n추론 시간: ${elapsed} seconds`;
   }
-
-  const uploadRes = await axios.post("http://172.16.7.64:8100/files", formData);
-  const fileId = uploadRes.data.id;
-
-  const summarizeRes = await axios.post("http://172.16.7.64:8100/summarize", {
-    id: fileId,
-    prompt: prompt.value || "요약 프롬프트",
-    // 나머지 파라미터도 필요시 추가
-  });
-
-  result.value = summarizeRes.data.summary || JSON.stringify(summarizeRes.data);
 }
 
 async function onAsk(q) {
-  const res = await api.askAboutResult({ question: q, context: result.value });
-  result.value += `\n\nQ: ${q}\nA: ${res.answer}`;
+  const res = await api.askAboutResult({ question: q, context: response.value });
+  response.value += `\n\nQ: ${q}\nA: ${res.answer}`;
 }
 
 function saveResult() {
-  api.saveSummary({ content: result.value });
+  api.saveSummary({ content: response.value });
   // 썸네일/메타데이터를 localStorage에 저장
   if (videoFile.value && videoUrl.value) {
     const saved = JSON.parse(localStorage.getItem('vss_videos') || '[]');
@@ -177,8 +255,8 @@ function saveResult() {
       id: Date.now(),
       title: videoFile.value.name,
       date: new Date().toISOString().slice(0, 10),
-      url: videoUrl.value,
-      summary: result.value
+      url: videoUrls.value[selectedIndex.value],
+      summary: response.value
     };
     saved.unshift(newItem);
     localStorage.setItem('vss_videos', JSON.stringify(saved));
@@ -188,7 +266,7 @@ function saveResult() {
 
 function clear() {
   prompt.value = "";
-  result.value = "";
+  response.value = "";
 }
 
 function removeVideo() {
