@@ -12,12 +12,12 @@ import Register from "@/pages/Register.vue";
 
 const routes = [
   { path: "/", redirect: "/video_list" },
-  { path: "/summary", component: Summary },
-  { path: "/video_list", component: Video_List },
-  { path: "/report", component: Report },
-  { path: "/setting", component: Setting },
-  { path: "/login", component: Login },
-  { path: "/register", component: Register }
+  { path: "/summary", name: "Summary", component: Summary },
+  { path: "/video_list", name: "Video_List", component: Video_List },
+  { path: "/report", name: "Report", component: Report },
+  { path: "/setting", name: "Setting", component: Setting },
+  { path: "/login", name: "Login", component: Login },
+  { path: "/register", name: "Register", component: Register }
 ];
 
 const router = createRouter({
