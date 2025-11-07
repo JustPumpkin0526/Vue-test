@@ -49,7 +49,7 @@ function resend() { alert("30초 이후 활성화됩니다."); }
 
 async function register() {
   try {
-    const res = await axios.post("http://localhost:8100/register", {
+    const res = await axios.post("http://localhost:8001/register", {
       username: id.value,
       password: pw.value,
       email: email.value

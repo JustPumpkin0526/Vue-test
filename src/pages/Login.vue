@@ -29,7 +29,7 @@ const pw = ref("");
 
 async function login() {
   try {
-    const res = await axios.post("http://localhost:8100/login", {
+    const res = await axios.post("http://localhost:8001/login", {
       username: id.value,
       password: pw.value
     });
