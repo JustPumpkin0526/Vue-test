@@ -403,17 +403,13 @@ const maxTokens = ref(512);
 const seed = ref(1);
 
 const reset_TopP = () => {
-  topp.value = 1.0;
-onMounted(() => {
-  settingStore.captionPrompt = captionPrompt.value;
-  settingStore.aggregationPrompt = aggregationPrompt.value;
-});
+  settingStore.topp = 1.0;
 };
 const reset_Temperature = () => {
-  temp.value = 0.4;
+  settingStore.temp = 0.4;
 };
 const reset_MaxTokens = () => {
-  maxTokens.value = 512;
+  settingStore.maxTokens = 512;
 };
 
 //RAG parameters
@@ -436,13 +432,13 @@ const S_TEMPERATURE = ref(0.2);
 const SMAX_TOKENS = ref(2048);
 
 const resetS_TopP = () => {
-  S_TopP.value = 0.7;
+  settingStore.S_TopP = 0.7;
 };
 const resetS_TEMPERATURE = () => {
-  S_TEMPERATURE.value = 0.2;
+  settingStore.S_TEMPERATURE = 0.2;
 };
 const resetSMAX_TOKENS = () => {
-  SMAX_TOKENS.value = 2048;
+  settingStore.SMAX_TOKENS = 2048;
 };
 
 //Chat parameters
@@ -456,13 +452,13 @@ const C_TEMPERATURE = ref(0.2);
 const C_MAX_TOKENS = ref(2048);
 
 const resetC_TopP = () => {
-  C_TopP.value = 0.7;
+  settingStore.C_TopP = 0.7;
 };
 const resetC_TEMPERATURE = () => {
-  C_TEMPERATURE.value = 0.2;
+  settingStore.C_TEMPERATURE = 0.2;
 };
 const resetC_MAX_TOKENS = () => {
-  C_MAX_TOKENS.value = 2048;
+  settingStore.C_MAX_TOKENS = 2048;
 };
 
 //Alert parameters
@@ -476,13 +472,13 @@ const A_TEMPERATURE = ref(0.2);
 const A_MAX_TOKENS = ref(2048);
 
 const resetA_TopP = () => {
-  A_TopP.value = 0.7;
+  settingStore.A_TopP = 0.7;
 };
 const resetA_TEMPERATURE = () => {
-  A_TEMPERATURE.value = 0.2;
+  settingStore.A_TEMPERATURE = 0.2;
 };
 const resetA_MAX_TOKENS = () => {
-  A_MAX_TOKENS.value = 2048;
+  settingStore.A_MAX_TOKENS = 2048;
 };
 
 provide("summaryParams", {
