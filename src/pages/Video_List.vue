@@ -78,8 +78,15 @@
 <script setup>
 import { ref } from "vue";
 import { useRouter } from 'vue-router';
+import { useSettingStore } from '@/stores/settingStore';
+import { useSummaryVideoStore } from '@/stores/summaryVideoStore';
+
 const router = useRouter();
 const showDeletePopup = ref(false);
+const items = ref([]);
+const selectedIds = ref([]);
+const summaryVideoStore = useSummaryVideoStore();
+
 function toggleSelect(id) {
   const idx = selectedIds.value.indexOf(id);
   if (idx === -1) {
@@ -88,9 +95,6 @@ function toggleSelect(id) {
     selectedIds.value.splice(idx, 1);
   }
 }
-
-const items = ref([]);
-const selectedIds = ref([]);
 
 // 페이지 로드 시 localStorage에서 동영상 목록 불러오기
 if (localStorage.getItem("videoItems")) {
@@ -112,14 +116,24 @@ async function handleUpload(e) {
       title: file.name,
       url,
       date: new Date().toISOString().slice(0, 10),
-      summary: ""
+      summary: "",
+      file // File 객체도 함께 저장
     };
     items.value.unshift(video);
   }
   localStorage.setItem("videoItems", JSON.stringify(items.value));
+  // 동일 파일 재업로드 가능하도록 input value 초기화
+  if (e.target) e.target.value = '';
 }
 
 function confirmDelete() {
+  // 삭제 전 미리보기 URL 메모리 해제
+  const toDelete = items.value.filter(v => selectedIds.value.includes(v.id));
+  toDelete.forEach(v => {
+    if (v.url) {
+      try { URL.revokeObjectURL(v.url); } catch (e) {}
+    }
+  });
   items.value = items.value.filter(v => !selectedIds.value.includes(v.id));
   localStorage.setItem("videoItems", JSON.stringify(items.value));
   selectedIds.value = [];
@@ -128,7 +142,7 @@ function confirmDelete() {
 
 function goToSummary() {
   const selectedVideos = items.value.filter(v => selectedIds.value.includes(v.id));
-  localStorage.setItem('summarySelectedVideos', JSON.stringify(selectedVideos));
+  summaryVideoStore.setVideos(selectedVideos);
   router.push({ name: 'Summary' });
 }
 </script>

@@ -20,7 +20,30 @@
           </span>
           <span v-else class="text-blue-600 font-bold">여기에 파일을 놓으세요</span>
         </template>
-        <video v-else class="w-full h-full rounded-xl" :src="videoUrl" controls></video>
+        <template v-else-if="videoFiles.length === 1">
+          <video class="w-full h-full rounded-xl" :src="videoFiles[0].url" controls></video>
+        </template>
+        <template v-else>
+          <!-- 여러 개일 때 리스트 또는 확대 -->
+          <div v-if="!isZoomed" class="grid grid-cols-2 md:grid-cols-3 gap-4 w-full">
+            <div v-for="(video, idx) in videoFiles" :key="video.id"
+              class="flex flex-col items-center justify-center bg-gray-100 rounded-lg shadow hover:bg-blue-100 cursor-pointer p-3 border border-gray-300"
+              @click="zoomVideo(idx)">
+              <video :src="video.url" class="object-cover rounded w-full h-32 mb-2" controls preload="metadata"></video>
+              <div class="w-full text-xs text-center truncate">{{ video.name || video.title }}</div>
+              <div class="flex gap-2 mt-1">
+                <button @click.stop="zoomVideo(idx)" class="text-blue-500 hover:underline text-xs">확대</button>
+                <button @click.stop="removeVideo(idx)" class="text-red-500 hover:underline text-xs">삭제</button>
+              </div>
+            </div>
+          </div>
+          <div v-else class="flex flex-col items-center w-full">
+            <video :src="videoFiles[zoomedIndex]?.url" class="w-full h-80 rounded-xl mb-2" controls></video>
+            <div class="w-full text-xs text-center truncate mb-2">{{ videoFiles[zoomedIndex]?.name ||
+              videoFiles[zoomedIndex]?.title }}</div>
+            <button class="px-3 py-2 rounded-md bg-gray-300 text-black mb-2" @click="unzoomVideo">되돌아가기</button>
+          </div>
+        </template>
       </div>
 
 
@@ -32,14 +55,17 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <input type="file" accept="video/*" @change="onUpload" ref="fileInputRef" class="hidden" />
-        <button class="px-4 py-2 rounded-md bg-vix-primary text-white" @click="runInference" :disabled="!videoFile">
+        <input type="file" accept="video/*" multiple @change="onUpload" ref="fileInputRef" class="hidden"
+          :disabled="videoFiles.length > 0" />
+        <button class="px-4 py-2 rounded-md bg-vix-primary text-white" @click="runInference"
+          :disabled="videoFiles.length === 0 || selectedIndex === null">
           추론 실행
         </button>
       </div>
 
-      <div v-if="videoUrl" class="mt-2 flex">
-        <button class="px-3 py-2 rounded-md bg-red-500 text-white hover:bg-red-600 transition" @click="removeVideo">
+      <div v-if="videoFiles.length > 0 && selectedIndex !== null" class="mt-2 flex">
+        <button class="px-3 py-2 rounded-md bg-red-500 text-white hover:bg-red-600 transition"
+          @click="removeVideo(selectedIndex)">
           동영상 제거
         </button>
       </div>
@@ -53,8 +79,8 @@
     <section class="rounded-2xl border p-4">
       <h2 class="font-semibold mb-3">요약 결과</h2>
 
-      <div class="h-72 border rounded-xl p-3 bg-gray-50 overflow-auto whitespace-pre-wrap text-sm">
-        <textarea v-model="response" readonly class="w-full h-full bg-transparent border-0 resize-none outline-none"></textarea>
+      <div class="prose w-full max-w-none h-[600px] border rounded-xl p-3 bg-gray-50 overflow-auto text-base"
+        v-html="response">
       </div>
 
       <div class="mt-4">
@@ -70,10 +96,12 @@
 </template>
 
 <script setup>
-import { ref, inject, onMounted, watch } from "vue";
+import { ref, inject, onMounted, watch, computed } from "vue";
 import PromptInput from "@/components/PromptInput.vue";
 import api from "@/services/api";
 import { useSettingStore } from '@/stores/settingStore';
+import { useSummaryVideoStore } from '@/stores/summaryVideoStore';
+import { marked } from 'marked';
 
 const summaryParams = inject("summaryParams"); // Setting.vue에서 제공한 파라미터
 
@@ -83,26 +111,15 @@ const videoUrls = ref([]); // 각 동영상 미리보기 URL
 watch(videoFiles, (newFiles) => {
   videoUrls.value = newFiles.map(f => f.url ? f.url : (f instanceof File ? URL.createObjectURL(f) : ''));
 });
+const summaryVideoStore = useSummaryVideoStore();
 onMounted(() => {
-  // summarySelectedVideos가 있으면 자동 업로드
-  const selectedVideos = JSON.parse(localStorage.getItem('summarySelectedVideos') || 'null');
-  if (selectedVideos && Array.isArray(selectedVideos) && selectedVideos.length > 0) {
-    videoFiles.value = [];
-    videoUrls.value = [];
-    for (const v of selectedVideos) {
-      // File 객체 대신 미리보기 URL만 사용 (실제 업로드는 불가, 미리보기만)
-      videoFiles.value.push({ name: v.title, url: v.url });
-      videoUrls.value.push(v.url);
-    }
+  // Pinia 스토어에서 선택된 동영상 객체를 불러옴
+  if (summaryVideoStore.videos && Array.isArray(summaryVideoStore.videos) && summaryVideoStore.videos.length > 0) {
+    videoFiles.value = [...summaryVideoStore.videos];
+    videoUrls.value = videoFiles.value.map(v => v.url);
     selectedIndex.value = 0;
-    // zoomedIndex에 해당하는 videoUrls 값도 세팅
-    if (videoUrls.value.length > 0) {
-      zoomedIndex.value = 0;
-    } else {
-      zoomedIndex.value = null;
-    }
-    // 사용 후 삭제 (원하면 유지 가능)
-    localStorage.removeItem('summarySelectedVideos');
+    zoomedIndex.value = videoFiles.value.length > 0 ? 0 : null;
+    summaryVideoStore.clearVideos();
   }
 });
 const selectedIndex = ref(null); // 선택된 동영상 인덱스
@@ -119,11 +136,23 @@ function onVideoAreaClick() {
 
 function onUpload(e) {
   const files = Array.from(e.target.files ?? []);
+  if (!files.length) return;
   for (const file of files) {
-    if (file.type.startsWith('video/')) {
-      videoFiles.value.push(file);
-      videoUrls.value.push(URL.createObjectURL(file));
+    if (!file.type.startsWith('video/')) {
+      alert('동영상 파일만 업로드할 수 있습니다.');
+      continue;
     }
+    const url = URL.createObjectURL(file);
+    const video = {
+      id: Date.now() + Math.random(),
+      name: file.name,
+      url,
+      date: new Date().toISOString().slice(0, 10),
+      summary: "",
+      file // File 객체도 함께 저장
+    };
+    videoFiles.value.unshift(video);
+    videoUrls.value.unshift(url);
   }
   // input[type=file] value 초기화 (동일 파일 재업로드 가능)
   if (fileInputRef.value) fileInputRef.value.value = '';
@@ -172,7 +201,7 @@ function unzoomVideo() {
 function removeVideo(idx) {
   // 삭제 전 URL.revokeObjectURL로 메모리 해제
   if (videoUrls.value[idx]) {
-    try { URL.revokeObjectURL(videoUrls.value[idx]); } catch (e) {}
+    try { URL.revokeObjectURL(videoUrls.value[idx]); } catch (e) { }
   }
   videoFiles.value.splice(idx, 1);
   videoUrls.value.splice(idx, 1);
@@ -198,7 +227,7 @@ async function runInference() {
   if (videoFiles.value.length === 0) return;
   // 여러 파일을 서버에 업로드
   const formData = new FormData();
-  formData.append('file', videoFiles.value[0])
+  formData.append('file', videoFiles.value[0].file)
   formData.append('prompt', prompt.value)
   formData.append('csprompt', settingStore.captionPrompt)
   formData.append('saprompt', settingStore.aggregationPrompt)
@@ -224,7 +253,7 @@ async function runInference() {
   formData.append('alert_top_p', settingStore.A_TopP)
   formData.append('alert_temperature', settingStore.A_TEMPERATURE)
   formData.append('alert_max_tokens', settingStore.A_MAX_TOKENS)
-  
+
 
   response.value = '⏳ Sending video + prompt to backend for summarization...'
   const startTime = Date.now();
@@ -233,7 +262,8 @@ async function runInference() {
     const data = await res.json();
     const endTime = Date.now();
     const elapsed = ((endTime - startTime) / 1000).toFixed(2);
-    response.value = `✅ Summarization Completed!\n\n${data.summary || JSON.stringify(data, null, 2)}\n\n추론 시간: ${elapsed} seconds`;
+    const markedsummary = marked.parse(data.summary || '');
+    response.value = `<div>✅ Summarization Completed!</div><br><br>${markedsummary}<br><br><div>추론 시간: ${elapsed} seconds</div>`;
   } catch {
     const endTime = Date.now();
     const elapsed = ((endTime - startTime) / 1000).toFixed(2);
