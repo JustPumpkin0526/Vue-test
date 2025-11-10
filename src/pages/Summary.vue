@@ -25,22 +25,34 @@
         </template>
         <template v-else>
           <!-- 여러 개일 때 리스트 또는 확대 -->
-          <div v-if="!isZoomed" class="grid grid-cols-2 md:grid-cols-3 gap-4 w-full">
-            <div v-for="(video, idx) in videoFiles" :key="video.id"
-              class="flex flex-col items-center justify-center bg-gray-100 rounded-lg shadow hover:bg-blue-100 cursor-pointer p-3 border border-gray-300"
-              @click="zoomVideo(idx)">
-              <video :src="video.url" class="object-cover rounded w-full h-32 mb-2" controls preload="metadata"></video>
-              <div class="w-full text-xs text-center truncate">{{ video.name || video.title }}</div>
-              <div class="flex gap-2 mt-1">
-                <button @click.stop="zoomVideo(idx)" class="text-blue-500 hover:underline text-xs">확대</button>
-                <button @click.stop="removeVideo(idx)" class="text-red-500 hover:underline text-xs">삭제</button>
+          <div v-if="!isZoomed" id="list" class="w-full h-full bg-gray-300 rounded-[12px] p-6">
+            <div class="w-[100%] h-[100%] border-[1px] border-black bg-white rounded-[12px]">
+              <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 p-6">
+                <div v-for="(video, idx) in videoFiles" :key="video.id"
+                  class="flex flex-col items-center justify-center bg-gray-100 rounded-lg shadow hover:bg-blue-100 cursor-pointer p-3 border border-gray-300"
+                  @click="selectVideo(idx)">
+                  <div class="w-[100%] h-[100%] flex items-center justify-center bg-gray-300 rounded mb-2 overflow-hidden relative">
+                    <input type="checkbox" class="absolute top-1 left-1 z-10" :checked="selectedIndexes.includes(idx)" @change.stop="selectVideo(idx)" />
+                    <video v-if="video.url" :src="video.url" class="object-cover rounded" controls preload="metadata"></video>
+                    <span v-else class="text-gray-400">No Thumbnail</span>
+                    <div v-if="video.title || video.name" class="absolute bottom-0 left-0 w-full bg-black bg-opacity-60 text-white text-xs px-1 py-0.5 truncate text-center pointer-events-none">
+                      {{ video.title || video.name }}
+                    </div>
+                  </div>
+                  <div class="flex gap-2 mt-1">
+                    <button @click.stop="zoomVideo(idx)" class="text-blue-500 hover:underline text-xs">열기</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
           <div v-else class="flex flex-col items-center w-full">
-            <video :src="videoFiles[zoomedIndex]?.url" class="w-full h-80 rounded-xl mb-2" controls></video>
-            <div class="w-full text-xs text-center truncate mb-2">{{ videoFiles[zoomedIndex]?.name ||
-              videoFiles[zoomedIndex]?.title }}</div>
+            <div class="relative w-full h-[100%] mb-2">
+              <video v-if="videoFiles[zoomedIndex]" :src="videoFiles[zoomedIndex].url" class="w-full h-[100%] rounded-xl" controls></video>
+              <div v-if="videoFiles[zoomedIndex]" class="absolute top-2 left-2 bg-gray-300 text-black text-xs px-2 py-1 rounded truncate max-w-[70%] pointer-events-none">
+                {{ videoFiles[zoomedIndex].name || videoFiles[zoomedIndex].title }}
+              </div>
+            </div>
             <button class="px-3 py-2 rounded-md bg-gray-300 text-black mb-2" @click="unzoomVideo">되돌아가기</button>
           </div>
         </template>
@@ -63,10 +75,16 @@
         </button>
       </div>
 
-      <div v-if="videoFiles.length > 0 && selectedIndex !== null" class="mt-2 flex">
+      <div v-if="videoFiles.length === 1" class="mt-2 flex">
         <button class="px-3 py-2 rounded-md bg-red-500 text-white hover:bg-red-600 transition"
-          @click="removeVideo(selectedIndex)">
-          동영상 제거
+          @click="removeSingleVideo">
+          동영상 삭제
+        </button>
+      </div>
+      <div v-else-if="videoFiles.length > 1" class="mt-2 flex">
+        <button class="px-3 py-2 rounded-md bg-red-500 text-white hover:bg-red-600 transition"
+          @click="batchRemoveSelectedVideos" :disabled="selectedIndexes.length === 0">
+          선택한 동영상 삭제
         </button>
       </div>
 
@@ -96,6 +114,19 @@
 </template>
 
 <script setup>
+// 동영상이 1개일 때 삭제
+function removeSingleVideo() {
+  if (videoFiles.value.length === 1) {
+    if (videoUrls.value[0]) {
+      try { URL.revokeObjectURL(videoUrls.value[0]); } catch (e) { }
+    }
+    videoFiles.value.splice(0, 1);
+    videoUrls.value.splice(0, 1);
+    selectedIndexes.value = [];
+    isZoomed.value = false;
+    zoomedIndex.value = null;
+  }
+}
 import { ref, inject, onMounted, watch, computed } from "vue";
 import PromptInput from "@/components/PromptInput.vue";
 import api from "@/services/api";
@@ -122,7 +153,7 @@ onMounted(() => {
     summaryVideoStore.clearVideos();
   }
 });
-const selectedIndex = ref(null); // 선택된 동영상 인덱스
+const selectedIndexes = ref([]); // 선택된 동영상 인덱스 배열
 const prompt = ref("");
 const response = ref("");
 const isDragging = ref(false);
@@ -185,7 +216,11 @@ function onDrop(e) {
 }
 
 function selectVideo(idx) {
-  selectedIndex.value = idx;
+  if (selectedIndexes.value.includes(idx)) {
+    selectedIndexes.value = selectedIndexes.value.filter(i => i !== idx);
+  } else {
+    selectedIndexes.value.push(idx);
+  }
 }
 
 function zoomVideo(idx) {
@@ -198,29 +233,22 @@ function unzoomVideo() {
   zoomedIndex.value = null;
 }
 
-function removeVideo(idx) {
-  // 삭제 전 URL.revokeObjectURL로 메모리 해제
-  if (videoUrls.value[idx]) {
-    try { URL.revokeObjectURL(videoUrls.value[idx]); } catch (e) { }
+function batchRemoveSelectedVideos() {
+  const sorted = [...selectedIndexes.value].sort((a, b) => b - a);
+  for (const idx of sorted) {
+    if (videoUrls.value[idx]) {
+      try { URL.revokeObjectURL(videoUrls.value[idx]); } catch (e) { }
+    }
+    videoFiles.value.splice(idx, 1);
+    videoUrls.value.splice(idx, 1);
   }
-  videoFiles.value.splice(idx, 1);
-  videoUrls.value.splice(idx, 1);
+  selectedIndexes.value = [];
   if (videoFiles.value.length === 0) {
-    selectedIndex.value = null;
     isZoomed.value = false;
     zoomedIndex.value = null;
-  } else if (selectedIndex.value === idx) {
-    selectedIndex.value = 0;
-  } else if (selectedIndex.value > idx) {
-    selectedIndex.value--;
-  }
-  if (isZoomed.value && zoomedIndex.value === idx) {
-    isZoomed.value = false;
-    zoomedIndex.value = null;
-  } else if (isZoomed.value && zoomedIndex.value > idx) {
-    zoomedIndex.value--;
   }
 }
+
 
 async function runInference() {
   const VSS_API_URL = 'http://localhost:8001/vss-summarize'
