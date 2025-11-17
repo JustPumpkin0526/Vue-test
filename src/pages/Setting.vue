@@ -379,17 +379,16 @@
 </template>
 
 <script setup>
-import { ref, provide } from "vue";
+import { ref } from "vue";
 import { useSettingStore } from '@/stores/settingStore.js';
+
 const settingStore = useSettingStore();
-import { onMounted } from "vue";
 
 //VLM parameters
 const showVlmParams = ref(true);
-function toggleVlmParams() {
-  showVlmParams.value = !showVlmParams.value;
-}
+const toggleVlmParams = () => showVlmParams.value = !showVlmParams.value;
 
+// VLM parameter refs (일부는 사용되지 않지만 호환성을 위해 유지)
 const chunk = ref(0);
 const captionPrompt = ref("You will be given captions from sequential clips of a video. Aggregate captions in the format start_time:end_time:caption based on whether captions are related to one another or create a continuous scene.");
 const aggregationPrompt = ref("Based on the available information, generate a summary that captures the important events in the video. The summary should be organized chronologically and in logical sections. This should be a concise, yet descriptive summary of all the important events. The format should be intuitive and easy for a user to read and understand what happened. Format the output in Markdown so it can be displayed nicely. Timestamps are in seconds so please format them as SS.SSS");
@@ -402,108 +401,50 @@ const temp = ref(0.4);
 const maxTokens = ref(512);
 const seed = ref(1);
 
-const reset_TopP = () => {
-  settingStore.topp = 1.0;
-};
-const reset_Temperature = () => {
-  settingStore.temp = 0.4;
-};
-const reset_MaxTokens = () => {
-  settingStore.maxTokens = 512;
-};
-
-//RAG parameters
+// RAG parameters
 const batch = ref(6);
 const RAG_batch = ref(1);
 const RAG_topk = ref(5);
 
+// Toggle states
 const showRAGParams = ref(true);
-function toggleRAGParams() {
-  showRAGParams.value = !showRAGParams.value;
-}
-//Summary parameters
 const showSUMMARYParams = ref(false);
-function toggleSUMMARYParams() {
-  showSUMMARYParams.value = !showSUMMARYParams.value;
-}
+const showChatParams = ref(false);
+const showAlertParams = ref(false);
 
+// Toggle functions
+const toggleRAGParams = () => showRAGParams.value = !showRAGParams.value;
+const toggleSUMMARYParams = () => showSUMMARYParams.value = !showSUMMARYParams.value;
+const toggleChatParams = () => showChatParams.value = !showChatParams.value;
+const toggleAlertParams = () => showAlertParams.value = !showAlertParams.value;
+
+// Parameter refs
 const S_TopP = ref(0.7);
 const S_TEMPERATURE = ref(0.2);
 const SMAX_TOKENS = ref(2048);
-
-const resetS_TopP = () => {
-  settingStore.S_TopP = 0.7;
-};
-const resetS_TEMPERATURE = () => {
-  settingStore.S_TEMPERATURE = 0.2;
-};
-const resetSMAX_TOKENS = () => {
-  settingStore.SMAX_TOKENS = 2048;
-};
-
-//Chat parameters
-const showChatParams = ref(false);
-function toggleChatParams() {
-  showChatParams.value = !showChatParams.value;
-}
-
 const C_TopP = ref(0.7);
 const C_TEMPERATURE = ref(0.2);
 const C_MAX_TOKENS = ref(2048);
-
-const resetC_TopP = () => {
-  settingStore.C_TopP = 0.7;
-};
-const resetC_TEMPERATURE = () => {
-  settingStore.C_TEMPERATURE = 0.2;
-};
-const resetC_MAX_TOKENS = () => {
-  settingStore.C_MAX_TOKENS = 2048;
-};
-
-//Alert parameters
-const showAlertParams = ref(false);
-function toggleAlertParams() {
-  showAlertParams.value = !showAlertParams.value;
-}
-
 const A_TopP = ref(0.7);
 const A_TEMPERATURE = ref(0.2);
 const A_MAX_TOKENS = ref(2048);
 
-const resetA_TopP = () => {
-  settingStore.A_TopP = 0.7;
-};
-const resetA_TEMPERATURE = () => {
-  settingStore.A_TEMPERATURE = 0.2;
-};
-const resetA_MAX_TOKENS = () => {
-  settingStore.A_MAX_TOKENS = 2048;
+// 공통 reset 함수
+const resetParameter = (paramName, defaultValue) => {
+  settingStore[paramName] = defaultValue;
 };
 
-provide("summaryParams", {
-  chunk,
-  captionPrompt,
-  aggregationPrompt,
-  nfmc,
-  frameWidth,
-  frameHeight,
-  topk,
-  topp,
-  temp,
-  maxTokens,
-  seed,
-  batch,
-  RAG_batch,
-  RAG_topk,
-  S_TopP,
-  S_TEMPERATURE,
-  SMAX_TOKENS,
-  C_TopP,
-  C_TEMPERATURE,
-  C_MAX_TOKENS,
-  A_TopP,
-  A_TEMPERATURE,
-  A_MAX_TOKENS
-});
+// Reset 함수들
+const reset_TopP = () => resetParameter('topp', 1.0);
+const reset_Temperature = () => resetParameter('temp', 0.4);
+const reset_MaxTokens = () => resetParameter('maxTokens', 512);
+const resetS_TopP = () => resetParameter('S_TopP', 0.7);
+const resetS_TEMPERATURE = () => resetParameter('S_TEMPERATURE', 0.2);
+const resetSMAX_TOKENS = () => resetParameter('SMAX_TOKENS', 2048);
+const resetC_TopP = () => resetParameter('C_TopP', 0.7);
+const resetC_TEMPERATURE = () => resetParameter('C_TEMPERATURE', 0.2);
+const resetC_MAX_TOKENS = () => resetParameter('C_MAX_TOKENS', 2048);
+const resetA_TopP = () => resetParameter('A_TopP', 0.7);
+const resetA_TEMPERATURE = () => resetParameter('A_TEMPERATURE', 0.2);
+const resetA_MAX_TOKENS = () => resetParameter('A_MAX_TOKENS', 2048);
 </script>

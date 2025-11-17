@@ -1,7 +1,7 @@
 <template>
   <header class="w-full border-b bg-gray-50">
     <div class="px-4 py-3 flex items-center justify-between">
-      <h1 class="text-2xl font-bold text-vix-primary">Vix VSS</h1>
+  <h1 class="text-2xl font-bold text-vix-primary cursor-pointer" @click="goToVideoList">Vix VSS</h1>
       <nav class="flex gap-4 items-center">
         <template v-if="userId">
           <span class="text-sm text-gray-700 font-semibold">{{ userId }}님</span>
@@ -32,6 +32,10 @@ function logout() {
   userId.value = "";
   window.dispatchEvent(new Event("vss-login"));
   router.push("/login");
+}
+
+function goToVideoList() {
+  router.push("/video_storage");
 }
 
 onMounted(() => {
