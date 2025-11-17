@@ -1,9 +1,9 @@
 <template>
-  <div class="grid lg:grid-cols-[1fr_320px] gap-6">
-    <section class="rounded-2xl border p-4">
+  <div class="grid lg:grid-cols-[1fr_1200px] gap-6 h-[calc(100vh-120px)] p-6">
+    <section class="rounded-2xl border border-black p-4">
       <h2 class="font-semibold mb-3">현재 리포트</h2>
 
-      <div class="h-96 border rounded-xl p-3 bg-gray-50 overflow-auto whitespace-pre-wrap text-sm">
+      <div class="h-[calc(100vh-240px)] border border-black rounded-xl p-3 bg-gray-50 overflow-auto whitespace-pre-wrap text-sm">
         {{ report }}
       </div>
 
@@ -14,14 +14,16 @@
       </div>
     </section>
 
-    <aside class="rounded-2xl border p-4">
-      <h3 class="font-semibold mb-3">리포트 리스트</h3>
-      <ul class="space-y-2">
-        <li v-for="r in list" :key="r.id" class="p-2 border rounded-md flex items-center justify-between">
-          <span class="text-sm">{{ r.title }}</span>
-          <button class="px-2 py-1 bg-gray-100 rounded" @click="open(r)">열기</button>
-        </li>
-      </ul>
+    <aside class="rounded-2xl border border-black p-4 w-[1200px] flex flex-col justify-between">
+      <div>
+        <h3 class="font-semibold mb-3">리포트 리스트</h3>
+        <ul class="space-y-2">
+          <li v-for="r in list" :key="r.id" class="p-2 border border-black rounded-md flex items-center justify-between">
+            <span class="text-sm">{{ r.title }}</span>
+            <button class="px-2 py-1 bg-gray-100 rounded" @click="open(r)">열기</button>
+          </li>
+        </ul>
+      </div>
 
       <div class="mt-4">
         <Pagination :page="page" :pages="pages" @update:page="(p)=>{page=p; loadList();}" />
