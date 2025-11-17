@@ -218,6 +218,7 @@ async def gradio_api(
 ):
     os.makedirs("./tmp", exist_ok=True)
     file_path = f"./tmp/{file.filename}"
+    print(f"Saving uploaded file to: {file_path}")
     with open(file_path, "wb") as f:
         f.write(await file.read())
 
@@ -253,3 +254,60 @@ async def gradio_api(
         alert_max_tokens,
     )
     return {"summary": result}
+
+# 로그인용 모델
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+# DB 연결 설정
+conn = mariadb.connect(
+    user="root",
+    password="pass0001!",
+    host="127.0.0.1",
+    port=3306,
+    database="vss"
+)
+cursor = conn.cursor()
+
+# 로그인 엔드포인트
+@app.post("/login")
+def login(data: LoginRequest = Body(...)):
+    cursor.execute(
+        "SELECT PW FROM vss_user WHERE ID = ?",
+        (data.username,)
+    )
+    row = cursor.fetchone()
+    if row is None:
+        return {"success": False, "message": "가입되지 않은 ID입니다."}
+    db_pw = row[0]
+    if db_pw != data.password:
+        return {"success": False, "message": "비밀번호가 올바르지 않습니다."}
+    return {"success": True}
+
+class User(BaseModel):
+    username: str
+    password: str
+    email: str
+
+@app.post("/register")
+def register(user: User):
+    try:
+        cursor.execute(
+            "INSERT INTO vss_user (ID, PW, EMAIL) VALUES (?, ?, ?)",
+            (user.username, user.password, user.email)
+        )
+        conn.commit()
+        return {"message": "회원가입 성공"}
+    except mariadb.IntegrityError:
+        raise HTTPException(status_code=400, detail="이미 존재하는 사용자입니다.")
+
+# CORS 설정 (Vue와 통신 가능하게)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 실제 운영에서는 도메인 제한 권장
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
