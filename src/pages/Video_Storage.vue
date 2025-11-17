@@ -2,7 +2,7 @@
   <!-- 메뉴 틀 -->
   <div id="video_list" class="w-[100%] h-[90%]">
     <header id="header" class="flex items-center justify-between">
-      <div class="w-[500px] bg-blue-400 text-white text-lg p-3 text-center rounded-lg shadow-md mt-6 ml-12">
+      <div class="w-[20%] bg-blue-400 text-white text-[25px] p-3 text-center rounded-lg shadow-md mt-[10px] ml-[50px]">
         <p>My Video Storage</p>
       </div>
       <div class="flex items-center h-12 mr-12 mt-auto ml-auto">
@@ -14,27 +14,65 @@
       </div>
     </header>
     <!-- 비디오 리스트 -->
-    <div id="list" class="w-full h-full border-[1px] border-black bg-gray-300 rounded-[12px] p-6 mt-6">
-      <div class="w-full border-[1px] border-black bg-white rounded-[12px] overflow-y-auto"
-        style="height:900px; min-height:900px; max-height:900px;">
+    <div id="list" class="flex w-full h-full border-[1px] border-black bg-gray-300 rounded-[12px] p-6 mt-6">
+      <div class="w-full h-[90%] border-[1px] border-black bg-white rounded-[12px] overflow-y-auto">
+        <div v-if="items.length === 0" class="flex items-center justify-center h-full">
+          <div class="w-[30%] h-[9%] bg-gray-200 text-gray-600 text-center text-[26px] p-6 border-[1px] border-black rounded-lg shadow-md">
+            please Upload the video
+          </div>
+        </div>
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 p-6">
           <div v-for="video in items" :key="video.id"
-            class="flex flex-col items-center justify-center bg-gray-100 rounded-lg shadow hover:bg-blue-100 cursor-pointer p-3 border border-gray-300"
+            class="flex flex-col items-center justify-center bg-gray-100 rounded-lg shadow hover:bg-blue-100 cursor-pointer p-3 border border-gray-300 relative"
             @click="toggleSelect(video.id)">
             <div
-              class="w-[100%] h-[100%] flex items-center justify-center bg-gray-300 rounded mb-2 overflow-hidden relative">
+              class="w-[100%] h-[100%] flex items-center justify-center bg-gray-300 rounded mb-2 overflow-hidden relative"
+              @mouseenter="hoveredVideoId = video.id"
+              @mouseleave="hoveredVideoId = null">
               <input type="checkbox" class="absolute top-1 left-1 z-10" v-model="selectedIds" :value="video.id" />
-              <video v-if="video.displayUrl" :src="video.displayUrl" class="object-cover rounded" controls preload="metadata"></video>
+              <video
+                :ref="el => (videoRefs[video.id] = el)"
+                v-if="video.displayUrl"
+                :src="video.displayUrl"
+                class="object-cover rounded"
+                preload="metadata"
+              ></video>
               <span v-else class="text-gray-400">No Thumbnail</span>
               <div v-if="video.title"
                 class="absolute top-1 right-1 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded truncate max-w-[70%] pointer-events-none">
                 {{ video.title }}
               </div>
-            </div>
-            <div class="flex gap-2 mt-1">
-              <button @click.stop="zoomVideo(video)"
-                class="px-3 py-1 rounded-md bg-blue-500 text-white font-semibold text-xs border border-blue-600 shadow hover:bg-blue-600 hover:scale-105 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-blue-300">
-                확대
+              <!-- 재생 버튼 -->
+              <button
+                @click.stop="togglePlay(video.id)"
+                :class="{
+                  'opacity-100': hoveredVideoId === video.id || !playingVideoIds.includes(video.id),
+                  'opacity-0': hoveredVideoId !== video.id && playingVideoIds.includes(video.id),
+                }"
+                class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white rounded-full w-12 h-12 m-auto transition-opacity duration-300"
+              >
+                <svg
+                  v-if="!playingVideoIds.includes(video.id)"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="currentColor"
+                  viewBox="0 0 16 16"
+                  class="w-8 h-8"
+                >
+                  <path
+                    d="M6.271 4.055a.5.5 0 0 1 .759-.429l4.592 3.11a.5.5 0 0 1 0 .828l-4.592 3.11a.5.5 0 0 1-.759-.429V4.055z"
+                  />
+                </svg>
+                <svg
+                  v-else
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="currentColor"
+                  viewBox="0 0 16 16"
+                  class="w-8 h-8"
+                >
+                  <path
+                    d="M5.5 3.5A.5.5 0 0 1 6 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5H6a.5.5 0 0 1-.5-.5v-9zM9.5 3.5A.5.5 0 0 1 10 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-9z"
+                  />
+                </svg>
               </button>
             </div>
             <!-- 확대 모달 -->
@@ -53,12 +91,39 @@
                   @click="unzoomVideo">닫기</button>
               </div>
             </div>
+            <!-- 설정 버튼 -->
+            <div
+              class="relative bottom-[2%] left-[47%] flex flex-col cursor-pointer bg-[#787878] p-2 rounded hover:bg-gray-600"
+              @click.stop="openSettings(video.id)"
+            >
+              <span class="w-[3.5px] h-[3.5px] bg-white rounded-full mb-[2px]"></span>
+              <span class="w-[3.5px] h-[3.5px] bg-white rounded-full mb-[2px]"></span>
+              <span class="w-[3.5px] h-[3.5px] bg-white rounded-full"></span>
+            </div>
+            <div v-if="expandedVideoId === video.id" class="absolute bottom-[15px] right-[40px] flex flex-col items-center">
+              <button 
+                class="bg-blue-500 hover:bg-blue-600 text-white text-s font-semibold px-3 py-1 rounded-lg shadow-lg transition-transform transform hover:scale-105"
+                @click.stop="zoomVideo(video)"
+              >
+                확대
+              </button>
+            </div>
           </div>
         </div>
       </div>
+      <!-- 좌측 하단 Summary, Search 버튼 -->
+      <div class="fixed left-[13%] bottom-[7%] w-[21%] z-50 flex gap-4">
+        <button
+          class="w-[100%] text-[25px] px-5 py-3 rounded-lg bg-blue-500 text-white shadow-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:text-gray-100"
+          :disabled="selectedIds.length === 0" @click="goToSummary">Summary</button>
+        <button
+          class="w-[100%] text-[25px] px-5 py-3 rounded-lg bg-green-500 text-white shadow-lg hover:bg-green-600 disabled:bg-gray-400 disabled:text-gray-100"
+          :disabled="selectedIds.length === 0" @click="goToSearch">Search</button>
+      </div>
+
       <!-- 우측 하단 선택 동영상 삭제 버튼 -->
-      <div class="fixed bottom-[110px] right-[80px] z-50">
-        <button class="px-5 py-3 rounded-lg bg-red-500 text-white shadow-lg hover:bg-red-600"
+      <div class="fixed right-[3%] bottom-[7%] w-[14%] z-50">
+        <button class="w-[100%] text-[25px] px-5 py-3 rounded-lg bg-red-500 text-white shadow-lg hover:bg-red-600"
           :disabled="selectedIds.length === 0" @click="showDeletePopup = true">
           선택 동영상 삭제 ({{ selectedIds.length }})
         </button>
@@ -77,16 +142,6 @@
               @click="showDeletePopup = false">cancel</button>
           </div>
         </div>
-      </div>
-
-      <!-- 좌측 하단 Summary, Search 버튼 -->
-      <div class="fixed bottom-[110px] left-[290px] z-50 flex gap-4">
-        <button
-          class="w-[200px] text-[18px] px-5 py-3 rounded-lg bg-blue-500 text-white shadow-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:text-white"
-          :disabled="selectedIds.length === 0" @click="goToSummary">Summary</button>
-        <button
-          class="w-[200px] text-[18px] px-5 py-3 rounded-lg bg-green-500 text-white shadow-lg hover:bg-green-600 disabled:bg-gray-400 disabled:text-white"
-          :disabled="selectedIds.length === 0" @click="goToSearch">Search</button>
       </div>
 
       <!-- Search 사이드바 메뉴 -->
@@ -185,11 +240,22 @@ onActivated(() => {
 const isZoomed = ref(false);
 const zoomedVideo = ref(null);
 const showSearchSidebar = ref(false);
+const hoveredVideoId = ref(null);
+const playingVideoIds = ref([]); // 여러 동영상의 재생 상태를 관리
+const expandedVideoId = ref(null);
 
 const router = useRouter();
 const showDeletePopup = ref(false);
 const items = ref([]);
 const selectedIds = ref([]);
+const videoRefs = ref({});
+
+function playVideo(videoId) {
+  const videoElement = videoRefs.value[videoId];
+  if (videoElement) {
+    videoElement.play();
+  }
+}
 
 // localStorage에서 동영상 목록 로딩
 function loadVideosFromStorage() {
@@ -313,24 +379,27 @@ function goToSearch() {
 function closeSearchSidebar() {
   showSearchSidebar.value = false;
 }
+
+function togglePlay(videoId) {
+  const videoElement = videoRefs.value[videoId];
+  if (!videoElement) return;
+
+  const index = playingVideoIds.value.indexOf(videoId);
+  if (index === -1) {
+    playingVideoIds.value.push(videoId);
+    videoElement.play();
+  } else {
+    playingVideoIds.value.splice(index, 1);
+    videoElement.pause();
+  }
+}
+
+function openSettings(videoId) {
+  console.log(`Settings for video ID: ${videoId}`);
+  if (expandedVideoId.value === videoId) {
+    expandedVideoId.value = null;
+  } else {
+    expandedVideoId.value = videoId;
+  }
+}
 </script>
-
-<style scoped>
-/* 배경 오버레이 애니메이션 */
-.overlay-enter-active, .overlay-leave-active {
-  transition: opacity 0.3s ease-in-out;
-}
-
-.overlay-enter-from, .overlay-leave-to {
-  opacity: 0;
-}
-
-/* 사이드바 패널 애니메이션 */
-.sidebar-enter-active, .sidebar-leave-active {
-  transition: transform 0.3s ease-in-out;
-}
-
-.sidebar-enter-from, .sidebar-leave-to {
-  transform: translateX(100%);
-}
-</style>
