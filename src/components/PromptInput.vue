@@ -3,7 +3,7 @@
     <input
       v-model="model"
       :placeholder="placeholder"
-      class="w-full rounded-xl border px-4 py-3 bg-white"
+      class="w-full rounded-xl border-[1px] border-black px-4 py-3 bg-white"
       @keyup.enter="emitAsk" />
     <button
       class="rounded-lg bg-vix-primary text-white px-4 py-2"

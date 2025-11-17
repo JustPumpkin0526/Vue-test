@@ -1,14 +1,14 @@
 <template>
   <div class="grid lg:grid-cols-2 gap-6">
     <!-- 좌측: 비디오/업로드 -->
-    <section class="rounded-2xl border p-4 bg-gray-50">
+    <section class="rounded-2xl border border-black p-4 bg-gray-50">
       <h2 class="font-semibold mb-3">
         {{ selectedIndexes.length === 0 ? 'Video Section' : (videoFiles.find(v => v.id === selectedIndexes[0])?.name || 'Video Section') }}
       </h2>
 
 
       <div
-        class="aspect-video h-92 rounded-xl mb-3 flex items-center justify-center text-gray-600 transition border-2 cursor-pointer"
+        class="aspect-video h-92 rounded-xl mb-3 flex items-center justify-center text-gray-600 transition border-2 border-black cursor-pointer"
         :class="[isDragging ? 'bg-blue-100 border-blue-400' : 'bg-gray-300 border-transparent']"
         @dragover.prevent="onDragOver" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop"
         @click="onVideoAreaClick">
@@ -29,7 +29,7 @@
             <div class="w-full border-[1px] border-black bg-white rounded-[12px] overflow-y-auto" style="height:600px; min-height:600px; max-height:600px;">
               <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-6 p-6">
                 <div v-for="(video, idx) in videoFiles" :key="video.id"
-                  class="flex flex-col items-center justify-center bg-gray-100 rounded-lg shadow hover:bg-blue-100 cursor-pointer p-3 border border-gray-300"
+                  class="flex flex-col items-center justify-center bg-gray-100 rounded-lg shadow hover:bg-blue-100 cursor-pointer p-3 border border-black"
                   @click="selectVideo(video.id)">
                   <div class="w-[100%] h-[100%] flex items-center justify-center bg-gray-300 rounded mb-2 overflow-hidden relative">
                     <input type="checkbox" class="absolute top-1 left-1 z-10" v-model="selectedIndexes" :value="video.id" />
@@ -67,7 +67,7 @@
 
       <!-- 프롬프트 입력 블럭 -->
       <div class="mb-3">
-        <input v-model="prompt" type="text" class="w-full border rounded-md px-3 py-2 mt-2"
+        <input v-model="prompt" type="text" class="w-full border border-black rounded-md px-3 py-2 mt-2"
           placeholder="프롬프트를 입력하세요." />
       </div>
 
@@ -76,7 +76,7 @@
           :disabled="videoFiles.length > 0" />
         <button class="px-4 py-2 rounded-md bg-vix-primary text-white" @click="runInference"
           :disabled="videoFiles.length === 0 || selectedIndexes.length === 0">
-          추론 실행
+          요약 실행
         </button>
       </div>
 
@@ -99,10 +99,10 @@
     </section>
 
     <!-- 우측: 결과/프롬프트 -->
-    <section class="rounded-2xl border p-4">
+    <section class="rounded-2xl border border-black p-4">
       <h2 class="font-semibold mb-3">요약 결과</h2>
 
-      <div class="prose w-full max-w-none h-[600px] border rounded-xl p-3 bg-gray-50 overflow-auto text-base"
+      <div class="prose w-full max-w-none h-[600px] border border-black rounded-xl p-3 bg-gray-50 overflow-auto text-base"
         v-html="response">
       </div>
 
