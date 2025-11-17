@@ -36,6 +36,7 @@
                 :src="video.displayUrl"
                 class="object-cover rounded"
                 preload="metadata"
+                @timeupdate="updateProgress(video.id, $event)"
               ></video>
               <span v-else class="text-gray-400">No Thumbnail</span>
               <div v-if="video.title"
@@ -74,6 +75,21 @@
                   />
                 </svg>
               </button>
+            </div>
+            <!-- 프로그레스 바 -->
+            <div
+              class="w-full h-2 bg-gray-300 rounded-full overflow-hidden relative cursor-pointer"
+              @click="seekVideo(video.id, $event)"
+            >
+              <div
+                class="h-full bg-blue-500"
+                :style="{ width: `${video.progress || 0}%` }"
+              ></div>
+              <div
+                class="absolute top-0 h-4 w-4 bg-white rounded-full shadow transform -translate-y-1/2"
+                :style="{ left: `${video.progress || 0}%` }"
+                @mousedown="startDragging(video.id, $event)"
+              ></div>
             </div>
             <!-- 확대 모달 -->
             <div v-if="isZoomed" class="fixed inset-0 z-[200] flex items-center justify-center bg-black bg-opacity-40"
@@ -223,9 +239,8 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, onMounted, onActivated } from "vue";
 import { useRouter } from 'vue-router';
-import { onMounted, onActivated } from 'vue'; // Video_List 메뉴 진입 시 동영상 목록 갱신 (router navigation guard)
 
 onMounted(() => {
   loadVideosFromStorage();
@@ -270,7 +285,8 @@ function loadVideosFromStorage() {
     displayUrl: v.url || v.displayUrl || v.originUrl || '',
     objectUrl: null, // 재로딩된 세션에서는 revoke 대상 없음
     date: v.date,
-    file: null
+    file: null,
+    progress: 0 // 초기화된 progress 값 추가
   }));
 }
 
@@ -401,5 +417,61 @@ function openSettings(videoId) {
   } else {
     expandedVideoId.value = videoId;
   }
+}
+
+function updateProgress(videoId, event) {
+  const video = items.value.find(v => v.id === videoId);
+  if (video) {
+    const currentTime = event.target.currentTime;
+    const duration = event.target.duration;
+    video.progress = duration ? (currentTime / duration) * 100 : 0;
+  }
+}
+
+const isDragging = ref(false);
+const draggedVideoId = ref(null);
+
+function seekVideo(videoId, event) {
+  const videoElement = videoRefs.value[videoId];
+  if (!videoElement) return;
+
+  const progressBar = event.currentTarget;
+  const rect = progressBar.getBoundingClientRect();
+  const clickPosition = event.clientX - rect.left;
+  const newTime = (clickPosition / rect.width) * videoElement.duration;
+
+  videoElement.currentTime = newTime;
+}
+
+function startDragging(videoId, event) {
+  isDragging.value = true;
+  draggedVideoId.value = videoId;
+
+  document.addEventListener('mousemove', handleDragging);
+  document.addEventListener('mouseup', stopDragging);
+}
+
+function handleDragging(event) {
+  if (!isDragging.value || !draggedVideoId.value) return;
+
+  const videoElement = videoRefs.value[draggedVideoId.value];
+  if (!videoElement) return;
+
+  const progressBar = event.target.closest('.relative.cursor-pointer');
+  if (!progressBar) return;
+
+  const rect = progressBar.getBoundingClientRect();
+  const dragPosition = event.clientX - rect.left;
+  const newTime = Math.max(0, Math.min((dragPosition / rect.width) * videoElement.duration, videoElement.duration));
+
+  videoElement.currentTime = newTime;
+}
+
+function stopDragging() {
+  isDragging.value = false;
+  draggedVideoId.value = null;
+
+  document.removeEventListener('mousemove', handleDragging);
+  document.removeEventListener('mouseup', stopDragging);
 }
 </script>
