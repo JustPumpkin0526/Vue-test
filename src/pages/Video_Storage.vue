@@ -17,7 +17,8 @@
     <div id="list" class="flex w-full h-full border-[1px] border-black bg-gray-300 rounded-[12px] p-6 mt-6">
       <div class="w-full h-[90%] border-[1px] border-black bg-white rounded-[12px] overflow-y-auto">
         <div v-if="items.length === 0" class="flex items-center justify-center h-full">
-          <div class="w-[30%] h-[9%] bg-gray-200 text-gray-600 text-center text-[26px] p-6 border-[1px] border-black rounded-lg shadow-md">
+          <div
+            class="w-[30%] h-[9%] bg-gray-200 text-gray-600 text-center text-[24px] pt-[22px] border-[1px] border-black rounded-lg shadow-md">
             please Upload the video
           </div>
         </div>
@@ -27,69 +28,38 @@
             @click="toggleSelect(video.id)">
             <div
               class="w-[100%] h-[100%] flex items-center justify-center bg-gray-300 rounded mb-2 overflow-hidden relative"
-              @mouseenter="hoveredVideoId = video.id"
-              @mouseleave="hoveredVideoId = null">
+              @mouseenter="hoveredVideoId = video.id" @mouseleave="hoveredVideoId = null">
               <input type="checkbox" class="absolute top-1 left-1 z-10" v-model="selectedIds" :value="video.id" />
-              <video
-                :ref="el => (videoRefs[video.id] = el)"
-                v-if="video.displayUrl"
-                :src="video.displayUrl"
-                class="object-cover rounded"
-                preload="metadata"
-                @timeupdate="updateProgress(video.id, $event)"
-              ></video>
+              <video :ref="el => (videoRefs[video.id] = el)" v-if="video.displayUrl" :src="video.displayUrl"
+                class="object-cover rounded" preload="metadata" @timeupdate="updateProgress(video.id, $event)"></video>
               <span v-else class="text-gray-400">No Thumbnail</span>
               <div v-if="video.title"
                 class="absolute top-1 right-1 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded truncate max-w-[70%] pointer-events-none">
                 {{ video.title }}
               </div>
               <!-- 재생 버튼 -->
-              <button
-                @click.stop="togglePlay(video.id)"
-                :class="{
-                  'opacity-100': hoveredVideoId === video.id || !playingVideoIds.includes(video.id),
-                  'opacity-0': hoveredVideoId !== video.id && playingVideoIds.includes(video.id),
-                }"
-                class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white rounded-full w-12 h-12 m-auto transition-opacity duration-300"
-              >
-                <svg
-                  v-if="!playingVideoIds.includes(video.id)"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="currentColor"
-                  viewBox="0 0 16 16"
-                  class="w-8 h-8"
-                >
+              <button @click.stop="togglePlay(video.id)" :class="{
+                'opacity-100': hoveredVideoId === video.id || !playingVideoIds.includes(video.id),
+                'opacity-0': hoveredVideoId !== video.id && playingVideoIds.includes(video.id),
+              }"
+                class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white rounded-full w-12 h-12 m-auto transition-opacity duration-300">
+                <svg v-if="!playingVideoIds.includes(video.id)" xmlns="http://www.w3.org/2000/svg" fill="currentColor"
+                  viewBox="0 0 16 16" class="w-8 h-8">
                   <path
-                    d="M6.271 4.055a.5.5 0 0 1 .759-.429l4.592 3.11a.5.5 0 0 1 0 .828l-4.592 3.11a.5.5 0 0 1-.759-.429V4.055z"
-                  />
+                    d="M6.271 4.055a.5.5 0 0 1 .759-.429l4.592 3.11a.5.5 0 0 1 0 .828l-4.592 3.11a.5.5 0 0 1-.759-.429V4.055z" />
                 </svg>
-                <svg
-                  v-else
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="currentColor"
-                  viewBox="0 0 16 16"
-                  class="w-8 h-8"
-                >
+                <svg v-else xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 16" class="w-8 h-8">
                   <path
-                    d="M5.5 3.5A.5.5 0 0 1 6 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5H6a.5.5 0 0 1-.5-.5v-9zM9.5 3.5A.5.5 0 0 1 10 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-9z"
-                  />
+                    d="M5.5 3.5A.5.5 0 0 1 6 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5H6a.5.5 0 0 1-.5-.5v-9zM9.5 3.5A.5.5 0 0 1 10 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-9z" />
                 </svg>
               </button>
             </div>
             <!-- 프로그레스 바 -->
-            <div
-              class="w-full h-2 bg-gray-300 rounded-full overflow-hidden relative cursor-pointer"
-              @click="seekVideo(video.id, $event)"
-            >
-              <div
-                class="h-full bg-blue-500"
-                :style="{ width: `${video.progress || 0}%` }"
-              ></div>
-              <div
-                class="absolute top-0 h-4 w-4 bg-white rounded-full shadow transform -translate-y-1/2"
-                :style="{ left: `${video.progress || 0}%` }"
-                @mousedown="startDragging(video.id, $event)"
-              ></div>
+            <div class="w-full h-2 bg-gray-300 rounded-full overflow-hidden relative cursor-pointer"
+              @click.stop="seekVideo(video.id, $event)">
+              <div class="h-full bg-blue-500" :style="{ width: `${video.progress || 0}%` }"></div>
+              <div class="absolute top-0 h-4 w-4 bg-white rounded-full shadow transform -translate-y-1/2"
+                :style="{ left: `${video.progress || 0}%` }" @mousedown="startDragging(video.id, $event)"></div>
             </div>
             <!-- 확대 모달 -->
             <div v-if="isZoomed" class="fixed inset-0 z-[200] flex items-center justify-center bg-black bg-opacity-40"
@@ -97,7 +67,8 @@
               <div
                 class="bg-white rounded-xl shadow-xl p-6 min-w-[350px] max-w-[90vw] relative flex flex-col items-center">
                 <div class="relative w-full h-[400px] mb-2">
-                  <video v-if="zoomedVideo" :src="zoomedVideo.displayUrl" class="w-full h-full rounded-xl" controls></video>
+                  <video v-if="zoomedVideo" :src="zoomedVideo.displayUrl" class="w-full h-full rounded-xl"
+                    controls></video>
                   <div v-if="zoomedVideo"
                     class="absolute top-2 left-2 bg-gray-300 text-black text-xs px-2 py-1 rounded truncate max-w-[70%] pointer-events-none">
                     {{ zoomedVideo.title }}
@@ -109,18 +80,17 @@
             </div>
             <!-- 설정 버튼 -->
             <div
-              class="relative bottom-[2%] left-[47%] flex flex-col cursor-pointer bg-[#787878] p-2 rounded hover:bg-gray-600"
-              @click.stop="openSettings(video.id)"
-            >
+              class="relative top-[2%] left-[47%] flex flex-col cursor-pointer bg-[#787878] p-2 rounded hover:bg-gray-600"
+              @click.stop="openSettings(video.id)">
               <span class="w-[3.5px] h-[3.5px] bg-white rounded-full mb-[2px]"></span>
               <span class="w-[3.5px] h-[3.5px] bg-white rounded-full mb-[2px]"></span>
               <span class="w-[3.5px] h-[3.5px] bg-white rounded-full"></span>
             </div>
-            <div v-if="expandedVideoId === video.id" class="absolute bottom-[15px] right-[40px] flex flex-col items-center">
-              <button 
+            <div v-if="expandedVideoId === video.id"
+              class="absolute bottom-[15px] right-[40px] flex flex-col items-center">
+              <button
                 class="bg-blue-500 hover:bg-blue-600 text-white text-s font-semibold px-3 py-1 rounded-lg shadow-lg transition-transform transform hover:scale-105"
-                @click.stop="zoomVideo(video)"
-              >
+                @click.stop="zoomVideo(video)">
                 확대
               </button>
             </div>
@@ -163,41 +133,37 @@
       <!-- Search 사이드바 메뉴 -->
       <!-- 배경 오버레이 -->
       <Transition name="overlay">
-        <div v-if="showSearchSidebar" 
-             class="fixed inset-0 z-[150] bg-black bg-opacity-40"
-             @click="closeSearchSidebar"></div>
+        <div v-if="showSearchSidebar" class="fixed inset-0 z-[150] bg-black bg-opacity-40" @click="closeSearchSidebar">
+        </div>
       </Transition>
-      
+
       <!-- 사이드바 패널 -->
       <Transition name="sidebar">
-        <div v-if="showSearchSidebar" 
-             class="fixed top-0 right-0 z-[151] bg-white w-[70%] h-full shadow-xl"
-             @click.stop>
+        <div v-if="showSearchSidebar" class="fixed top-0 right-0 z-[151] bg-white w-[70%] h-full shadow-xl" @click.stop>
           <!-- 사이드바 헤더 -->
           <div class="flex items-center justify-between p-4 border-b">
             <h2 class="text-lg font-semibold">Search Videos</h2>
-            <button @click="closeSearchSidebar" 
-                    class="p-2 hover:bg-gray-100 rounded-full transition-colors">
+            <button @click="closeSearchSidebar" class="p-2 hover:bg-gray-100 rounded-full transition-colors">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
               </svg>
             </button>
           </div>
-          
+
           <!-- 검색 입력 -->
           <div class="p-4">
             <div class="mb-4">
               <label class="block text-sm font-medium mb-2">검색어</label>
               <input type="text" placeholder="검색할 키워드를 입력하세요..."
-                     class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
-            
+
             <!-- 선택된 동영상 목록 -->
             <div class="mb-4">
               <label class="block text-sm font-medium mb-2">선택된 동영상 ({{ selectedIds.length }}개)</label>
               <div class="max-h-48 overflow-y-auto border rounded-md">
                 <div v-for="video in items.filter(v => selectedIds.includes(v.id))" :key="video.id"
-                     class="flex items-center gap-3 p-2 border-b last:border-b-0">
+                  class="flex items-center gap-3 p-2 border-b last:border-b-0">
                   <video :src="video.displayUrl" class="w-12 h-8 object-cover rounded"></video>
                   <div class="flex-1 min-w-0">
                     <p class="text-sm font-medium truncate">{{ video.title }}</p>
@@ -206,7 +172,7 @@
                 </div>
               </div>
             </div>
-            
+
             <!-- 검색 옵션 -->
             <div class="mb-4">
               <label class="block text-sm font-medium mb-2">검색 옵션</label>
@@ -225,7 +191,7 @@
                 </label>
               </div>
             </div>
-            
+
             <!-- 검색 버튼 -->
             <button class="w-full px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors">
               검색 실행
@@ -241,104 +207,78 @@
 <script setup>
 import { ref, onMounted, onActivated } from "vue";
 import { useRouter } from 'vue-router';
-
-onMounted(() => {
-  loadVideosFromStorage();
-});
-onActivated(() => {
-  // 이미 메모리에 파일 객체들이 유지되고 있다면 재로딩으로 File 손실 방지
-  if (items.value.length === 0) {
-    loadVideosFromStorage();
-  }
-});
+import { useSummaryVideoStore } from '@/stores/summaryVideoStore';
 
 const isZoomed = ref(false);
 const zoomedVideo = ref(null);
 const showSearchSidebar = ref(false);
 const hoveredVideoId = ref(null);
-const playingVideoIds = ref([]); // 여러 동영상의 재생 상태를 관리
+const playingVideoIds = ref([]);
 const expandedVideoId = ref(null);
-
-const router = useRouter();
 const showDeletePopup = ref(false);
 const items = ref([]);
 const selectedIds = ref([]);
 const videoRefs = ref({});
+const isDragging = ref(false);
+const draggedVideoId = ref(null);
 
-function playVideo(videoId) {
-  const videoElement = videoRefs.value[videoId];
-  if (videoElement) {
-    videoElement.play();
+const router = useRouter();
+const summaryVideoStore = useSummaryVideoStore();
+
+onMounted(loadVideosFromStorage);
+onActivated(() => {
+  if (items.value.length === 0) {
+    loadVideosFromStorage();
   }
-}
+});
 
-// localStorage에서 동영상 목록 로딩
 function loadVideosFromStorage() {
   const stored = localStorage.getItem("videoItems");
   if (!stored) return;
-  const raw = JSON.parse(stored);
-  // 기존 구조(url) -> 확장 구조(originUrl/displayUrl/objectUrl)
-  items.value = raw.map(v => ({
-    id: v.id,
-    title: v.title,
+  items.value = JSON.parse(stored).map(v => ({
+    ...v,
     originUrl: v.url || v.originUrl || '',
     displayUrl: v.url || v.displayUrl || v.originUrl || '',
-    objectUrl: null, // 재로딩된 세션에서는 revoke 대상 없음
-    date: v.date,
-    file: null,
-    progress: 0 // 초기화된 progress 값 추가
+    objectUrl: null,
+    progress: 0
   }));
 }
 
-// 페이지 로드 시 동영상 목록 불러오기
-loadVideosFromStorage();
+function persistToStorage() {
+  localStorage.setItem("videoItems", JSON.stringify(items.value.map(({ id, title, originUrl, date }) => ({ id, title, url: originUrl, date }))));
+}
 
-async function handleUpload(e) {
-  const files = Array.from(e.target.files ?? []);
-  if (!files.length) return;
-  const newVideos = files
-    .filter(file => {
-      if (!file.type.startsWith('video/')) {
-        alert('동영상 파일만 업로드할 수 있습니다.');
-        return false;
-      }
-      return true;
-    })
-    .map(file => {
-      const objUrl = URL.createObjectURL(file);
-      return {
-        id: Date.now() + Math.random(),
-        title: file.name,
-        originUrl: objUrl,
-        displayUrl: objUrl,
-        objectUrl: objUrl, // revoke 대상
-        date: new Date().toISOString().slice(0, 10),
-        file,
-        url: objUrl // Summary 호환(기존 필드 유지)
-      };
-    });
+function handleUpload(e) {
+  const files = Array.from(e.target.files ?? []).filter((file) => {
+    if (!file.type.startsWith('video/')) {
+      alert('동영상 파일만 업로드할 수 있습니다.');
+      return false;
+    }
+    return true;
+  });
+
+  const newVideos = files.map((file) => {
+    const objUrl = URL.createObjectURL(file);
+    return {
+      id: Date.now() + Math.random(),
+      title: file.name,
+      originUrl: objUrl,
+      displayUrl: objUrl,
+      objectUrl: objUrl,
+      date: new Date().toISOString().slice(0, 10),
+      file,
+      url: objUrl
+    };
+  });
+
   items.value.unshift(...newVideos);
   persistToStorage();
   if (e.target) e.target.value = '';
 }
 
-function persistToStorage() {
-  const serializable = items.value.map(v => ({
-    id: v.id,
-    title: v.title,
-    url: v.originUrl, // 이전 구조와 호환
-    date: v.date
-  }));
-  localStorage.setItem("videoItems", JSON.stringify(serializable));
-}
-
 function toggleSelect(id) {
   const idx = selectedIds.value.indexOf(id);
-  if (idx === -1) {
-    selectedIds.value.push(id);
-  } else {
-    selectedIds.value.splice(idx, 1);
-  }
+  idx === -1 ? selectedIds.value.push(id) : selectedIds.value.splice(idx, 1);
 }
 
 function zoomVideo(video) {
@@ -352,36 +292,41 @@ function unzoomVideo() {
 }
 
 function confirmDelete() {
-  // 삭제 전 이 컴포넌트가 생성한 objectUrl만 해제
-  items.value
-    .filter(v => selectedIds.value.includes(v.id))
-    .forEach(v => {
-      if (v.objectUrl) {
-        try { URL.revokeObjectURL(v.objectUrl); } catch (e) { }
+  console.log("Selected IDs before delete:", selectedIds.value);
+  console.log("Items before delete:", items.value);
+
+  // 선택된 동영상 삭제
+  items.value = items.value.filter(video => {
+    if (selectedIds.value.includes(video.id)) {
+      if (video.objectUrl) {
+        try {
+          URL.revokeObjectURL(video.objectUrl);
+        } catch (error) {
+          console.error("Failed to revoke object URL:", error);
+        }
       }
-    });
-  items.value = items.value.filter(v => !selectedIds.value.includes(v.id));
+      return false; // 삭제 대상
+    }
+    return true; // 유지 대상
+  });
+
+  console.log("Items after delete:", items.value);
+
+  // localStorage 업데이트
   persistToStorage();
+
+  // 선택된 ID 초기화
   selectedIds.value = [];
   showDeletePopup.value = false;
 }
 
-import { useSummaryVideoStore } from '@/stores/summaryVideoStore';
-const summaryVideoStore = useSummaryVideoStore();
-
 function goToSummary() {
-  // 반드시 items.value에서 선택된 동영상을 넘김 (file 객체가 살아있음)
-  const selectedVideos = items.value
-    .filter(v => selectedIds.value.includes(v.id))
-    .map(v => ({
-      id: v.id,
-      name: v.title,
-      title: v.title,
-      url: v.originUrl, // Summary는 v.url을 사용 -> 원본 URL 전달
-      date: v.date,
-      summary: v.summary || '',
-      file: v.file instanceof File ? v.file : null
-    }));
+  const selectedVideos = items.value.filter(v => selectedIds.value.includes(v.id)).map(v => ({
+    ...v,
+    name: v.title,
+    summary: v.summary || '',
+    file: v.file instanceof File ? v.file : null
+  }));
   summaryVideoStore.setVideos(selectedVideos);
   router.push({ name: 'Summary' });
 }
@@ -401,49 +346,30 @@ function togglePlay(videoId) {
   if (!videoElement) return;
 
   const index = playingVideoIds.value.indexOf(videoId);
-  if (index === -1) {
-    playingVideoIds.value.push(videoId);
-    videoElement.play();
-  } else {
-    playingVideoIds.value.splice(index, 1);
-    videoElement.pause();
-  }
+  index === -1 ? playingVideoIds.value.push(videoId) && videoElement.play() : playingVideoIds.value.splice(index, 1) && videoElement.pause();
 }
 
 function openSettings(videoId) {
-  console.log(`Settings for video ID: ${videoId}`);
-  if (expandedVideoId.value === videoId) {
-    expandedVideoId.value = null;
-  } else {
-    expandedVideoId.value = videoId;
-  }
+  expandedVideoId.value = expandedVideoId.value === videoId ? null : videoId;
 }
 
 function updateProgress(videoId, event) {
   const video = items.value.find(v => v.id === videoId);
   if (video) {
-    const currentTime = event.target.currentTime;
-    const duration = event.target.duration;
+    const { currentTime, duration } = event.target;
     video.progress = duration ? (currentTime / duration) * 100 : 0;
   }
 }
-
-const isDragging = ref(false);
-const draggedVideoId = ref(null);
 
 function seekVideo(videoId, event) {
   const videoElement = videoRefs.value[videoId];
   if (!videoElement) return;
 
-  const progressBar = event.currentTarget;
-  const rect = progressBar.getBoundingClientRect();
-  const clickPosition = event.clientX - rect.left;
-  const newTime = (clickPosition / rect.width) * videoElement.duration;
-
-  videoElement.currentTime = newTime;
+  const { left, width } = event.currentTarget.getBoundingClientRect();
+  videoElement.currentTime = ((event.clientX - left) / width) * videoElement.duration;
 }
 
-function startDragging(videoId, event) {
+function startDragging(videoId) {
   isDragging.value = true;
   draggedVideoId.value = videoId;
 
@@ -460,11 +386,8 @@ function handleDragging(event) {
   const progressBar = event.target.closest('.relative.cursor-pointer');
   if (!progressBar) return;
 
-  const rect = progressBar.getBoundingClientRect();
-  const dragPosition = event.clientX - rect.left;
-  const newTime = Math.max(0, Math.min((dragPosition / rect.width) * videoElement.duration, videoElement.duration));
-
-  videoElement.currentTime = newTime;
+  const { left, width } = progressBar.getBoundingClientRect();
+  videoElement.currentTime = Math.max(0, Math.min(((event.clientX - left) / width) * videoElement.duration, videoElement.duration));
 }
 
 function stopDragging() {
