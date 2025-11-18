@@ -163,6 +163,7 @@ class VSS:
             "summarize_batch_size": batch_size,
             "rag_batch_size": rag_batch_size,
             "rag_top_k": rag_top_k,
+            "enable_chat": True,
         }
 
         response = requests.post(self.summarize_endpoint, json=body)
@@ -176,25 +177,36 @@ class VSS:
             # JSON이 아니거나 에러일 때는 원본 텍스트 또는 에러 메시지 반환
             return json_data
 
-    def query_video(self, file_id, query):
+    def query_video(self, video_id, model, chunk_size, temperature, seed, max_new_tokens, top_p, top_k, query):
         body = {
-            "id": file_id,
-            "messages": [{"content": query, "role": "user"}],
-            "model": self.model,
+            "id": video_id,
+            "model": model,
+            "chunk_duration": chunk_size,
+            "temperature": temperature,
+            "seed": seed,
+            "max_tokens": max_new_tokens,
+            "top_p": top_p,
+            "top_k": top_k,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+            "highlight": False,
         }
+        body["messages"] = [{"content": str(query), "role": "user"}]
         response = requests.post(self.query_endpoint, json=body)
         json_data = self.check_response(response)
         message_content = json_data["choices"][0]["message"]["content"]
         return message_content
 
+# 전역 VSS 클라이언트 (지연 초기화)
+vss_client = None
+
 @app.post("/vss-summarize")
-async def gradio_api(
+async def vss_summarize(
     file: UploadFile,
     prompt: str = Form(...),
     csprompt: str = Form(...),
     saprompt: str = Form(...),
     chunk_duration: int = Form(...),
-    model: Optional[str] = Form(...),
     num_frames_per_chunk: int = Form(...),
     frame_width: int = Form(...),
     frame_height: int = Form(...),
@@ -216,16 +228,26 @@ async def gradio_api(
     alert_temperature: float = Form(...),
     alert_max_tokens: int = Form(...),
 ):
+    global vss_client
+    if vss_client is None:
+        vss_client = VSS(VIA_SERVER_URL)
+
+    with requests.get(VIA_SERVER_URL + "/models") as resp:
+        resp_json = resp.json()
+        if resp.status_code >= 400:  # 수정된 부분
+            return
+        
+        model = resp_json["data"][0]["id"]
+
     os.makedirs("./tmp", exist_ok=True)
     file_path = f"./tmp/{file.filename}"
-    print(f"Saving uploaded file to: {file_path}")
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
+    # 업로드용 임시 파일 실제 저장 (기존 누락으로 인해 FileNotFoundError / 빈 처리 발생 가능)
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
 
-    vss = VSS("http://172.16.7.64:8100")
-    video_id = vss.upload_video(file_path)
+    video_id = vss_client.upload_video(file_path)
 
-    result = vss.summarize_video(
+    result = vss_client.summarize_video(
         video_id,
         prompt,
         csprompt,
@@ -253,7 +275,45 @@ async def gradio_api(
         alert_temperature,
         alert_max_tokens,
     )
-    return {"summary": result}
+    return {"summary": result, "video_id": video_id}
+
+@app.post("/vss-query")
+def vss_query(
+    video_id: Optional[str] = Form(None),
+    file: Optional[UploadFile] = None,
+    chunk_size: int = Form(...),
+    temperature: float = Form(...),
+    seed: int = Form(...),
+    max_new_tokens: int = Form(...),
+    top_p: float = Form(...),
+    top_k: int = Form(...),
+    query: str = Form(...)
+    ):
+    
+    # 전역 vss_client 사용 선언 (누락 시 UnboundLocalError 발생)
+    global vss_client
+    if vss_client is None:
+        vss_client = VSS(VIA_SERVER_URL)
+    
+    with requests.get(VIA_SERVER_URL + "/models") as resp:
+        resp_json = resp.json()
+        if resp.status_code >= 400:  # 수정된 부분
+            return
+        
+        model = resp_json["data"][0]["id"]
+    
+    if file and not video_id:
+        os.makedirs("./tmp", exist_ok=True)
+        file_path = f"./tmp/{file.filename}"
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        video_id = vss_client.upload_video(file_path)
+    elif not video_id:
+        raise HTTPException(status_code=400, detail="video_id 또는 file 중 하나는 필요합니다.")\
+        
+    result = vss_client.query_video(video_id, model, chunk_size, temperature, seed, max_new_tokens, top_p, top_k, query)
+
+    return {"summary": result, "video_id": video_id}
 
 # 로그인용 모델
 class LoginRequest(BaseModel):
