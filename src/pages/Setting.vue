@@ -4,7 +4,8 @@
       <h2>VLM Parameters</h2>
       <span class="ml-auto">{{ showVlmParams ? '▲' : '▼' }}</span>
     </button>
-    <div :class="[showVlmParams ? 'block' : 'hidden', 'mt-3']">
+    <Transition name="fade-slide">
+    <div v-show="showVlmParams" class="mt-3">
       <div class="grid lg:grid-cols-3 gap-4 rounded-md">
         <section class="rounded-2xl border-2 px-2 py-3 min-w-[220px] bg-white">
           <h2 class="font-semibold mb-3">Chunk 설정</h2>
@@ -113,7 +114,7 @@
             </div>
 
             <div class="ml-auto">
-              <input v-model.number="maxTokens" type="number" min="1" max="1024" step="1" class="border-2 border-gray-300 w-20 text-center" />
+              <input v-model.number="settingStore.maxTokens" type="number" min="1" max="1024" step="1" class="border-2 border-gray-300 w-[70%] text-center" />
               <button class="border-2 border-gray-300 w-7" @click="reset_MaxTokens">↺</button>
             </div>
           </div>
@@ -134,6 +135,7 @@
         </section>
       </div>
     </div>
+    </Transition>
   </div>
 
   <div class="border-2 px-3 py-3 bg-gray-100">
@@ -143,12 +145,14 @@
     </button>
 
     <!--Summarize Parameters-->
-    <div :class="[showRAGParams ? 'block' : 'hidden', 'mt-3', 'border-2', 'border-gray-300']">
+    <Transition name="fade-slide">
+    <div v-show="showRAGParams" class="mt-3 border-2 border-gray-300">
       <button class="w-full text-left rounded-md px-3 py-2 flex items-center gap-2"  @click="toggleSUMMARYParams">
         <span>Summarize Parameters</span>
         <span class="ml-auto">{{ showSUMMARYParams ? '▲' : '▼' }}</span>
       </button>
-      <div :class="[showSUMMARYParams ? 'block' : 'hidden', 'mt-3', 'm-3']">
+      <Transition name="fade-scale">
+      <div v-show="showSUMMARYParams" class="mt-3 m-3">
         <section class="rounded-2xl border-2 px-2 py-3 min-w-[220px] bg-white">
           <div class="flex items-center gap-2">
             <label>
@@ -209,15 +213,19 @@
           </div>
         </section>
       </div>
+      </Transition>
     </div>
+    </Transition>
 
     <!-- Chat parameters-->
-    <div :class="[showRAGParams ? 'block' : 'hidden', 'mt-3', 'border-2', 'border-gray-300']">
+    <Transition name="fade-slide">
+    <div v-show="showRAGParams" class="mt-3 border-2 border-gray-300">
       <button class="w-full text-left rounded-md px-3 py-2 flex items-center gap-2"  @click="toggleChatParams">
         <span>Chat Parameters</span>
         <span class="ml-auto">{{ showChatParams ? '▲' : '▼' }}</span>
       </button>
-      <div :class="[showChatParams ? 'block' : 'hidden', 'mt-3', 'm-3']">
+      <Transition name="fade-scale">
+      <div v-show="showChatParams" class="mt-3 m-3">
         <section class="rounded-2xl border-2 px-2 py-3 min-w-[220px] bg-white">
           <div class="flex items-center gap-2">
             <label>
@@ -278,15 +286,19 @@
           </div>
         </section>
       </div>
+      </Transition>
     </div>
+    </Transition>
 
     <!-- Alert Parameters -->
-    <div :class="[showRAGParams ? 'block' : 'hidden', 'mt-3', 'border-2', 'border-gray-300']">
+    <Transition name="fade-slide">
+    <div v-show="showRAGParams" class="mt-3 border-2 border-gray-300">
       <button class="w-full text-left rounded-md px-3 py-2 flex items-center gap-2"  @click="toggleAlertParams">
         <span>Alert Parameters</span>
         <span class="ml-auto">{{ showAlertParams ? '▲' : '▼' }}</span>
       </button>
-      <div :class="[showAlertParams ? 'block' : 'hidden', 'mt-3', 'm-3']">
+      <Transition name="fade-scale">
+      <div v-show="showAlertParams" class="mt-3 m-3">
         <section class="rounded-2xl border-2 px-2 py-3 min-w-[220px] bg-white">
           <div class="flex items-center gap-2">
             <label>
@@ -347,7 +359,9 @@
           </div>
         </section>
       </div>
+      </Transition>
     </div>
+    </Transition>
 
     <!--Batch Size-->
     <div class="grid lg:grid-cols-1 gap-4 rounded-md, mt-3">
@@ -448,3 +462,12 @@ const resetA_TopP = () => resetParameter('A_TopP', 0.7);
 const resetA_TEMPERATURE = () => resetParameter('A_TEMPERATURE', 0.2);
 const resetA_MAX_TOKENS = () => resetParameter('A_MAX_TOKENS', 2048);
 </script>
+
+<style scoped>
+.fade-slide-enter-active, .fade-slide-leave-active { transition: all .28s cubic-bezier(.4,0,.2,1); }
+.fade-slide-enter-from, .fade-slide-leave-to { opacity:0; transform: translateY(-6px); }
+.fade-scale-enter-active, .fade-scale-leave-active { transition: all .25s ease; }
+.fade-scale-enter-from, .fade-scale-leave-to { opacity:0; transform: scale(.96); }
+/* 메뉴 토글 버튼 포커스 테두리 제거 */
+button:focus, button:focus-visible { outline: none; box-shadow: none; }
+</style>
