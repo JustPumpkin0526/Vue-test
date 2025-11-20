@@ -709,14 +709,9 @@ function confirmDelete() {
 }
 
 function goToSummary() {
-  const selectedVideos = items.value.filter(v => selectedIds.value.includes(v.id)).map(v => ({
-    ...v,
-    name: v.title,
-    summary: v.summary || '',
-    file: v.file instanceof File ? v.file : null
-  }));
-  summaryVideoStore.setVideos(selectedVideos);
-  router.push({ name: 'Summary' });
+  const selectedVideos = items.value.filter(v => selectedIds.value.includes(v.id));
+  summaryVideoStore.setVideos(selectedVideos); // Pinia 스토어에 선택된 동영상 저장
+  router.push({ name: 'Summary' }); // Summary 페이지로 이동
 }
 
 function goToSearch() {

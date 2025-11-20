@@ -22,13 +22,16 @@ export const useSummaryVideoStore = defineStore('summaryVideo', {
      * @param {Array<{id: number, title: string, url: string, date: string, file?: File}>} videos
      */
     setVideos(videos) {
-      // 원본 File 객체를 그대로 유지 (Summary 페이지에서 직접 사용 필요)
       this.videos = videos.map(v => ({
         id: v.id,
         title: v.title,
-        url: v.url,
+        originUrl: v.originUrl,
+        displayUrl: v.displayUrl,
+        objectUrl: v.objectUrl,
         date: v.date,
-        file: v.file instanceof File ? v.file : null
+        file: v.file instanceof File ? v.file : null,
+        url: v.url, // videoUrl이 url로 저장됨
+        summary: v.summary || '' // Ensure summary is included
       }));
     },
     clearVideos() {

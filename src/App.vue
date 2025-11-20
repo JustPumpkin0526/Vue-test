@@ -18,4 +18,5 @@
 <script setup>
 import HeaderBar from "@/components/HeaderBar.vue";
 import SidebarNav from "@/components/SidebarNav.vue";
+import './assets/tailwind.css';
 </script>

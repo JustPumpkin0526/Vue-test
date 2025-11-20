@@ -7,93 +7,16 @@ from fastapi import Request
 from openai import OpenAI
 import requests
 import mariadb
-from fastapi.middleware.cors import CORSMiddleware
+import shutil
+import json
+import os
+import re
 
 app = FastAPI()
-
-# 로그인용 모델
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-# 로그인 엔드포인트
-@app.post("/login")
-def login(data: LoginRequest = Body(...)):
-    cursor.execute(
-        "SELECT PW FROM vss_user WHERE ID = ?",
-        (data.username,)
-    )
-    row = cursor.fetchone()
-    if row is None:
-        return {"success": False, "message": "가입되지 않은 ID입니다."}
-    db_pw = row[0]
-    if db_pw != data.password:
-        return {"success": False, "message": "비밀번호가 올바르지 않습니다."}
-    return {"success": True}
-
-# DB 연결 설정
-conn = mariadb.connect(
-    user="root",
-    password="pass0001!",
-    host="127.0.0.1",
-    port=3306,
-    database="vss"
-)
-cursor = conn.cursor()
-
-class User(BaseModel):
-    username: str
-    password: str
-    email: str
-
-@app.post("/register")
-def register(user: User):
-    try:
-        cursor.execute(
-            "INSERT INTO vss_user (ID, PW, EMAIL) VALUES (?, ?, ?)",
-            (user.username, user.password, user.email)
-        )
-        conn.commit()
-        return {"message": "회원가입 성공"}
-    except mariadb.IntegrityError:
-        raise HTTPException(status_code=400, detail="이미 존재하는 사용자입니다.")
-
-
-# CORS 설정 (Vue와 통신 가능하게)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # 실제 운영에서는 도메인 제한 권장
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # VIA 서버 주소
 VIA_SERVER_URL = "http://172.16.7.64:8100"  # 환경에 맞게 수정
 
-@app.post("/api/summarize")
-async def summarize(file: UploadFile = File(...), prompt: str = Form(...)):
-    # 1. VIA 서버에 파일 업로드
-    files = {"file": (file.filename, await file.read(), file.content_type)}
-    upload_resp = requests.post(f"{VIA_SERVER_URL}/files", files=files)
-    if upload_resp.status_code != 200:
-        return JSONResponse(status_code=500, content={"error": "VIA 서버 파일 업로드 실패"})
-    media_id = upload_resp.json().get("id")
-    if not media_id:
-        return JSONResponse(status_code=500, content={"error": "media_id 없음"})
-
-    # 2. VIA 서버에 요약 요청
-    payload = {
-        "media_id": media_id,
-        "prompt": prompt,
-    }
-    summarize_resp = requests.post(f"{VIA_SERVER_URL}/summarize", json=payload)
-    if summarize_resp.status_code != 200:
-        return JSONResponse(status_code=500, content={"error": "VIA 서버 요약 실패"})
-    result = summarize_resp.json()
-
-    # 3. Vue로 결과 반환
-    return JSONResponse(content={"summary": result.get("summary", result)})
 class VSS:
     """Wrapper to call VSS REST APIs"""
 
@@ -123,9 +46,16 @@ class VSS:
             return response.text
 
     def get_model(self):
-        response = requests.get(self.models_endpoint)
-        json_data = self.check_response(response)
-        return json_data["data"][0]["id"]  # get configured model name
+        try:
+            resp = requests.get(self.models_endpoint, timeout=10)
+        except Exception as e:
+            # Raise HTTPException so FastAPI returns a proper error response (and CORS headers)
+            raise HTTPException(status_code=502, detail=f"Failed to reach VIA server for models: {e}")
+        json_data = self.check_response(resp)
+        try:
+            return json_data["data"][0]["id"]  # get configured model name
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Invalid response from VIA /models: {e}")
 
     def upload_video(self, video_path):
         files = {"file": (f"file_{self.f_count}", open(video_path, "rb"))}
@@ -232,12 +162,19 @@ async def vss_summarize(
     if vss_client is None:
         vss_client = VSS(VIA_SERVER_URL)
 
-    with requests.get(VIA_SERVER_URL + "/models") as resp:
+    # GET models from VIA server (synchronous requests)
+    try:
+        resp = requests.get(VIA_SERVER_URL + "/models", timeout=10)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to contact VIA server: {e}")
+    try:
         resp_json = resp.json()
-        if resp.status_code >= 400:  # 수정된 부분
-            return
-        
-        model = resp_json["data"][0]["id"]
+    except Exception:
+        resp_json = None
+    if resp.status_code >= 400 or not resp_json:
+        raise HTTPException(status_code=502, detail=f"VIA /models returned status {resp.status_code}")
+
+    model = resp_json["data"][0]["id"]
 
     os.makedirs("./tmp", exist_ok=True)
     file_path = f"./tmp/{file.filename}"
@@ -295,12 +232,11 @@ def vss_query(
     if vss_client is None:
         vss_client = VSS(VIA_SERVER_URL)
     
-    with requests.get(VIA_SERVER_URL + "/models") as resp:
-        resp_json = resp.json()
-        if resp.status_code >= 400:  # 수정된 부분
-            return
-        
-        model = resp_json["data"][0]["id"]
+    resp = requests.get(VIA_SERVER_URL + "/models")
+    resp_json = resp.json()
+    if resp.status_code >= 400:
+        return
+    model = resp_json["data"][0]["id"]
     
     if file and not video_id:
         os.makedirs("./tmp", exist_ok=True)

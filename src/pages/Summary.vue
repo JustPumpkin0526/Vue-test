@@ -13,7 +13,7 @@
         :class="[isDragging ? 'bg-blue-50 ring-blue-300' : 'bg-gray-200']"
         @dragover.prevent="onDragOver" @dragleave.prevent="onDragLeave" @drop.prevent="onDrop"
         @click="onVideoAreaClick">
-        <template v-if="!videoUrl">
+        <template v-if="!videoFiles || videoFiles.length === 0">
           <span v-if="!isDragging">
             <span class="font-bold text-blue-500 flex flex-col items-center justify-center text-center w-full">
               Drop Video here<br>-- or --<br>Click to upload
@@ -76,16 +76,20 @@
         </template>
         <template v-else>
           <!-- 여러 개일 때 리스트 & 확대 분기 -->
-          <div v-if="!isZoomed" id="list" class="w-full bg-gray-200 rounded-[14px] p-6 ring-1 ring-gray-300">
-            <div class="w-full ring-1 ring-gray-200 bg-gradient-to-br from-white to-gray-50 rounded-[14px] overflow-y-auto shadow-inner"
-              style="height:600px; min-height:600px; max-height:600px; position: relative;">
+          <div v-if="!isZoomed" id="list" class="relative w-full h-full border border-gray-200 bg-gradient-to-br from-white to-gray-50 rounded-2xl p-6 mt-0 shadow-inner">
+            <div class="w-full h-[90%] border border-gray-200 bg-white rounded-2xl overflow-y-auto shadow-sm">
+              <div v-if="videoFiles.length === 0" class="flex items-center justify-center h-full">
+                <div class="w-[30%] h-[9%] bg-gradient-to-br from-gray-50 to-gray-100 text-gray-500 text-center text-[18px] pt-[14px] border border-gray-200 rounded-2xl shadow-sm backdrop-blur-sm">
+                  <p class="font-light">Please upload a video</p>
+                </div>
+              </div>
               <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-6 p-6">
                 <div v-for="(video, idx) in videoFiles" :key="video.id"
-                  class="flex flex-col items-center justify-center bg-white rounded-xl shadow-md hover:shadow-xl hover:bg-blue-50 cursor-pointer p-3 border border-gray-200 relative transform transition-all duration-300 hover:-translate-y-1 hover:scale-105 group"
+                  class="flex flex-col items-center justify-center bg-white rounded-2xl shadow-md hover:shadow-xl cursor-pointer p-3 border border-gray-200 relative transform transition-all duration-300 hover:scale-105 hover:-translate-y-1 group"
                   :class="{ 'ring-2 ring-blue-400 ring-offset-2': selectedIndexes.includes(video.id) }"
                   @click="selectVideo(video.id)">
                   <div
-                    class="w-[100%] h-[100%] flex items-center justify-center bg-gray-200 rounded-xl mb-2 overflow-hidden relative group"
+                    class="w-[100%] h-[130px] flex items-center justify-center bg-gray-200 rounded-xl overflow-hidden relative group"
                     @mouseenter="hoveredVideoId = video.id" @mouseleave="hoveredVideoId = null">
                     <input type="checkbox" class="absolute top-1 left-1 z-10" v-model="selectedIndexes"
                       :value="video.id" />
@@ -276,8 +280,18 @@
         </div>
       </div>
 
-      <input type="file" accept="video/*" multiple @change="onUpload" ref="fileInputRef" class="hidden"
-        :disabled="videoFiles.length > 0" />
+      <input type="file" accept="video/*" multiple @change="onUpload" ref="fileInputRef" class="hidden" />
+
+          <!-- 경고 모달 -->
+          <div v-if="showWarningModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div class="bg-white rounded-lg shadow-lg max-w-lg w-full p-6">
+              <h3 class="text-lg font-semibold mb-2">경고</h3>
+              <p class="text-sm text-gray-700 mb-4" v-html="warningMessage"></p>
+              <div class="flex justify-end gap-2">
+                <button class="px-3 py-2 rounded bg-blue-600 text-white" @click="closeWarning">확인</button>
+              </div>
+            </div>
+          </div>
 
       <div v-if="videoFiles.length === 1" class="mt-2 flex">
         <button
@@ -434,12 +448,13 @@ function addChatMessage(message) {
 }
 
 function updateProgress(videoId, event) {
-  const video = videoRefs.value[videoId];
-  if (video && video.duration) {
-    progress.value[videoId] = (video.currentTime / video.duration) * 100;
-    currentTimeMap.value[videoId] = video.currentTime;
-    durationMap.value[videoId] = video.duration;
-  }
+  if (!videoId) return;
+  const video = videoRefs.value && videoRefs.value[videoId];
+  if (!video) return;
+  if (typeof video.duration !== 'number' || !Number.isFinite(video.duration) || video.duration === 0) return;
+  progress.value[videoId] = (video.currentTime / video.duration) * 100;
+  currentTimeMap.value[videoId] = video.currentTime;
+  durationMap.value[videoId] = video.duration;
 }
 
 function seekVideo(videoId, event) {
@@ -524,7 +539,7 @@ onMounted(() => {
     });
     selectedIndexes.value = videoFiles.value.map(v => v.id);
     zoomedIndex.value = videoFiles.value.length > 0 ? 0 : null;
-    // 초기 로딩 후 File 객체가 null인 항목 복원 시도 (세션 재진입, localStorage 경유 케이스)
+    // 초기 로딩 후 File 객체가 null인 항목 복원 시도 (세션 재진입, localStorage 경유 케스)
     restoreAllMissingFiles();
   }
 });
@@ -576,9 +591,9 @@ function onDrop(e) {
 }
 
 function onVideoAreaClick() {
-  if (fileInputRef.value) {
-    fileInputRef.value.click();
-  }
+  // Only open file picker when there are no uploaded videos.
+  if (videoFiles.value && videoFiles.value.length > 0) return;
+  if (fileInputRef.value) fileInputRef.value.click();
 }
 
 function selectVideo(id) {
@@ -639,6 +654,19 @@ function onUpload(e) {
 }
 
 async function runInference() {
+  // Prompt이 없을 경우 경고 모달 표시
+  if (!prompt.value || String(prompt.value).trim().length === 0) {
+    // 사용자에게 입력을 요구하고 실행을 막기 위한 단순 경고
+    warningMessage.value = '텍스트를 입력하십시오.';
+    pendingAction = null;
+    showWarningModal.value = true;
+    return;
+  }
+  // 실제 실행 로직은 runInferenceConfirmed에 있음
+  await runInferenceConfirmed();
+}
+
+async function runInferenceConfirmed() {
   const VSS_API_URL = 'http://localhost:8001/vss-summarize';
 
   // 순차 처리 대상: 선택된 것이 있으면 선택 영상들, 없으면 전체
@@ -661,7 +689,7 @@ async function runInference() {
   addChatMessage({
     id: Date.now() + Math.random(),
     role: 'system',
-    content: `📦 총 ${targetVideos.length}개 동영상 요약을 시작합니다 (순차 처리).`
+    content: `📦 총 ${targetVideos.length}개 동영상 요약을 시작합니다.`
   });
 
   for (let idx = 0; idx < targetVideos.length; idx++) {
@@ -714,6 +742,8 @@ async function runInference() {
     formData.append('alert_top_p', safeNum(settingStore.A_TopP, 1.0));
     formData.append('alert_temperature', safeNum(settingStore.A_TEMPERATURE, 1.0));
     formData.append('alert_max_tokens', safeNum(settingStore.A_MAX_TOKENS, 512));
+
+    console.log(settingStore.chunk);
 
     try {
       const res = await fetch(VSS_API_URL, { method: 'POST', body: formData });
@@ -791,6 +821,25 @@ function removeSingleVideo() {
   }
 }
 
+// 경고 모달 상태/메시지
+const showWarningModal = ref(false);
+const warningMessage = ref('');
+let pendingAction = null; // function to execute if user confirms
+
+function closeWarning() {
+  showWarningModal.value = false;
+  warningMessage.value = '';
+  pendingAction = null;
+}
+
+function confirmWarning() {
+  // 단순히 모달을 닫기만 함 (실행 금지)
+  showWarningModal.value = false;
+  pendingAction = null;
+  warningMessage.value = '';
+}
+
+
 function batchRemoveSelectedVideos() {
   videoFiles.value
     .filter(v => selectedIndexes.value.includes(v.id))
@@ -825,6 +874,17 @@ function batchRemoveSelectedVideos() {
 }
 
 async function onAsk(q) {
+  if (!q || String(q).trim().length === 0) {
+    // 사용자에게 입력을 요구하고 실행을 막기 위한 단순 경고
+    warningMessage.value = '텍스트를 입력하십시오.';
+    pendingAction = null;
+    showWarningModal.value = true;
+    return;
+  }
+  await onAskConfirmed(q);
+}
+
+async function onAskConfirmed(q) {
   const VSS_API_URL = 'http://localhost:8001/vss-query';
   const formData = new FormData();
 
