@@ -35,13 +35,6 @@
         </svg>
         <span v-if="!collapsed" class="transition-opacity duration-200 text-lg">Report</span>
       </RouterLink>
-      <RouterLink
-        to="/setting"
-        class="flex items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white active:scale-[0.97]"
-        :class="isActive('/setting')">
-        <img :src="settingIcon" alt="Setting" class="w-6 h-6 transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3" :class="route.path.startsWith('/setting') ? 'png-active' : ''" />
-        <span v-if="!collapsed" class="transition-opacity duration-200 text-lg">Setting</span>
-      </RouterLink>
     </nav>
 
     <div class="space-y-3 flex flex-col items-center">
@@ -65,9 +58,6 @@ const isActive = (path) =>
   route.path.startsWith(path)
     ? "text-vix-primary font-medium bg-gradient-to-r from-white to-vix-primary/10 shadow ring-1 ring-vix-primary/30"
     : "text-gray-700 hover:bg-gradient-to-r hover:from-white hover:to-gray-50";
-
-// 인라인 SVG 사용으로 stroke=currentColor 적용. PNG는 필터 처리.
-import settingIcon from '@/assets/icons/setting.png';
 const collapsed = ref(false);
 function toggleCollapse() {
   collapsed.value = !collapsed.value;

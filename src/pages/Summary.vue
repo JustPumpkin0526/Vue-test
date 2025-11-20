@@ -2,10 +2,14 @@
   <div class="grid lg:grid-cols-2 gap-6">
     <!-- 좌측: 비디오/업로드 -->
     <section class="rounded-2xl p-5 bg-gradient-to-br from-white via-gray-50 to-gray-100 border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-300">
-      <h2 class="font-semibold mb-3">
-        {{selectedIndexes.length === 0 ? 'Video Section' : (videoFiles.find(v => v.id === selectedIndexes[0])?.name ||
-          'Video Section')}}
-      </h2>
+      <div class="flex items-center gap-2 mb-3">
+        <h2 class="font-semibold">
+          {{selectedIndexes.length === 0 ? 'Video Section' : (videoFiles.find(v => v.id === selectedIndexes[0])?.name || 'Video Section')}}
+        </h2>
+        <button @click="showSettingModal = true" title="설정" class="ml-auto w-9 h-9 flex items-center justify-center bg-white/90 hover:bg-white backdrop-blur-md rounded-full shadow transition-all duration-200 border border-gray-200">
+          <img :src="settingIcon" alt="설정" class="w-5 h-5 object-contain" />
+        </button>
+      </div>
 
 
       <div
@@ -328,6 +332,16 @@
       <p class="text-xs text-gray-500 mt-2">
         Chunk 크기/프롬프트 등 세부 설정은 Setting에서 조정하세요.
       </p>
+      <!-- Setting Modal -->
+      <div v-if="showSettingModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div class="bg-white rounded-lg shadow-lg max-w-[90%] max-h-[90%] w-full p-4 overflow-auto">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold">설정</h3>
+            <button @click="closeSettingModal" class="px-2 py-[1px] rounded-full border-[2px] border-gray-300 ">X</button>
+          </div>
+          <Setting />
+        </div>
+      </div>
     </section>
 
     <!-- 우측: 결과/프롬프트 -->
@@ -391,6 +405,8 @@ import { useSummaryVideoStore } from '@/stores/summaryVideoStore';
 import api from "@/services/api";
 import { useSettingStore } from '@/stores/settingStore';
 import { marked } from 'marked';
+import Setting from '@/pages/Setting.vue';
+import settingIcon from '@/assets/icons/setting.png';
 
 const selectedIndexes = ref([]); // 선택된 동영상 id 배열
 const prompt = ref("");
@@ -427,6 +443,10 @@ const dragVideoId = ref(null); // 업로드 영역용 id
 const draggingVideoId = ref(null); // 재생바 스크러빙 중인 비디오 id
 const progressBarRefs = ref({}); // 비디오별 진행바 엘리먼트 참조
 let draggingBarEl = null; // 현재 드래그 중인 진행바 엘리먼트
+// 설정 모달 상태
+const showSettingModal = ref(false);
+
+function closeSettingModal() { showSettingModal.value = false; }
 
 function scrollChatToBottom() {
   nextTick(() => {
