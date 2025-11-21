@@ -330,7 +330,7 @@
       </div>
 
       <p class="text-xs text-gray-500 mt-2">
-        Chunk 크기/프롬프트 등 세부 설정은 Setting에서 조정하세요.
+        요약 성능을 조정하고 싶다면 우측 상단의 설정 버튼을 클릭하여 조정할 수 있습니다.
       </p>
       <!-- Setting Modal -->
       <div v-if="showSettingModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -762,8 +762,6 @@ async function runInferenceConfirmed() {
     formData.append('alert_top_p', safeNum(settingStore.A_TopP, 1.0));
     formData.append('alert_temperature', safeNum(settingStore.A_TEMPERATURE, 1.0));
     formData.append('alert_max_tokens', safeNum(settingStore.A_MAX_TOKENS, 512));
-
-    console.log(settingStore.chunk);
 
     try {
       const res = await fetch(VSS_API_URL, { method: 'POST', body: formData });
