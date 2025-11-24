@@ -1,18 +1,25 @@
-from fastapi import FastAPI, File, Form, UploadFile, Body, HTTPException
+from fastapi import FastAPI, File, Form, UploadFile, Body, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing import Optional, List
 from pydantic import BaseModel
 from fastapi import Request
-from openai import OpenAI
 import requests
 import mariadb
 import shutil
 import json
 import os
-import re
+import random
+from moviepy.video.io.VideoFileClip import VideoFileClip
+from fastapi.logger import logger
+import time
 
 app = FastAPI()
+
+# Serve generated clips as static files under /clips
+os.makedirs("./clips", exist_ok=True)
+app.mount("/clips", StaticFiles(directory="clips"), name="clips")
 
 # VIA 서버 주소
 VIA_SERVER_URL = "http://172.16.7.64:8100"  # 환경에 맞게 수정
@@ -184,6 +191,33 @@ async def vss_summarize(
 
     video_id = vss_client.upload_video(file_path)
 
+    #print(video_id)
+    #print(prompt)
+    #print(csprompt)
+    #print(saprompt)
+    #print(chunk_duration)
+    #print(model)
+    #print(num_frames_per_chunk)
+    #print(frame_width)
+    #print(frame_height)
+    #print(top_k)
+    #print(top_p)
+    #print(temperature)
+    #print(max_tokens)
+    #print(seed)
+    #print(batch_size)
+    #print(rag_batch_size)
+    #print(rag_top_k)
+    #print(summary_top_p)
+    #print(summary_temperature)
+    #print(summary_max_tokens)
+    #print(chat_top_p)
+    #print(chat_temperature)
+    #print(chat_max_tokens)
+    #print(alert_top_p)
+    #print(alert_temperature)
+    #print(alert_max_tokens)
+
     result = vss_client.summarize_video(
         video_id,
         prompt,
@@ -251,6 +285,8 @@ def vss_query(
 
     return {"summary": result, "video_id": video_id}
 
+
+
 # 로그인용 모델
 class LoginRequest(BaseModel):
     username: str
@@ -306,4 +342,96 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.post("/api/generate-clips")
+async def generate_clips(
+    request: Request,
+    file: UploadFile = File(None),
+    files: List[UploadFile] = File(None)
+):
+    os.makedirs("./clips", exist_ok=True)  # 클립 저장 디렉토리 생성
+    # /clips 폴더 초기화 (기존 파일 삭제) - 요청 전체에서 단 한 번만 실행
+    if getattr(request, "_clips_cleared", None) is None:
+        for existing_file in os.listdir("./clips"):
+            file_path = os.path.join("./clips", existing_file)
+            try:
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    logger.info(f"Deleted existing clip: {file_path}")
+            except Exception as e:
+                logger.error(f"Error deleting file {file_path}: {e}")
+        setattr(request, "_clips_cleared", True)
+
+    grouped_clips = []
+
+    # Normalize inputs: support single file param or multiple files
+    upload_list = []
+    if files:
+        upload_list.extend(files)
+    if file:
+        upload_list.append(file)
+
+    if not upload_list:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    # Ensure tmp directory exists
+    os.makedirs("./tmp", exist_ok=True)
+
+    try:
+        for upfile in upload_list:
+            safe_filename = os.path.basename(upfile.filename)
+            tmp_path = f"./tmp/{safe_filename}"
+            # 업로드 파일을 새로 열어서 복사 (핸들 문제 방지)
+            upfile.file.seek(0)
+            with open(tmp_path, "wb") as buffer:
+                shutil.copyfileobj(upfile.file, buffer)
+
+            logger.info(f"Uploaded video saved to {tmp_path}")
+
+            video_clips = []
+            # MoviePy에 파일 경로(문자열)로 전달
+            video = VideoFileClip(tmp_path)
+            duration = video.duration or 0
+            logger.info(f"Video duration: {duration} seconds for {tmp_path}")
+            num_clips = random.randint(0, 3)
+            logger.info(f"Number of clips to generate: {num_clips}")
+            base_name, _ = os.path.splitext(safe_filename)
+            for clip_index in range(num_clips):
+                start_time = random.uniform(0, max(0, duration - 15))
+                end_time = min(start_time + 15, duration)
+                clip_filename = f"clip_{base_name}_{clip_index+1}.mp4"
+                clip_path = os.path.join("./clips", clip_filename)
+                try:
+                    video.subclip(start_time, end_time).write_videofile(
+                        clip_path,
+                        codec="libx264",
+                        audio = False,
+                        verbose=False
+                    )
+                    logger.info(f"Clip saved: {clip_path}")
+                    base = str(request.base_url).rstrip('/')
+                    clip_url = f"{base}/clips/{clip_filename}"
+                    video_clips.append({
+                        "id": f"{base_name}_{clip_index}",
+                        "title": clip_filename,
+                        "url": clip_url,
+                    })
+                except Exception as e:
+                    logger.error(f"Error generating clip {clip_filename}: {e}")
+                time.sleep(0.5)
+            video.close()
+            del video
+
+            grouped_clips.append({
+                "video": safe_filename,
+                "clips": video_clips
+            })
+
+    except Exception as e:
+        logger.error(f"Error processing uploaded video(s): {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing uploaded video(s): {e}")
+
+    print("All clips generated successfully.")
+    print(f"Returned clips payload: {json.dumps({'clips': grouped_clips}, ensure_ascii=False)}")
+    return JSONResponse(content={"clips": grouped_clips})
 
