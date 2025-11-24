@@ -1,20 +1,20 @@
 <template>
   <!-- 메뉴 틀 -->
-  <div id="video_list" class="w-[100%] h-[100vh]">
+  <div id="video_list" class="w-[100%] h-[90vh]">
 
     <!-- 헤더 -->
     <header id="header" class="flex items-center justify-between">
 
-      <!-- 제목 -->
-      <div
-        class="w-[20%] bg-gradient-to-r from-blue-500 to-blue-600 text-white text-[25px] p-3 text-center rounded-xl shadow-lg mt-[10px] ml-[50px] transform transition-all duration-300 hover:scale-105 hover:shadow-xl">
-        <p class="font-semibold">My Video Storage</p>
-      </div>
+      <button
+          class="mt-4 mr-4 ml-auto bg-slate-600 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl shadow-sm cursor-pointer flex items-center gap-2 transform transition-all duration-300 hover:scale-105 active:scale-95 disabled:bg-gray-300 disabled:text-gray-100 disabled:shadow-none disabled:transform-none disabled:cursor-default"
+          :disabled="items.length === 0" @click="allselect()">
+          Select All
+      </button>
 
       <!-- 업로드 버튼 -->
-      <div class="flex items-center h-12 mr-12 mt-auto ml-auto">
+      <div class="flex items-center h-12 mr-12 mt-auto ">
         <label
-          class="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-5 py-2.5 rounded-xl shadow-lg cursor-pointer flex items-center gap-2 transform transition-all duration-300 hover:scale-105 hover:shadow-xl active:scale-95">
+          class="bg-slate-600 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl shadow-sm cursor-pointer flex items-center gap-2 transform transition-all duration-300 hover:scale-105 active:scale-95">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
@@ -33,12 +33,7 @@
       <!-- 동영상 출력 영역 -->
       <div class="w-full h-[90%] border border-gray-200 bg-white rounded-2xl overflow-y-auto shadow-sm">
 
-        <button
-          class="mt-4 ml-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-5 py-2.5 rounded-xl shadow-lg cursor-pointer flex items-center gap-2 transform transition-all duration-300 hover:scale-105 hover:shadow-xl active:scale-95
-        disabled:from-gray-300 disabled:to-gray-400 disabled:text-gray-100 disabled:shadow-none disabled:transform-none disabled:cursor-default"
-          :disabled="items.length === 0" @click="allselect()">
-          전체 선택
-        </button>
+        
 
         <div v-if="items.length === 0" class="flex items-center justify-center h-full">
           <div
@@ -84,18 +79,17 @@
                     d="M5.5 3.5A.5.5 0 0 1 6 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5H6a.5.5 0 0 1-.5-.5v-9zM9.5 3.5A.5.5 0 0 1 10 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-9z" />
                 </svg>
               </button>
-              <!-- 오버레이 프로그레스 바 & 시간 표시 (Summary.vue 스타일) -->
               <div class="absolute bottom-0 left-0 w-full px-2 pb-2 flex flex-col pointer-events-none">
                 <div
                   class="relative w-full h-2 bg-gray-200/90 rounded-full cursor-pointer group/progress overflow-visible backdrop-blur-[2px] pointer-events-auto"
                   :class="{ 'dragging': isDragging && draggedVideoId === video.id }"
                   @click.stop="seekVideo(video.id, $event)">
                   <div
-                    class="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full shadow-sm overflow-hidden progress-bar-fill"
+                    class="h-full bg-slate-500 rounded-full shadow-sm overflow-hidden progress-bar-fill"
                     :class="{ 'transition-all duration-300': !(isDragging && draggedVideoId === video.id) }"
                     :style="{ width: `${video.progress || 0}%` }"></div>
                   <div
-                    class="absolute top-1 h-4 w-4 bg-white rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2 transition-all duration-200 border-2 border-blue-500 z-[100] progress-bar-handle"
+                    class="absolute top-1 h-4 w-4 bg-white rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2 transition-all duration-200 border-2 border-slate-500 z-[100] progress-bar-handle"
                     :class="{ 'transition-none': isDragging && draggedVideoId === video.id }"
                     :style="{ left: `${video.progress || 0}%` }" @mousedown="startDragging(video.id, $event)"></div>
                 </div>
@@ -157,17 +151,17 @@
       <!-- 좌측 하단 Summary, Search 버튼 -->
       <div class="absolute left-[2%] bottom-[4%] w-[21%] z-50 flex gap-4">
         <button
-          class="w-[100%] text-[25px] px-5 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg hover:shadow-xl hover:from-blue-600 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 disabled:text-gray-100 disabled:shadow-none disabled:transform-none disabled:cursor-default transition-all duration-300 transform hover:scale-105 active:scale-95 font-semibold"
-          :disabled="selectedIds.length === 0" @click="goToSummary">Summary</button>
-        <button
-          class="w-[100%] text-[25px] px-5 py-3 rounded-xl bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg hover:shadow-xl hover:from-green-600 hover:to-green-700 disabled:from-gray-300 disabled:to-gray-400 disabled:text-gray-100 disabled:shadow-none disabled:transform-none disabled:cursor-default transition-all duration-300 transform hover:scale-105 active:scale-95 font-semibold"
+          class="w-[100%] text-[25px] px-5 py-3 rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-sm disabled:bg-gray-300 disabled:text-gray-100 disabled:shadow-none disabled:transform-none disabled:cursor-default transition-all duration-300 transform hover:scale-105 active:scale-95 font-semibold"
           :disabled="selectedIds.length === 0" @click="goToSearch">Search</button>
+        <button
+          class="w-[100%] text-[25px] px-5 py-3 rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-sm disabled:bg-gray-300 disabled:text-gray-100 disabled:shadow-none disabled:transform-none disabled:cursor-default transition-all duration-300 transform hover:scale-105 active:scale-95 font-semibold"
+          :disabled="selectedIds.length === 0" @click="goToSummary">Summary</button>
       </div>
 
       <!-- 우측 하단 선택 동영상 삭제 아이콘 버튼 -->
       <div class="absolute right-[3%] bottom-[4%] z-50">
         <button
-          class="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 to-red-600 text-white shadow-lg hover:shadow-xl hover:from-red-600 hover:to-red-700 disabled:from-gray-300 disabled:to-gray-400 disabled:text-gray-200 disabled:shadow-none disabled:transform-none disabled:cursor-default transition-all duration-300 flex items-center justify-center transform hover:scale-110 active:scale-95"
+          class="relative w-16 h-16 rounded-2xl bg-slate-700 text-white shadow-sm hover:shadow-md disabled:bg-gray-300 disabled:text-gray-200 disabled:shadow-none disabled:transform-none disabled:cursor-default transition-all duration-300 flex items-center justify-center transform hover:scale-110 active:scale-95"
           :disabled="selectedIds.length === 0" @click="showDeletePopup = true" aria-label="선택 동영상 삭제" title="선택 동영상 삭제">
           <!-- 휴지통 아이콘 -->
           <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
@@ -195,10 +189,10 @@
             </div>
             <div class="flex justify-end gap-3 mt-8">
               <button
-                class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 transition-all duration-300 transform hover:scale-105 active:scale-95 font-medium shadow-md"
+                class="px-6 py-2.5 rounded-xl bg-slate-700 text-white hover:bg-slate-800 transition-all duration-300 transform hover:scale-105 active:scale-95 font-medium shadow-sm"
                 @click="confirmDelete">delete</button>
               <button
-                class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-gray-200 to-gray-300 text-gray-700 hover:from-gray-300 hover:to-gray-400 transition-all duration-300 transform hover:scale-105 active:scale-95 font-medium shadow-md"
+                class="px-6 py-2.5 rounded-xl bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all duration-300 transform hover:scale-105 active:scale-95 font-medium shadow-sm"
                 @click="showDeletePopup = false">cancel</button>
             </div>
           </div>
@@ -894,8 +888,19 @@ function handleSearch() {
       return response.json();
     })
     .then(data => {
+      const clips = data.clips || [];
+      if (clips.length === 0) {
+        currentChat.messages.push({
+          role: 'assistant',
+          content: '해당하는 장면은 존재하지 않습니다.',
+          clips: [],
+          timestamp: getCurrentTime()
+        });
+        return;
+      }
+
       // 결과를 메시지 객체에 직접 저장 (DOM 수동 조작 제거)
-      const clipItems = (data.clips || []).map(clip => {
+      const clipItems = clips.map(clip => {
         // Ensure absolute URL: backend serves clips on port 8001
         const raw = clip.url || '';
         const url = raw.startsWith('http') ? raw : `http://localhost:8001${raw}`;
