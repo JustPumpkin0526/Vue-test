@@ -1,6 +1,6 @@
 <template>
-  <aside :class="[collapsed ? 'w-[105px] text-center' : 'w-64', 'shrink-0 border-r bg-gray-100 p-6 flex flex-col justify-between transition-all duration-200']">
-    <nav class="space-y-3">
+  <aside :class="[collapsed ? 'w-[105px]' : 'w-64', ' h-[100vh] shrink-0 border-r bg-gray-100 p-6 flex flex-col justify-between relative transition-all duration-200']">
+    <nav class="space-y-3 flex flex-col flex-1">
       <RouterLink
         to="/video_storage"
         class="flex items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white active:scale-[0.97]"
@@ -9,7 +9,7 @@
           <circle cx="11" cy="11" r="7" />
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
-        <span v-if="!collapsed" class="transition-opacity duration-200 text-lg">Video Storage</span>
+        <span v-if="!collapsed" class="transition-opacity duration-200 text-lg">Search</span>
       </RouterLink>
       <RouterLink
         to="/summary"
@@ -21,7 +21,7 @@
           <line x1="7" y1="12" x2="13" y2="12" />
           <line x1="7" y1="16" x2="11" y2="16" />
         </svg>
-        <span v-if="!collapsed" class="transition-opacity duration-200 text-base">Summary & Query</span>
+        <span v-if="!collapsed" class="transition-opacity duration-200 text-lg">Summary</span>
       </RouterLink>
       <RouterLink
         to="/report"
@@ -35,18 +35,45 @@
         </svg>
         <span v-if="!collapsed" class="transition-opacity duration-200 text-lg">Report</span>
       </RouterLink>
-    </nav>
 
-    <div class="space-y-3 flex flex-col items-center">
-      <button
-        :class="[collapsed ? 'text-center' : 'w-full text-left', 'flex items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group bg-white hover:shadow hover:bg-white active:scale-[0.97]']"
-        @click="toggleCollapse"
-        aria-label="Toggle sidebar"
-        :aria-expanded="(!collapsed).toString()"
-      >
-        <span class="transition-opacity duration-200 select-none text-lg">{{ collapsed ? '>>' : 'Collapse' }}</span>
-      </button>
-    </div>
+      <div class="absolute left-6 right-6 bottom-[5vh] flex flex-col items-start space-y-3">
+        <!-- Setting (PNG icon) -->
+        <button
+          type="button"
+          :class="['w-full text-left', 'flex items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white active:scale-[0.97]']"
+          title="Setting"
+          @click.stop.prevent="() => {}"
+        >
+          <img src="@/assets/icons/setting.png" alt="Setting" class="w-6 h-6 object-contain" />
+          <span v-if="!collapsed" class="transition-opacity duration-200 text-lg">Setting</span>
+        </button>
+
+        <!-- Help (question mark icon) -->
+        <button
+          type="button"
+          :class="['w-full text-left', 'flex items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white active:scale-[0.97]']"
+          title="Help"
+          @click.stop.prevent="() => {}"
+        >
+          <svg viewBox="0 0 24 24" class="w-6 h-6 transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3 icon-base text-gray-700">
+            <path d="M12 18h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M9.09 9a3 3 0 115.82 0c0 2-3 2.5-3 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1" fill="none" />
+          </svg>
+          <span v-if="!collapsed" class="transition-opacity duration-200 text-lg">Help</span>
+        </button>
+
+        <!-- Collapse button positioned with the bottom group -->
+        <button
+          :class="['w-full text-left', 'flex items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white active:scale-[0.97]']"
+          @click="toggleCollapse"
+          aria-label="Toggle sidebar"
+          :aria-expanded="(!collapsed).toString()"
+        >
+          <span class="transition-opacity duration-200 select-none text-lg">{{ collapsed ? '>>' : 'Collapse' }}</span>
+        </button>
+      </div>
+    </nav>
   </aside>
 </template>
 
