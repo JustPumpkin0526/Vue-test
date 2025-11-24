@@ -81,19 +81,15 @@
         <template v-else>
           <!-- 여러 개일 때 리스트 & 확대 분기 -->
           <div v-if="!isZoomed" id="list" class="relative w-full h-full border border-gray-200 bg-gradient-to-br from-white to-gray-50 rounded-2xl p-6 mt-0 shadow-inner">
-            <div class="w-full h-[90%] border border-gray-200 bg-white rounded-2xl overflow-y-auto shadow-sm">
-              <div v-if="videoFiles.length === 0" class="flex items-center justify-center h-full">
-                <div class="w-[30%] h-[9%] bg-gradient-to-br from-gray-50 to-gray-100 text-gray-500 text-center text-[18px] pt-[14px] border border-gray-200 rounded-2xl shadow-sm backdrop-blur-sm">
-                  <p class="font-light">Please upload a video</p>
-                </div>
-              </div>
-              <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-6 p-6">
+            <div class="w-full h-[100%] border border-gray-200 bg-white rounded-2xl overflow-y-auto shadow-sm">
+              <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
                 <div v-for="(video, idx) in videoFiles" :key="video.id"
-                  class="flex flex-col items-center justify-center bg-white rounded-2xl shadow-md hover:shadow-xl cursor-pointer p-3 border border-gray-200 relative transform transition-all duration-300 hover:scale-105 hover:-translate-y-1 group"
-                  :class="{ 'ring-2 ring-blue-400 ring-offset-2': selectedIndexes.includes(video.id) }"
-                  @click="selectVideo(video.id)">
+                  class="flex flex-col items-center justify-center rounded-2xl shadow-md hover:shadow-xl cursor-pointer p-3 border border-gray-200 relative transform transition-all duration-300 hover:scale-105 hover:-translate-y-1 group"
+                  :class="{ 'ring-2 ring-blue-400 bg-blue-100': selectedIndexes.includes(video.id) }"
+                  @click="selectVideo(video.id)"
+                  @contextmenu.prevent.stop="onVideoContextMenu(video, idx, $event)">
                   <div
-                    class="w-[100%] h-[130px] flex items-center justify-center bg-gray-200 rounded-xl overflow-hidden relative group"
+                    class="flex items-center justify-center bg-gray-200 rounded-xl overflow-hidden relative group"
                     @mouseenter="hoveredVideoId = video.id" @mouseleave="hoveredVideoId = null">
                     <input type="checkbox" class="absolute top-1 left-1 z-10" v-model="selectedIndexes"
                       :value="video.id" />
@@ -150,46 +146,19 @@
                       </svg>
                     </button>
                   </div>
-                  <!-- 설정 버튼 및 메뉴 (Video_Storage.vue 스타일, 확대 포함) -->
-                  <div class="absolute top-2 right-2 z-20">
-                    <button
-                      @click.stop="openSettings(video.id)"
-                      class="w-9 h-9 flex items-center justify-center bg-white/90 hover:bg-white backdrop-blur-md rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-110 active:scale-95 border border-gray-200/50 group"
-                    >
-                      <svg class="w-5 h-5 text-gray-700 group-hover:text-blue-600 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path>
-                      </svg>
-                    </button>
-                    <Transition name="menu">
-                      <div v-if="expandedVideoId === video.id" 
-                        class="absolute top-12 right-0 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden min-w-[140px] backdrop-blur-md z-30"
-                        @click.stop>
-                        <div class="py-1">
-                          <button
-                            @click.stop="zoomVideo(idx); openSettings(video.id)"
-                            class="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100 transition-all duration-200 flex items-center gap-3 group"
-                          >
-                            <svg class="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"></path>
-                            </svg>
-                            <span class="font-medium">확대</span>
-                          </button>
-                          <div class="h-px bg-gray-100 my-1"></div>
-                          <button
-                            @click.stop="openSettings(video.id)"
-                            class="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all duration-200 flex items-center gap-3 group"
-                          >
-                            <svg class="w-5 h-5 text-gray-400 group-hover:text-gray-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            </svg>
-                            <span class="font-medium">설정</span>
-                          </button>
-                        </div>
-                      </div>
-                    </Transition>
-                  </div>
                 </div>
+              </div>
+            </div>
+            <!-- 우클릭 컨텍스트 메뉴 -->
+            <div v-if="contextMenu.visible" class="fixed z-[200]"
+              :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click.stop>
+              <div class="bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden w-[200px]">
+                <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextZoom">확대</button>
+                <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextOpenSettings">설정</button>
+                <div class="h-px bg-gray-100"></div>
+                <button class="w-full text-left px-4 py-3 text-red-600 hover:bg-gray-50" @click.stop="contextDelete">
+                  {{ selectedIndexes.length > 1 ? `선택된 항목 삭제 (${selectedIndexes.length})` : '삭제' }}
+                </button>
               </div>
             </div>
           </div>
@@ -272,7 +241,7 @@
       <div class="mb-3 flex items-center gap-2">
         <div class="relative flex-1">
           <textarea v-model="prompt" class="w-full border border-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-300 rounded-xl px-3 py-2 resize-none transition-all"
-            placeholder="프롬프트를 입력하세요." rows="3"></textarea>
+            placeholder="프롬프트를 입력하세요." rows="3" @keydown.enter.exact.prevent="runInference"></textarea>
           <button
             class="absolute right-[8px] top-[45px] p-2 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 text-white flex items-center justify-center shadow hover:shadow-lg hover:from-blue-600 hover:to-indigo-700 transition-all duration-200"
             @click="runInference" :disabled="videoFiles.length === 0 || selectedIndexes.length === 0">
@@ -365,7 +334,7 @@
               }">
               <span v-if="m.role === 'assistant'">AI</span>
               <span v-else-if="m.role === 'user'">You</span>
-              <span v-else>Sys</span>
+              <span v-else>VSS</span>
             </div>
             <div class="chat-bubble" :class="{
                 'user': m.role === 'user',
@@ -385,8 +354,8 @@
       <div class="flex items-center gap-2 mt-3">
         <input v-model="ask_prompt" placeholder="질문을 입력하세요..."
           class="w-full rounded-xl border border-gray-300 focus:border-green-500 focus:ring-2 focus:ring-green-300 px-4 py-3 bg-white transition-all"
-          @keyup.enter="onAsk(ask_prompt); ask_prompt = ''" />
-        <button class="rounded-lg bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-2 shadow hover:shadow-lg hover:from-green-600 hover:to-green-700 transition-all duration-200" @click="onAsk(ask_prompt); ask_prompt = ''">
+          @keyup.enter="() => { onAsk(ask_prompt); ask_prompt = '';}" />
+        <button class="rounded-lg bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-2 shadow hover:shadow-lg hover:from-green-600 hover:to-green-700 transition-all duration-200" @click="() => { onAsk(ask_prompt); ask_prompt = ''; }">
           Ask
         </button>
       </div>
@@ -402,7 +371,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, nextTick } from "vue";
 import { useSummaryVideoStore } from '@/stores/summaryVideoStore';
-import api from "@/services/api";
 import { useSettingStore } from '@/stores/settingStore';
 import { marked } from 'marked';
 import Setting from '@/pages/Setting.vue';
@@ -424,8 +392,6 @@ const ask_prompt = ref("");
 // 확대 기능 상태
 const isZoomed = ref(false); // 확대 여부 (멀티 비디오 전용)
 const zoomedIndex = ref(null); // 확대된 비디오 인덱스
-// 설정 메뉴 확장 상태
-const expandedVideoId = ref(null);
 const settingStore = useSettingStore();
 const videoFiles = ref([]); // Summary 메뉴의 로컬 동영상 배열
 // videoUrls 제거: 템플릿에서 사용되지 않아 메모리 관리 단순화
@@ -445,6 +411,8 @@ const progressBarRefs = ref({}); // 비디오별 진행바 엘리먼트 참조
 let draggingBarEl = null; // 현재 드래그 중인 진행바 엘리먼트
 // 설정 모달 상태
 const showSettingModal = ref(false);
+// 우클릭 컨텍스트 메뉴 상태
+const contextMenu = ref({ visible: false, x: 0, y: 0, video: null, index: null });
 
 function closeSettingModal() { showSettingModal.value = false; }
 
@@ -541,6 +509,7 @@ async function restoreAllMissingFiles() {
 
 // Pinia 스토어에서 동영상 목록을 불러와서 Summary 메뉴의 로컬 배열에 복사
 onMounted(() => {
+  document.addEventListener('click', handleGlobalClick);
   if (Array.isArray(summaryVideoStore.videos) && summaryVideoStore.videos.length > 0) {
     // Summary 전용 표시 URL을 분리하여 Video Storage 원본 URL(ObjectURL)과 독립
     videoFiles.value = summaryVideoStore.videos.map(v => {
@@ -566,6 +535,7 @@ onMounted(() => {
 
 // Summary 페이지에서 벗어날 때 영상 URL 및 스토어 정리 (다시 들어왔을 때 이전 영상이 남지 않도록)
 onUnmounted(() => {
+  document.removeEventListener('click', handleGlobalClick);
   // Summary에서 만든 전용 ObjectURL만 해제 (원본은 유지)
   videoFiles.value.forEach(v => {
     if (v.summaryObjectUrl) {
@@ -617,6 +587,7 @@ function onVideoAreaClick() {
 }
 
 function selectVideo(id) {
+  closeContextMenu();
   const idx = selectedIndexes.value.indexOf(id);
   if (idx === -1) {
     selectedIndexes.value.push(id);
@@ -625,8 +596,64 @@ function selectVideo(id) {
   }
 }
 
-function openSettings(videoId) {
-  expandedVideoId.value = (expandedVideoId.value === videoId) ? null : videoId;
+function closeContextMenu() {
+  contextMenu.value.visible = false;
+  contextMenu.value.video = null;
+  contextMenu.value.index = null;
+}
+
+function onVideoContextMenu(video, idx, event) {
+  if (!video) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (selectedIndexes.value.length < 2) {
+    if (!selectedIndexes.value.includes(video.id)) {
+      selectedIndexes.value = [video.id];
+    }
+  }
+  contextMenu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    video,
+    index: idx
+  };
+}
+
+function handleGlobalClick() {
+  if (!contextMenu.value.visible) return;
+  closeContextMenu();
+}
+
+function contextZoom() {
+  const { index, video } = contextMenu.value;
+  closeContextMenu();
+  if (index != null && index >= 0) {
+    zoomVideo(index);
+    return;
+  }
+  if (video) {
+    const resolvedIndex = videoFiles.value.findIndex(v => v.id === video.id);
+    if (resolvedIndex !== -1) {
+      zoomVideo(resolvedIndex);
+    }
+  }
+}
+
+function contextOpenSettings() {
+  closeContextMenu();
+  showSettingModal.value = true;
+}
+
+function contextDelete() {
+  const { video } = contextMenu.value;
+  closeContextMenu();
+  if (!video) return;
+  if (!selectedIndexes.value.includes(video.id) || selectedIndexes.value.length < 2) {
+    selectedIndexes.value = [video.id];
+  }
+  if (selectedIndexes.value.length === 0) return;
+  batchRemoveSelectedVideos();
 }
 
 function zoomVideo(idx) {
@@ -741,7 +768,6 @@ async function runInferenceConfirmed() {
     formData.append('csprompt', settingStore.captionPrompt ?? '');
     formData.append('saprompt', settingStore.aggregationPrompt ?? '');
     formData.append('chunk_duration', safeNum(settingStore.chunk, 10));
-    formData.append('model', (settingStore.model && String(settingStore.model)) || 'default');
     formData.append('num_frames_per_chunk', safeNum(settingStore.nfmc, 1));
     formData.append('frame_width', safeNum(settingStore.frameWidth, 224));
     formData.append('frame_height', safeNum(settingStore.frameHeight, 224));
@@ -763,8 +789,18 @@ async function runInferenceConfirmed() {
     formData.append('alert_temperature', safeNum(settingStore.A_TEMPERATURE, 1.0));
     formData.append('alert_max_tokens', safeNum(settingStore.A_MAX_TOKENS, 512));
 
+    // 경과 시간 추적기 설정
+    const intervalId = setInterval(() => {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+      const loadingIdx = chatMessages.value.findIndex(m => m.id === loadingId);
+      if (loadingIdx !== -1) {
+        chatMessages.value[loadingIdx].content = `⏳ [${idx + 1}/${targetVideos.length}] '${videoObj.name}' 요약 요청 중... (경과 시간: ${elapsed}s)`;
+      }
+    }, 10); // Update every 10ms for finer precision
+
     try {
       const res = await fetch(VSS_API_URL, { method: 'POST', body: formData });
+      clearInterval(intervalId); // 요청 완료 시 타이머 정리
       const endTime = Date.now();
       const elapsed = ((endTime - startTime) / 1000).toFixed(2);
       if (!res.ok) {
@@ -883,11 +919,6 @@ function batchRemoveSelectedVideos() {
     hoveredVideoId.value = null;
     playingVideoIds.value = [];
     videoRefs.value = {};
-    if (summaryVideoStore && typeof summaryVideoStore.clearVideos === 'function') {
-      summaryVideoStore.clearVideos();
-    } else if (summaryVideoStore && typeof summaryVideoStore.setVideos === 'function') {
-      summaryVideoStore.setVideos([]);
-    }
   }
 }
 

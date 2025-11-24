@@ -6,9 +6,9 @@
     <header id="header" class="flex items-center justify-between">
 
       <button
-          class="mt-4 mr-4 ml-auto bg-slate-600 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl shadow-sm cursor-pointer flex items-center gap-2 transform transition-all duration-300 hover:scale-105 active:scale-95 disabled:bg-gray-300 disabled:text-gray-100 disabled:shadow-none disabled:transform-none disabled:cursor-default"
-          :disabled="items.length === 0" @click="allselect()">
-          Select All
+        class="mt-4 mr-4 ml-auto bg-slate-600 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl shadow-sm cursor-pointer flex items-center gap-2 transform transition-all duration-300 hover:scale-105 active:scale-95 disabled:bg-gray-300 disabled:text-gray-100 disabled:shadow-none disabled:transform-none disabled:cursor-default"
+        :disabled="items.length === 0" @click="allselect()">
+        Select All
       </button>
 
       <!-- 업로드 버튼 -->
@@ -28,13 +28,10 @@
 
     <!-- 비디오 리스트 -->
     <div id="list"
-      class="relative w-full h-[80%] border border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-6 mt-6 shadow-inner">
+      class="relative w-full h-[90%] border border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-6 mt-6 shadow-inner">
 
       <!-- 동영상 출력 영역 -->
       <div class="w-full h-[90%] border border-gray-200 bg-white rounded-2xl overflow-y-auto shadow-sm">
-
-        
-
         <div v-if="items.length === 0" class="flex items-center justify-center h-full">
           <div
             class="w-[30%] h-[9%] bg-gradient-to-br from-gray-50 to-gray-100 text-gray-500 text-center text-[24px] pt-[22px] border border-gray-200 rounded-2xl shadow-sm backdrop-blur-sm">
@@ -45,9 +42,9 @@
         <!-- 동영상 출력 그리드(행열 구조) -->
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 p-6 overflow-y-auto">
           <div v-for="video in items" :key="video.id"
-            class="flex flex-col items-center justify-center bg-white rounded-2xl shadow-md hover:shadow-xl cursor-pointer p-3 border border-gray-200 relative transform transition-all duration-300 hover:scale-105 hover:-translate-y-1 group"
-            :class="{ 'ring-2 ring-blue-400 ring-offset-2': selectedIds.includes(video.id) }"
-            @click="toggleSelect(video.id)">
+            class="flex flex-col items-center justify-center rounded-2xl shadow-md hover:shadow-xl cursor-pointer p-3 border border-gray-200 relative transform transition-all duration-300 hover:scale-105 hover:-translate-y-1 group"
+            :class="{ 'ring-2 ring-blue-400 bg-blue-100': selectedIds.includes(video.id) }"
+            @click="onCardClick(video.id, $event)" @contextmenu.prevent.stop="onVideoContextMenu(video, $event)">
             <div
               class="w-[100%] h-[100%] flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl mb-2 overflow-hidden relative group-hover:from-gray-200 group-hover:to-gray-300 transition-all duration-300"
               @mouseenter="hoveredVideoId = video.id" @mouseleave="hoveredVideoId = null">
@@ -58,10 +55,6 @@
               <!-- 그리드: 재생 중이 아닐 때 어두워지는 오버레이 -->
               <div v-if="video.displayUrl" class="absolute inset-0 pointer-events-none transition-colors duration-300"
                 :class="playingVideoIds.includes(video.id) ? 'bg-transparent' : 'bg-black/20'"></div>
-              <div v-if="video.title"
-                class="absolute top-2 left-2 bg-gradient-to-r from-black/70 to-black/50 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-lg truncate max-w-[70%] pointer-events-none shadow-lg">
-                {{ video.title }}
-              </div>
               <!-- 재생 버튼 -->
               <button @click.stop="togglePlay(video.id)" :class="{
                 'opacity-100 scale-100': hoveredVideoId === video.id || !playingVideoIds.includes(video.id),
@@ -79,13 +72,17 @@
                     d="M5.5 3.5A.5.5 0 0 1 6 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5H6a.5.5 0 0 1-.5-.5v-9zM9.5 3.5A.5.5 0 0 1 10 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-9z" />
                 </svg>
               </button>
-              <div class="absolute bottom-0 left-0 w-full px-2 pb-2 flex flex-col pointer-events-none">
+              <div
+                class="absolute bottom-0 left-0 w-full px-2 pb-2 flex flex-col transition-all duration-300 ease-in-out"
+                :class="{
+                  'opacity-100 scale-100': hoveredVideoId === video.id || !playingVideoIds.includes(video.id),
+                  'opacity-0 scale-90': hoveredVideoId !== video.id && playingVideoIds.includes(video.id),
+                }">
                 <div
                   class="relative w-full h-2 bg-gray-200/90 rounded-full cursor-pointer group/progress overflow-visible backdrop-blur-[2px] pointer-events-auto"
                   :class="{ 'dragging': isDragging && draggedVideoId === video.id }"
                   @click.stop="seekVideo(video.id, $event)">
-                  <div
-                    class="h-full bg-slate-500 rounded-full shadow-sm overflow-hidden progress-bar-fill"
+                  <div class="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full shadow-sm overflow-hidden progress-bar-fill"
                     :class="{ 'transition-all duration-300': !(isDragging && draggedVideoId === video.id) }"
                     :style="{ width: `${video.progress || 0}%` }"></div>
                   <div
@@ -100,52 +97,96 @@
                 </div>
               </div>
             </div>
-            <!-- 설정 버튼 및 메뉴 -->
-            <div class="absolute top-2 right-2 z-20">
-              <!-- 설정 버튼 -->
-              <button @click.stop="openSettings(video.id)"
-                class="w-9 h-9 flex items-center justify-center bg-white/90 hover:bg-white backdrop-blur-md rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-110 active:scale-95 border border-gray-200/50 group">
-                <svg class="w-5 h-5 text-gray-700 group-hover:text-blue-600 transition-colors duration-300" fill="none"
-                  stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z">
-                  </path>
-                </svg>
-              </button>
-
-              <!-- 드롭다운 메뉴 -->
-              <Transition name="menu">
-                <div v-if="expandedVideoId === video.id"
-                  class="absolute top-12 right-0 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden min-w-[160px] backdrop-blur-md z-30"
-                  @click.stop>
-                  <div class="py-1">
-                    <button @click.stop="zoomVideo(video); openSettings(video.id)"
-                      class="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100 transition-all duration-200 flex items-center gap-3 group">
-                      <svg class="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" fill="none"
-                        stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"></path>
-                      </svg>
-                      <span class="font-medium">확대</span>
-                    </button>
-                    <div class="h-px bg-gray-100 my-1"></div>
-                    <button @click.stop="openSettings(video.id)"
-                      class="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all duration-200 flex items-center gap-3 group">
-                      <svg class="w-5 h-5 text-gray-400 group-hover:text-gray-600 transition-colors" fill="none"
-                        stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
-                        </path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                      </svg>
-                      <span class="font-medium">설정</span>
-                    </button>
-                  </div>
-                </div>
-              </Transition>
+            <div v-if="video.title" class="ml-4 w-full text-sm font-medium text-gray-800 truncate text-left">
+              {{ video.title }}
             </div>
           </div>
+        </div>
+      </div>
+      <!-- 확대 모달 팝업 - Teleport로 body에 렌더링 -->
+      <Teleport to="body">
+        <Transition name="modal">
+          <div v-if="isZoomed" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
+            @click.self="unzoomVideo">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl relative" @click.stop>
+              <!-- 비디오 영역 (확대 전용 - 하얀 프레임 + 하단 진행 바/타이틀) -->
+              <div class="relative w-full p-4 bg-white rounded-2xl shadow-inner flex flex-col">
+                <!-- 닫기 버튼: 프레임 우측 상단 -->
+                <button @click="unzoomVideo"
+                  class="ml-auto mb-3 z-10 w-6 h-6 flex items-center justify-center bg-black/50 hover:bg-black/70 rounded-full text-white transition-all duration-200">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                </button>
+                <div
+                  class="relative w-full aspect-video flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl overflow-hidden group zoom-group"
+                  @mouseenter="hoveredVideoId = zoomedVideo?.id" @mouseleave="hoveredVideoId = null">
+                <video v-if="zoomedVideo" ref="zoomVideoRef" :src="zoomedVideo.displayUrl"
+                  class="object-cover w-full h-full" preload="metadata" crossorigin="anonymous"
+                  @timeupdate="onZoomTimeUpdate($event)"
+                  @error="(e) => console.warn('zoom video error', e, zoomedVideo && zoomedVideo.displayUrl)"></video>
+                <div v-if="zoomedVideo" class="absolute inset-0 pointer-events-none transition-colors duration-300"
+                  :class="zoomPlaying ? 'bg-transparent' : 'bg-black/30'"></div>
+                <button v-if="zoomedVideo" @click.stop="togglePlay(zoomedVideo.id)" :class="[
+                  !zoomPlaying
+                    ? 'opacity-100 scale-100 pointer-events-auto'
+                    : (hoveredVideoId === zoomedVideo.id
+                      ? 'opacity-100 scale-100 pointer-events-auto'
+                      : 'opacity-0 scale-90 pointer-events-none'),
+                  'absolute inset-0 flex items-center justify-center bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-sm text-white rounded-full w-16 h-16 m-auto transition-all duration-300 hover:scale-110 active:scale-95 z-20'
+                ]">
+                  <svg v-if="!zoomPlaying" xmlns="http://www.w3.org/2000/svg" fill="currentColor"
+                    viewBox="0.4 -0.7 16 16" class="w-10 h-10">
+                    <path
+                      d="M6.271 4.055a.5.5 0 0 1 .759-.429l4.592 3.11a.5.5 0 0 1 0 .828l-4.592 3.11a.5.5 0 0 1-.759-.429V4.055z" />
+                  </svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0.4 -0.1 16 16"
+                    class="w-10 h-10">
+                    <path
+                      d="M5.5 3.5A.5.5 0 0 1 6 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5H6a.5.5 0 0 1-.5-.5v-9zM9.5 3.5A.5.5 0 0 1 10 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-9z" />
+                  </svg>
+                </button>
+                </div>
+                <!-- 하단 진행 바 + 타이틀 영역 -->
+                <div v-if="zoomedVideo" class="mt-4 w-full flex flex-col gap-2">
+                  <div ref="zoomProgressBarRef"
+                    class="relative w-full h-3 bg-gray-200 rounded-full cursor-pointer zoom-progress-bar overflow-visible"
+                    :class="{ 'dragging': isDragging && draggedVideoId === zoomedVideo.id }"
+                    @click.stop="seekVideo(zoomedVideo.id, $event)">
+                    <div
+                      class="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full shadow-sm overflow-hidden"
+                      :class="{ 'transition-all duration-300': !(isDragging && draggedVideoId === zoomedVideo.id) }"
+                      :style="{ width: `${zoomProgress}%` }"></div>
+                    <div
+                      class="absolute top-1/2 h-5 w-5 bg-white rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2 transition-all duration-200 border-2 border-blue-500 z-[20]"
+                      :class="{ 'transition-none': isDragging && draggedVideoId === zoomedVideo.id }"
+                      :style="{ left: `${zoomProgress}%` }" @mousedown="startDragging(zoomedVideo.id)"></div>
+                  </div>
+                  <div class="flex items-center justify-between text-xs font-medium text-gray-600">
+                    <div class="flex items-center gap-2">
+                      <span v-if="zoomedVideo.title" class="text-sm font-semibold text-gray-800 truncate max-w-[50vw]">{{ zoomedVideo.title }}</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-gray-500">
+                      <span>{{ formatTime(zoomCurrentTime) }}</span>
+                      <span>/</span>
+                      <span>{{ formatTime(zoomDuration) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </Teleport>
+      <!-- 우클릭 컨텍스트 메뉴 (고정 위치) -->
+      <div v-if="contextMenu.visible" class="fixed z-[200]"
+        :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click.stop>
+        <div class="bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden w-[200px]">
+          <button v-if="selectedIds.length < 2" class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextZoom">확대</button>
+          <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextOpenSettings">설정</button>
+          <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextSummary">Summary</button>
+          <div class="h-px bg-gray-100"></div>
+          <button class="w-full text-left px-4 py-3 text-red-600 hover:bg-gray-50" @click.stop="contextDelete">{{ selectedIds.length > 1 ? `선택된 항목 삭제 (${selectedIds.length})` : '삭제' }}</button>
         </div>
       </div>
       <!-- 좌측 하단 Summary, Search 버튼 -->
@@ -156,25 +197,6 @@
         <button
           class="w-[100%] text-[25px] px-5 py-3 rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-sm disabled:bg-gray-300 disabled:text-gray-100 disabled:shadow-none disabled:transform-none disabled:cursor-default transition-all duration-300 transform hover:scale-105 active:scale-95 font-semibold"
           :disabled="selectedIds.length === 0" @click="goToSummary">Summary</button>
-      </div>
-
-      <!-- 우측 하단 선택 동영상 삭제 아이콘 버튼 -->
-      <div class="absolute right-[3%] bottom-[4%] z-50">
-        <button
-          class="relative w-16 h-16 rounded-2xl bg-slate-700 text-white shadow-sm hover:shadow-md disabled:bg-gray-300 disabled:text-gray-200 disabled:shadow-none disabled:transform-none disabled:cursor-default transition-all duration-300 flex items-center justify-center transform hover:scale-110 active:scale-95"
-          :disabled="selectedIds.length === 0" @click="showDeletePopup = true" aria-label="선택 동영상 삭제" title="선택 동영상 삭제">
-          <!-- 휴지통 아이콘 -->
-          <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18" />
-            <path stroke-linecap="round" stroke-linejoin="round"
-              d="M8 6V4.8C8 4.358 8 4.137 8.074 3.958a1 1 0 01.418-.418C8.671 3.466 8.892 3.466 9.334 3.466h5.332c.442 0 .663 0 .842.074a1 1 0 01.418.418C16 4.137 16 4.358 16 4.8V6m-6 5v5m4-5v5M5 6l1.2 12.4c.109 1.123.163 1.685.44 2.118a2 2 0 00.826.73c.458.222 1.021.222 2.147.222h4.374c1.126 0 1.689 0 2.147-.222a2 2 0 00.826-.73c.277-.433.331-.995.44-2.118L19 6" />
-          </svg>
-          <!-- 선택 개수 배지 -->
-          <span v-if="selectedIds.length > 0"
-            class="absolute -top-1 -right-1 min-w-[28px] h-[28px] px-1 rounded-full bg-red-600 text-white text-xs font-semibold flex items-center justify-center shadow-md">
-            {{ selectedIds.length }}
-          </span>
-        </button>
       </div>
 
       <!-- 중앙 팝업창 -->
@@ -287,7 +309,8 @@
                 <!-- 클립 썸네일 있을 경우 첫 번째 클립을 아바타로 표시 -->
                 <template v-if="message.clips && message.clips.length > 0">
                   <video :src="message.clips[0].url" class="w-full h-full object-cover" muted playsinline
-                    @error="(e) => console.warn('avatar video error', e, message.clips[0].url)" crossorigin="anonymous"></video>
+                    @error="(e) => console.warn('avatar video error', e, message.clips[0].url)"
+                    crossorigin="anonymous"></video>
                   <div v-if="message.clips.length > 1"
                     class="absolute bottom-0 right-0 bg-black/60 text-[10px] text-white px-1 rounded">
                     +{{ message.clips.length - 1 }}
@@ -339,15 +362,15 @@
                     </p>
                     <div v-for="clip in message.clips" :key="clip.id"
                       :class="message.role === 'assistant' ? 'flex items-center gap-2 p-2 bg-gray-50 rounded-xl transition-all duration-200 hover:bg-gray-100' : 'flex items-center gap-2 p-2 bg-green-600/80 rounded-xl transition-all duration-200 hover:bg-green-600'">
-                      <video :src="clip.url" class="w-12 h-8 object-cover rounded cursor-pointer"
-                        preload="metadata" @click.stop="zoomClip(clip)"
-                        @error="(e) => console.warn('clip thumbnail error', e, clip.url)" crossorigin="anonymous"></video>
+                      <video :src="clip.url" class="w-12 h-8 object-cover rounded cursor-pointer" preload="metadata"
+                        @click.stop="zoomClip(clip)" @error="(e) => console.warn('clip thumbnail error', e, clip.url)"
+                        crossorigin="anonymous"></video>
                       <div class="flex-1 min-w-0">
                         <p
                           :class="message.role === 'assistant' ? 'text-xs font-medium text-gray-800 truncate' : 'text-xs font-medium text-white truncate'">
                           {{ clip.title }}</p>
                         <p :class="message.role === 'assistant' ? 'text-xs text-gray-500' : 'text-xs text-green-100'">{{
-                          clip.date }}</p>
+                          clip.sourceVideo || clip.date }}</p>
                       </div>
                     </div>
                   </div>
@@ -391,7 +414,8 @@
                   class="absolute right-2 bottom-2 p-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-110 active:scale-95 shadow-md">
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8">
+                    </path>
                   </svg>
                 </button>
               </div>
@@ -432,82 +456,11 @@
       </div>
     </div>
 
-    <!-- 확대 모달 팝업 - Teleport로 body에 렌더링 -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div v-if="isZoomed" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
-          @click.self="unzoomVideo">
-          <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl relative overflow-hidden" @click.stop>
-            <!-- 닫기 버튼 -->
-            <button @click="unzoomVideo"
-              class="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center bg-black/50 hover:bg-black/70 rounded-full text-white transition-all duration-200">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-              </svg>
-            </button>
-
-            <!-- 비디오 영역 (확대 전용 - 오버레이 진행 바 적용) -->
-            <div
-              class="relative w-full aspect-video flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl overflow-hidden group zoom-group"
-              @mouseenter="hoveredVideoId = zoomedVideo?.id" @mouseleave="hoveredVideoId = null">
-              <video v-if="zoomedVideo" ref="zoomVideoRef" :src="zoomedVideo.displayUrl"
-                class="object-cover w-full h-full" preload="metadata" crossorigin="anonymous" @timeupdate="onZoomTimeUpdate($event)"
-                @error="(e) => console.warn('zoom video error', e, zoomedVideo && zoomedVideo.displayUrl)"></video>
-              <div v-if="zoomedVideo" class="absolute inset-0 pointer-events-none transition-colors duration-300"
-                :class="zoomPlaying ? 'bg-transparent' : 'bg-black/30'"></div>
-              <div v-if="zoomedVideo && zoomedVideo.title"
-                class="absolute top-2 left-2 bg-gradient-to-r from-black/70 to-black/50 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-lg truncate max-w-[70%] pointer-events-none shadow-lg z-10">
-                {{ zoomedVideo.title }}
-              </div>
-              <button v-if="zoomedVideo" @click.stop="togglePlay(zoomedVideo.id)" :class="[
-                !zoomPlaying
-                  ? 'opacity-100 scale-100 pointer-events-auto'
-                  : (hoveredVideoId === zoomedVideo.id
-                    ? 'opacity-100 scale-100 pointer-events-auto'
-                    : 'opacity-0 scale-90 pointer-events-none'),
-                'absolute inset-0 flex items-center justify-center bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-sm text-white rounded-full w-16 h-16 m-auto transition-all duration-300 hover:scale-110 active:scale-95 z-20'
-              ]">
-                <svg v-if="!zoomPlaying" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0.4 -0.7 16 16"
-                  class="w-10 h-10">
-                  <path
-                    d="M6.271 4.055a.5.5 0 0 1 .759-.429l4.592 3.11a.5.5 0 0 1 0 .828l-4.592 3.11a.5.5 0 0 1-.759-.429V4.055z" />
-                </svg>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0.4 -0.1 16 16"
-                  class="w-10 h-10">
-                  <path
-                    d="M5.5 3.5A.5.5 0 0 1 6 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5H6a.5.5 0 0 1-.5-.5v-9zM9.5 3.5A.5.5 0 0 1 10 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-9z" />
-                </svg>
-              </button>
-              <!-- 확대 오버레이 진행 바 + 시간 -->
-              <div v-if="zoomedVideo"
-                class="absolute bottom-0 left-0 w-full px-4 pb-4 flex flex-col pointer-events-none">
-                <div ref="zoomProgressBarRef"
-                  class="relative w-full h-3 bg-gray-200/90 rounded-full cursor-pointer zoom-progress-bar overflow-visible backdrop-blur-[2px] pointer-events-auto"
-                  :class="{ 'dragging': isDragging && draggedVideoId === zoomedVideo.id }"
-                  @click.stop="seekVideo(zoomedVideo.id, $event)">
-                  <div class="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full shadow-sm overflow-hidden"
-                    :class="{ 'transition-all duration-300': !(isDragging && draggedVideoId === zoomedVideo.id) }"
-                    :style="{ width: `${zoomProgress}%` }"></div>
-                  <div
-                    class="absolute top-1.5 h-5 w-5 bg-white rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2 transition-all duration-200 border-2 border-blue-500 z-[120]"
-                    :class="{ 'transition-none': isDragging && draggedVideoId === zoomedVideo.id }"
-                    :style="{ left: `${zoomProgress}%` }" @mousedown="startDragging(zoomedVideo.id)"></div>
-                </div>
-                <div class="flex justify-between mt-2 text-xs font-medium text-white drop-shadow pointer-events-none">
-                  <span>{{ formatTime(zoomCurrentTime) }}</span>
-                  <span>{{ formatTime(zoomDuration) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onActivated, computed, nextTick, watch, Teleport } from "vue";
+import { ref, onMounted, onActivated, computed, nextTick, watch, onBeforeUnmount } from "vue";
 import { useRouter } from 'vue-router';
 import { useSummaryVideoStore } from '@/stores/summaryVideoStore';
 
@@ -547,6 +500,60 @@ const durationMap = ref({});
 // 확대 모달 시간 표시용
 const zoomCurrentTime = ref(0);
 const zoomDuration = ref(0);
+// Context menu state for right-click on video cards
+const contextMenu = ref({ visible: false, x: 0, y: 0, video: null });
+
+function onVideoContextMenu(video, e) {
+  // If the user already has multiple items selected, do not change selection
+  if (selectedIds.value.length < 2) {
+    if (!selectedIds.value.includes(video.id)) {
+      selectedIds.value = [video.id];
+    }
+  }
+  contextMenu.value = { visible: true, x: e.clientX, y: e.clientY, video };
+}
+
+function closeContextMenu() {
+  contextMenu.value.visible = false;
+  contextMenu.value.video = null;
+}
+
+function contextZoom() {
+  if (!contextMenu.value.video) return;
+  zoomVideo(contextMenu.value.video);
+  closeContextMenu();
+}
+
+function contextOpenSettings() {
+  if (!contextMenu.value.video) return;
+  openSettings(contextMenu.value.video.id);
+  closeContextMenu();
+}
+
+function contextSummary() {
+  goToSummary();
+  closeContextMenu();
+}
+
+function contextDelete() {
+  if (!contextMenu.value.video) return;
+  // If multiple items are already selected, delete those; otherwise delete the clicked one
+  if (selectedIds.value.length < 2) {
+    const id = contextMenu.value.video.id;
+    selectedIds.value = [id];
+  }
+  closeContextMenu();
+  showDeletePopup.value = true; // reuse existing delete confirmation flow
+}
+
+function handleGlobalClick(e) {
+  if (!contextMenu.value.visible) return;
+  // close when clicking outside
+  closeContextMenu();
+}
+
+onMounted(() => window.addEventListener('click', handleGlobalClick));
+onBeforeUnmount(() => window.removeEventListener('click', handleGlobalClick));
 
 function allselect() {
   if (selectedIds.value.length === items.value.length) {
@@ -554,6 +561,14 @@ function allselect() {
   } else {
     selectedIds.value = items.value.map(v => v.id);
   }
+}
+
+function onCardClick(id, event) {
+  // Only toggle on left mouse button
+  if (event && typeof event.button !== 'undefined') {
+    if (event.button !== 0) return;
+  }
+  toggleSelect(id);
 }
 
 function formatTime(sec) {
@@ -736,15 +751,33 @@ function goToSummary() {
 }
 
 function goToSearch() {
-  if (selectedIds.value.length > 0) {
-    showSearchSidebar.value = true;
-    // 채팅 내역은 유지하고 입력창만 초기화
-    searchInput.value = '';
+  if (selectedIds.value.length === 0) {
+    return;
+  }
 
-    // 채팅창이 없으면 새로 생성
-    if (chatSessions.value.length === 0) {
-      createNewChat();
-    }
+  const selectionVideos = selectedVideos.value;
+  const selectionSignature = getSelectionSignature(selectionVideos);
+
+  showSearchSidebar.value = true;
+  // 채팅 내역은 유지하고 입력창만 초기화
+  searchInput.value = '';
+
+  if (chatSessions.value.length === 0) {
+    createNewChat(selectionVideos, selectionSignature);
+    return;
+  }
+
+  const existingIndex = chatSessions.value.findIndex(
+    chat => chat.selectionSignature === selectionSignature
+  );
+
+  if (existingIndex !== -1) {
+    currentChatIndex.value = existingIndex;
+    nextTick(() => {
+      scrollToBottom();
+    });
+  } else {
+    createNewChat(selectionVideos, selectionSignature);
   }
 }
 
@@ -769,19 +802,43 @@ function scrollToBottom() {
   });
 }
 
-function createNewChat() {
+function getSelectionSignature(videos) {
+  if (!videos || videos.length === 0) return 'none';
+  const ids = videos
+    .map(video => video?.id)
+    .filter(id => id !== undefined && id !== null)
+    .map(id => id.toString())
+    .sort();
+  return ids.length > 0 ? ids.join('|') : 'none';
+}
+
+function snapshotVideosForChat(videos) {
+  return (videos || []).map(video => ({
+    id: video.id,
+    title: video.title,
+    displayUrl: video.displayUrl,
+    date: video.date
+  }));
+}
+
+function createNewChat(videos = selectedVideos.value, signature) {
+  const effectiveVideos = videos || [];
+  const selectionSnapshot = snapshotVideosForChat(effectiveVideos);
+  const resolvedSignature = signature ?? getSelectionSignature(effectiveVideos);
+
   const newChat = {
     id: Date.now(),
     name: null, // 사용자가 수정할 수 있는 이름
-    messages: []
+    messages: [],
+    selectionSignature: resolvedSignature
   };
 
   // 초기 시스템 메시지 추가
   newChat.messages.push({
     role: 'assistant',
-    content: `안녕하세요! 선택하신 <strong>${selectedIds.value.length}개의 동영상</strong>에서 검색을 도와드리겠습니다.`,
+    content: `안녕하세요! 선택하신 <strong>${selectionSnapshot.length}개의 동영상</strong>에서 검색을 도와드리겠습니다.`,
     isInitial: true,
-    selectedVideos: [...selectedVideos.value],
+    selectedVideos: selectionSnapshot,
     timestamp: getCurrentTime()
   });
 
@@ -848,80 +905,125 @@ function deleteChat(index) {
   }
 }
 
-function handleSearch() {
-  if (!searchInput.value.trim() || isSearching.value) return;
+async function ensureVideoFile(video) {
+  if (video.file instanceof File) {
+    return video.file;
+  }
+
+  if (!video.displayUrl) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(video.displayUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch video blob (${response.status})`);
+    }
+    const blob = await response.blob();
+    const filename = video.title || `video-${video.id}.mp4`;
+    const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
+    video.file = file;
+    return file;
+  } catch (error) {
+    console.error('Failed to reconstruct File from video URL:', error);
+    return null;
+  }
+}
+
+async function collectSelectedFiles() {
+  const results = [];
+  for (const video of selectedVideos.value) {
+    const file = await ensureVideoFile(video);
+    if (file) {
+      results.push({ file, video });
+    }
+  }
+  return results;
+}
+
+async function handleSearch() {
+  const query = searchInput.value.trim();
+  if (!query || isSearching.value) return;
   if (chatSessions.value.length === 0) return;
 
-  const query = searchInput.value.trim();
   const currentChat = chatSessions.value[currentChatIndex.value];
 
-  // 사용자 메시지 추가
   currentChat.messages.push({
     content: query,
     role: "user",
     timestamp: getCurrentTime()
   });
 
-  // 입력창 초기화
-  const currentQuery = query;
   searchInput.value = '';
-
-  // 스크롤 이동
   scrollToBottom();
 
-  // 검색 시작
   isSearching.value = true;
 
-  // 선택된 동영상 파일 전송
-  const formData = new FormData();
-  const selectedFiles = selectedVideos.value.map(video => video.file); // video.file은 File 객체
-  selectedFiles.forEach(file => formData.append("file", file));
-
-  fetch('http://localhost:8001/api/generate-clips', {
-    method: 'POST',
-    body: formData
-  })
-    .then(response => {
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      return response.json();
-    })
-    .then(data => {
-      const clips = data.clips || [];
-      if (clips.length === 0) {
-        currentChat.messages.push({
-          role: 'assistant',
-          content: '해당하는 장면은 존재하지 않습니다.',
-          clips: [],
-          timestamp: getCurrentTime()
-        });
-        return;
-      }
-
-      // 결과를 메시지 객체에 직접 저장 (DOM 수동 조작 제거)
-      const clipItems = clips.map(clip => {
-        // Ensure absolute URL: backend serves clips on port 8001
-        const raw = clip.url || '';
-        const url = raw.startsWith('http') ? raw : `http://localhost:8001${raw}`;
-        return {
-          id: clip.id,
-          title: clip.title,
-          url,
-          date: new Date().toLocaleDateString()
-        };
-      });
-
+  try {
+    const fileEntries = await collectSelectedFiles();
+    if (fileEntries.length === 0) {
       currentChat.messages.push({
         role: 'assistant',
-        content: '클립 검색 결과',
-        clips: clipItems,
+        content: '선택된 동영상을 가져오지 못했습니다. 다시 시도해주세요.',
         timestamp: getCurrentTime()
       });
-    })
-    .finally(() => {
-      isSearching.value = false;
+      return;
+    }
+
+    const formData = new FormData();
+    fileEntries.forEach(({ file }) => {
+      formData.append('files', file, file.name);
     });
+
+    const response = await fetch('http://localhost:8001/api/generate-clips', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}`);
+    }
+
+    const data = await response.json();
+    const groupedClipItems = (data.clips || []).map(group => ({
+      video: group.video,
+      clips: Array.isArray(group.clips) ? group.clips : []
+    }));
+
+    const flattenedClips = groupedClipItems.flatMap(group =>
+      group.clips.map(clip => ({
+        ...clip,
+        sourceVideo: group.video
+      }))
+    );
+
+    if (flattenedClips.length === 0) {
+      currentChat.messages.push({
+        role: 'assistant',
+        content: '클립이 추출되지 않았습니다.',
+        timestamp: getCurrentTime()
+      });
+      return;
+    }
+
+    currentChat.messages.push({
+      role: 'assistant',
+      content: `${groupedClipItems.length}개의 동영상에서 ${flattenedClips.length}개의 클립을 추출했습니다.`,
+      clips: flattenedClips,
+      groupedClips: groupedClipItems,
+      timestamp: getCurrentTime()
+    });
+  } catch (error) {
+    console.error('Search request failed:', error);
+    currentChat.messages.push({
+      role: 'assistant',
+      content: `검색 중 오류가 발생했습니다. (${error.message})`,
+      timestamp: getCurrentTime()
+    });
+  } finally {
+    isSearching.value = false;
+    scrollToBottom();
+  }
 }
 
 // 채팅 클립 확대용(그리드 비디오와 구분되는 최소 필드 구성)
