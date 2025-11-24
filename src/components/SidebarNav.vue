@@ -1,5 +1,5 @@
 <template>
-  <aside :class="[collapsed ? 'w-[105px]' : 'w-64', ' h-[100vh] shrink-0 border-r bg-gray-100 p-6 flex flex-col justify-between relative transition-all duration-200']">
+  <aside :class="[collapsed ? 'w-[105px]' : 'w-64', ' h-[95.65vh] shrink-0 border-r bg-gray-100 p-6 flex flex-col justify-between relative transition-all duration-200']">
     <nav class="space-y-3 flex flex-col flex-1">
       <RouterLink
         to="/video_storage"
@@ -36,7 +36,7 @@
         <span v-if="!collapsed" class="transition-opacity duration-200 text-lg">Report</span>
       </RouterLink>
 
-      <div class="absolute left-6 right-6 bottom-[5vh] flex flex-col items-start space-y-3">
+      <div class="absolute left-6 right-6 bottom-[1vh] flex flex-col items-start space-y-3">
         <!-- Setting (PNG icon) -->
         <button
           type="button"
@@ -65,12 +65,12 @@
 
         <!-- Collapse button positioned with the bottom group -->
         <button
-          :class="['w-full text-left', 'flex items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white active:scale-[0.97]']"
+          :class="['w-full text-center bg-white', 'items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow active:scale-[0.97]']"
           @click="toggleCollapse"
           aria-label="Toggle sidebar"
           :aria-expanded="(!collapsed).toString()"
         >
-          <span class="transition-opacity duration-200 select-none text-lg">{{ collapsed ? '>>' : 'Collapse' }}</span>
+          <span class="transition-opacity duration-200 select-none text-lg">{{ collapsed ? '>>' : '<<' }}</span>
         </button>
       </div>
     </nav>
