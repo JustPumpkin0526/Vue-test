@@ -1,4 +1,26 @@
 <template>
+  <!-- Enable Audio Toggle -->
+  <div class="border-2 px-3 py-3 bg-gray-100 mb-3 w-48">
+    <div class="flex items-center justify-between">
+      <label class="text-base font-semibold cursor-pointer" @click="settingStore.enableAudio = !settingStore.enableAudio">
+        Enable Audio
+      </label>
+      <button
+        type="button"
+        role="switch"
+        :aria-checked="settingStore.enableAudio"
+        @click="settingStore.enableAudio = !settingStore.enableAudio"
+        class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        :class="settingStore.enableAudio ? 'bg-blue-600' : 'bg-gray-300'"
+      >
+        <span
+          class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
+          :class="settingStore.enableAudio ? 'translate-x-6' : 'translate-x-1'"
+        ></span>
+      </button>
+    </div>
+  </div>
+
   <div class="border-2 px-3 py-3 bg-gray-100 mb-3">
     <button class="w-full text-left flex items-center gap-2" @click="toggleVlmParams">
       <h2>VLM Parameters</h2>
