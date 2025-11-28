@@ -184,7 +184,7 @@
         <div class="bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden w-[200px]">
           <button v-if="selectedIds.length < 2" class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextZoom">확대</button>
           <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextOpenSettings">설정</button>
-          <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextSummary">Summary</button>
+          <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextSummary">Summarize</button>
           <div class="h-px bg-gray-100"></div>
           <button class="w-full text-left px-4 py-3 text-red-600 hover:bg-gray-50" @click.stop="contextDelete">{{ selectedIds.length > 1 ? `선택된 항목 삭제 (${selectedIds.length})` : '삭제' }}</button>
         </div>
@@ -196,7 +196,7 @@
           :disabled="selectedIds.length === 0" @click="goToSearch">Search</button>
         <button
           class="w-[100%] text-[25px] px-5 py-3 rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-sm disabled:bg-gray-300 disabled:text-gray-100 disabled:shadow-none disabled:transform-none disabled:cursor-default transition-all duration-300 transform hover:scale-105 active:scale-95 font-semibold"
-          :disabled="selectedIds.length === 0" @click="goToSummary">Summary</button>
+          :disabled="selectedIds.length === 0" @click="goToSummary">Summarize</button>
       </div>
 
       <!-- 중앙 팝업창 -->
@@ -747,7 +747,7 @@ function confirmDelete() {
 function goToSummary() {
   const selectedVideos = items.value.filter(v => selectedIds.value.includes(v.id));
   summaryVideoStore.setVideos(selectedVideos); // Pinia 스토어에 선택된 동영상 저장
-  router.push({ name: 'Summary' }); // Summary 페이지로 이동
+  router.push({ name: 'Summarize' }); // Summarize 페이지로 이동
 }
 
 function goToSearch() {
@@ -975,7 +975,7 @@ async function handleSearch() {
       formData.append('files', file, file.name);
     });
 
-    const response = await fetch('http://localhost:8001/api/generate-clips', {
+    const response = await fetch('http://localhost:8001/generate-clips', {
       method: 'POST',
       body: formData
     });

@@ -26,11 +26,12 @@ export const useSettingStore = defineStore('setting', () => {
   const A_TopP = ref(0.7);
   const A_TEMPERATURE = ref(0.2);
   const A_MAX_TOKENS = ref(2048);
+  const enableAudio = ref(false);
 
   return {
     captionPrompt, aggregationPrompt, chunk, nfmc, frameWidth, frameHeight,
     topk, topp, temp, maxTokens, seed, batch, RAG_batch, RAG_topk,
     S_TopP, S_TEMPERATURE, SMAX_TOKENS, C_TopP, C_TEMPERATURE, C_MAX_TOKENS,
-    A_TopP, A_TEMPERATURE, A_MAX_TOKENS
+    A_TopP, A_TEMPERATURE, A_MAX_TOKENS, enableAudio
   };
 });
