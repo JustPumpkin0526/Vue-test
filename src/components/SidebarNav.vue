@@ -12,16 +12,16 @@
         <span v-if="!collapsed" class="transition-opacity duration-200 text-lg">Search</span>
       </RouterLink>
       <RouterLink
-        to="/summary"
+        to="/summarize"
         class="flex items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white active:scale-[0.97]"
-        :class="isActive('/summary')">
+        :class="isActive('/summarize')">
         <svg viewBox="0 0 24 24" class="w-6 h-6 transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3 icon-base">
           <rect x="3" y="4" width="18" height="16" rx="2" ry="2" />
           <line x1="7" y1="8" x2="17" y2="8" />
           <line x1="7" y1="12" x2="13" y2="12" />
           <line x1="7" y1="16" x2="11" y2="16" />
         </svg>
-        <span v-if="!collapsed" class="transition-opacity duration-200 text-lg">Summary</span>
+        <span v-if="!collapsed" class="transition-opacity duration-200 text-lg">Summarize</span>
       </RouterLink>
       <RouterLink
         to="/report"
