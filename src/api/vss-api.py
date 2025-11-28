@@ -21,6 +21,15 @@ app = FastAPI()
 os.makedirs("./clips", exist_ok=True)
 app.mount("/clips", StaticFiles(directory="clips"), name="clips")
 
+# Serve sample videos as static files under /sample
+# 절대 경로를 사용하여 현재 스크립트 위치 기준으로 sample 폴더 찾기
+import pathlib
+current_dir = pathlib.Path(__file__).parent
+print(current_dir)
+sample_dir ="../src/assets/sample"
+os.makedirs(sample_dir, exist_ok=True)
+app.mount("/sample", StaticFiles(directory=str(sample_dir)), name="sample")
+
 # VIA 서버 주소
 VIA_SERVER_URL = "http://172.16.7.64:8100"  # 환경에 맞게 수정
 
@@ -72,7 +81,7 @@ class VSS:
         json_data = self.check_response(response)
         return json_data.get("id")  # return uploaded file id
 
-    def summarize_video(self, file_id, prompt, cs_prompt, sa_prompt, chunk_duration, model, num_frames_per_chunk, frame_width, frame_height, top_k, top_p, temperature, max_new_tokens, seed, batch_size, rag_batch_size, rag_top_k, summarize_top_p, summarize_temperature, summarize_max_tokens, chat_top_p, chat_temperature, chat_max_tokens, notification_top_p, notification_temperature, notification_max_tokens):
+    def summarize_video(self, file_id, prompt, cs_prompt, sa_prompt, chunk_duration, model, num_frames_per_chunk, frame_width, frame_height, top_k, top_p, temperature, max_new_tokens, seed, batch_size, rag_batch_size, rag_top_k, summarize_top_p, summarize_temperature, summarize_max_tokens, chat_top_p, chat_temperature, chat_max_tokens, notification_top_p, notification_temperature, notification_max_tokens, enable_audio):
         body = {
             "id": file_id,
             "prompt": prompt,
@@ -101,6 +110,7 @@ class VSS:
             "rag_batch_size": rag_batch_size,
             "rag_top_k": rag_top_k,
             "enable_chat": True,
+            "enable_audio": enable_audio,
         }
 
         response = requests.post(self.summarize_endpoint, json=body)
@@ -137,6 +147,11 @@ class VSS:
 # 전역 VSS 클라이언트 (지연 초기화)
 vss_client = None
 
+def find_nearest_chunk_duration(value):
+    """동영상 길이의 1/10 값을 가장 가까운 chunk_duration 값으로 반올림"""
+    chunk_options = [0, 5, 10, 20, 30, 60, 120, 300, 600, 1200, 1800]
+    return min(chunk_options, key=lambda x: abs(x - value))
+
 @app.post("/vss-summarize")
 async def vss_summarize(
     file: UploadFile,
@@ -164,6 +179,7 @@ async def vss_summarize(
     alert_top_p: float = Form(...),
     alert_temperature: float = Form(...),
     alert_max_tokens: int = Form(...),
+    enable_audio: bool = Form(...),
 ):
     global vss_client
     if vss_client is None:
@@ -245,6 +261,7 @@ async def vss_summarize(
         alert_top_p,
         alert_temperature,
         alert_max_tokens,
+        enable_audio,
     )
     return {"summary": result, "video_id": video_id}
 
@@ -263,6 +280,7 @@ def vss_query(
     
     # 전역 vss_client 사용 선언 (누락 시 UnboundLocalError 발생)
     global vss_client
+    
     if vss_client is None:
         vss_client = VSS(VIA_SERVER_URL)
     
@@ -343,7 +361,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/api/generate-clips")
+@app.post("/generate-clips")
 async def generate_clips(
     request: Request,
     file: UploadFile = File(None),
@@ -364,6 +382,8 @@ async def generate_clips(
 
     grouped_clips = []
 
+    global vss_client
+
     # Normalize inputs: support single file param or multiple files
     upload_list = []
     if files:
@@ -381,18 +401,77 @@ async def generate_clips(
         for upfile in upload_list:
             safe_filename = os.path.basename(upfile.filename)
             tmp_path = f"./tmp/{safe_filename}"
-            # 업로드 파일을 새로 열어서 복사 (핸들 문제 방지)
-            upfile.file.seek(0)
+
+            if vss_client is None:
+                vss_client = VSS(VIA_SERVER_URL)
+
+            # GET models from VIA server (synchronous requests)
+            try:
+                resp = requests.get(VIA_SERVER_URL + "/models", timeout=10)
+            except Exception as e:
+                raise HTTPException(status_code=502, detail=f"Failed to contact VIA server: {e}")
+            try:
+                resp_json = resp.json()
+            except Exception:
+                resp_json = None
+            if resp.status_code >= 400 or not resp_json:
+                raise HTTPException(status_code=502, detail=f"VIA /models returned status {resp.status_code}")
+
+            model = resp_json["data"][0]["id"]
+
+            os.makedirs("./tmp", exist_ok=True)
+            file_path = f"./tmp/{file.filename}"
+            # 업로드용 임시 파일 실제 저장 (기존 누락으로 인해 FileNotFoundError / 빈 처리 발생 가능)
             with open(tmp_path, "wb") as buffer:
                 shutil.copyfileobj(upfile.file, buffer)
 
             logger.info(f"Uploaded video saved to {tmp_path}")
+
+            video_id = vss_client.upload_video(tmp_path)
 
             video_clips = []
             # MoviePy에 파일 경로(문자열)로 전달
             video = VideoFileClip(tmp_path)
             duration = video.duration or 0
             logger.info(f"Video duration: {duration} seconds for {tmp_path}")
+            
+            # chunk_duration 계산: 동영상 길이의 1/10을 가장 가까운 값으로 반올림
+            calculated_chunk_duration = duration / 10
+            chunk_duration = find_nearest_chunk_duration(calculated_chunk_duration)
+            logger.info(f"Calculated chunk_duration: {calculated_chunk_duration}s -> Nearest: {chunk_duration}s")
+
+            num_frames_per_chunk = chunk_duration // 4
+
+            result = vss_client.summarize_video(
+                video_id,
+                "You are an AI assistant that analyzes a video and detects important events such as abnormal actions, collisions, fights, fire, smoke, suspicious behavior, or scene changes. List all detected events in chronological order with start and end timestamps and a brief description.",
+                "You will be given captions from sequential clips of a video. Aggregate captions in the format start_time:end_time:caption based on whether captions are related to one another or create a continuous scene.",
+                "Based on the available information, generate a summary that captures the important events in the video. The summary should be organized chronologically and in logical sections. This should be a concise, yet descriptive summary of all the important events. The format should be intuitive and easy for a user to read and understand what happened. Format the output in Markdown so it can be displayed nicely. Timestamps are in seconds so please format them as SS.SSS",
+                chunk_duration,
+                model,
+                num_frames_per_chunk,
+                0,
+                0,
+                80,
+                1.0,
+                0.4,
+                512,
+                1,
+                6,
+                1,
+                5,
+                0.7,
+                0.2,
+                2048,
+                0.7,
+                0.2,
+                2048,
+                0.7,
+                0.2,
+                2048,
+                False  # enable_audio
+            )
+            
             num_clips = random.randint(0, 3)
             logger.info(f"Number of clips to generate: {num_clips}")
             base_name, _ = os.path.splitext(safe_filename)
