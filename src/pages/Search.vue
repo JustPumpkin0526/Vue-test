@@ -1,40 +1,91 @@
 <template>
   <!-- 메뉴 틀 -->
-  <div id="video_list" class="w-[100%] h-[90vh]">
-
+  <div
+    id="video_list"
+    class="w-full h-full bg-gradient-to-br from-slate-200 to-slate-300 via-slate-100 p-10"
+  >
     <!-- 헤더 -->
-    <header id="header" class="flex items-center justify-between">
-
-      <button
-        class="mt-4 mr-4 ml-auto bg-slate-600 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl shadow-sm cursor-pointer flex items-center gap-2 transform transition-all duration-300 hover:scale-105 active:scale-95 disabled:bg-gray-300 disabled:text-gray-100 disabled:shadow-none disabled:transform-none disabled:cursor-default"
-        :disabled="items.length === 0" @click="allselect()">
-        Select All
-      </button>
-
-      <!-- 업로드 버튼 -->
-      <div class="flex items-center h-12 mr-12 mt-auto ">
-        <label
-          class="bg-slate-600 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl shadow-sm cursor-pointer flex items-center gap-2 transform transition-all duration-300 hover:scale-105 active:scale-95">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-          </svg>
-          <span class="font-medium">Upload Video</span>
-          <input type="file" accept="video/*" multiple class="hidden" @change="handleUpload" />
-        </label>
+    <header
+      id="header"
+      class="flex items-center justify-between px-1 pb-3 border-b border-slate-800/70"
+    >
+      <!-- 좌측: 타이틀 / 설명 -->
+      <div class="flex flex-col gap-1">
+        <div
+          class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 w-fit"
+        >
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="text-[11px] font-semibold tracking-wide text-emerald-600 uppercase">
+            Video Search Workspace
+          </span>
+        </div>
+        <p class="text-xs md:text-sm text-black mt-1">
+          업로드한 여러 동영상에서 원하는 장면을 검색하고,
+          <span class="hidden md:inline">오른쪽 패널에서 검색 결과 클립을 한눈에 확인할 수 있습니다.</span>
+        </p>
       </div>
 
+      <!-- 우측: 전체 선택 + 업로드 버튼 -->
+      <div class="flex items-center gap-3">
+        <!-- Select All (데스크톱용 텍스트 버튼) -->
+        <button
+          class="hidden md:inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-500/60 text-[13px] text-slate-100 bg-slate-900/70 hover:bg-slate-800/80 hover:border-emerald-400/70 hover:text-emerald-50 shadow-sm transition-all duration-200 disabled:opacity-40 disabled:cursor-default"
+          :disabled="items.length === 0"
+          @click="allselect()"
+        >
+          <span
+            class="inline-flex items-center justify-center w-5 h-5 rounded-md bg-slate-950/80 text-[11px] font-semibold text-slate-50"
+          >
+            {{ selectedIds.length === items.length && items.length > 0 ? '✓' : ' ' }}
+          </span>
+          <span class="font-medium">
+            {{ selectedIds.length === items.length && items.length > 0 ? 'Clear Selection' : 'Select All' }}
+          </span>
+        </button>
+
+        <!-- Select All (모바일 아이콘 버튼) -->
+        <button
+          class="md:hidden flex items-center justify-center w-9 h-9 rounded-2xl border border-slate-500/60 bg-slate-900/70 text-slate-100 hover:bg-slate-800/90 hover:border-emerald-400/70 transition-all duration-200 disabled:opacity-40 disabled:cursor-default"
+          :disabled="items.length === 0"
+          @click="allselect()"
+          title="Select All"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+        </button>
+
+        <!-- 업로드 버튼 -->
+        <div class="flex items-center h-12">
+          <label
+            class="inline-flex items-center gap-2 rounded-2xl bg-emerald-500/90 hover:bg-emerald-400 text-white px-5 py-2.5 shadow-lg shadow-emerald-500/30 cursor-pointer transform transition-all duration-200 hover:scale-[1.03] active:scale-[0.97]"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M12 12v7m0-7l-3 3m3-3l3 3"
+              ></path>
+            </svg>
+            <span class="font-medium text-sm">Upload Video</span>
+            <input type="file" accept="video/*" multiple class="hidden" @change="handleUpload" />
+          </label>
+        </div>
+      </div>
     </header>
 
-    <!-- 비디오 리스트 -->
-    <div id="list"
-      class="relative w-full h-[90%] border border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-6 mt-6 shadow-inner">
+    <!-- 비디오 리스트 / 검색 영역 -->
+    <div
+      id="list"
+      class="relative w-full h-[90%] border border-slate-200/80 bg-blue-100 rounded-3xl p-6 mt-4 shadow-[0_18px_45px_rgba(15,23,42,0.25)] backdrop-blur-md"
+    >
 
       <!-- 동영상 출력 영역 -->
-      <div class="w-full h-[90%] border border-gray-200 bg-white rounded-2xl overflow-y-auto shadow-sm">
+      <div class="w-full h-[90%] border border-slate-200/80 bg-gray-50 rounded-2xl overflow-y-auto shadow-inner">
         <div v-if="items.length === 0" class="flex items-center justify-center h-full">
           <div
-            class="w-[30%] h-[9%] bg-gradient-to-br from-gray-50 to-gray-100 text-gray-500 text-center text-[24px] pt-[22px] border border-gray-200 rounded-2xl shadow-sm backdrop-blur-sm">
+            class="w-[30%] h-[9%] inline-flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 text-gray-500 text-center text-[24px] border border-gray-200 rounded-2xl shadow-sm backdrop-blur-sm">
             <p class="font-light">Please upload a video</p>
           </div>
         </div>
@@ -61,35 +112,45 @@
                 'opacity-0 scale-90': hoveredVideoId !== video.id && playingVideoIds.includes(video.id),
               }"
                 class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-sm text-white rounded-full w-14 h-14 m-auto transition-all duration-300 hover:scale-110 active:scale-95">
+                <!-- 재생 시작 아이콘 -->
                 <svg v-if="!playingVideoIds.includes(video.id)" xmlns="http://www.w3.org/2000/svg" fill="currentColor"
                   viewBox="0.4 -0.7 16 16" class="w-8 h-8">
                   <path
                     d="M6.271 4.055a.5.5 0 0 1 .759-.429l4.592 3.11a.5.5 0 0 1 0 .828l-4.592 3.11a.5.5 0 0 1-.759-.429V4.055z" />
                 </svg>
+
+                <!-- 재생 중단 아이콘 -->
                 <svg v-else xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0.4 -0.1 16 16"
                   class="w-8 h-8">
                   <path
                     d="M5.5 3.5A.5.5 0 0 1 6 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5H6a.5.5 0 0 1-.5-.5v-9zM9.5 3.5A.5.5 0 0 1 10 3h1a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-9z" />
                 </svg>
               </button>
+
+              <!-- 재생 프로그레스 바 -->
               <div
                 class="absolute bottom-0 left-0 w-full px-2 pb-2 flex flex-col transition-all duration-300 ease-in-out"
                 :class="{
                   'opacity-100 scale-100': hoveredVideoId === video.id || !playingVideoIds.includes(video.id),
                   'opacity-0 scale-90': hoveredVideoId !== video.id && playingVideoIds.includes(video.id),
                 }">
+                <!-- 재생 프로그레스 바 백그라운드 -->
                 <div
                   class="relative w-full h-2 bg-gray-200/90 rounded-full cursor-pointer group/progress overflow-visible backdrop-blur-[2px] pointer-events-auto"
                   :class="{ 'dragging': isDragging && draggedVideoId === video.id }"
                   @click.stop="seekVideo(video.id, $event)">
+                  <!-- 재생 프로그레스 바 진행 상태 -->
                   <div class="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full shadow-sm overflow-hidden progress-bar-fill"
                     :class="{ 'transition-all duration-300': !(isDragging && draggedVideoId === video.id) }"
                     :style="{ width: `${video.progress || 0}%` }"></div>
+                  <!-- 재생 프로그레스 바 핸들 -->
                   <div
                     class="absolute top-1 h-4 w-4 bg-white rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2 transition-all duration-200 border-2 border-slate-500 z-[100] progress-bar-handle"
                     :class="{ 'transition-none': isDragging && draggedVideoId === video.id }"
                     :style="{ left: `${video.progress || 0}%` }" @mousedown="startDragging(video.id, $event)"></div>
                 </div>
+
+                <!-- 재생 시간 표시 -->
                 <div
                   class="flex justify-between mt-1 text-[10px] font-medium text-white drop-shadow pointer-events-none">
                   <span>{{ formatTime(currentTimeMap[video.id] || 0) }}</span>
@@ -97,6 +158,7 @@
                 </div>
               </div>
             </div>
+            <!-- 동영상 타이틀 -->
             <div v-if="video.title" class="ml-4 w-full text-sm font-medium text-gray-800 truncate text-left">
               {{ video.title }}
             </div>
@@ -114,10 +176,13 @@
                 <!-- 닫기 버튼: 프레임 우측 상단 -->
                 <button @click="unzoomVideo"
                   class="ml-auto mb-3 z-10 w-6 h-6 flex items-center justify-center bg-black/50 hover:bg-black/70 rounded-full text-white transition-all duration-200">
+                  <!-- 닫기 아이콘 -->
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                   </svg>
                 </button>
+
+                
                 <div
                   class="relative w-full aspect-video flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl overflow-hidden group zoom-group"
                   @mouseenter="hoveredVideoId = zoomedVideo?.id" @mouseleave="hoveredVideoId = null">
@@ -178,31 +243,29 @@
           </div>
         </Transition>
       </Teleport>
-      <!-- 우클릭 컨텍스트 메뉴 (고정 위치) -->
-      <div v-if="contextMenu.visible" class="fixed z-[200]"
-        :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click.stop>
-        <div class="bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden w-[200px]">
-          <button v-if="selectedIds.length < 2" class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextZoom">확대</button>
-          <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextOpenSettings">설정</button>
-          <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextSummary">Summarize</button>
-          <div class="h-px bg-gray-100"></div>
-          <button class="w-full text-left px-4 py-3 text-red-600 hover:bg-gray-50" @click.stop="contextDelete">{{ selectedIds.length > 1 ? `선택된 항목 삭제 (${selectedIds.length})` : '삭제' }}</button>
+      <!-- 우클릭 컨텍스트 메뉴 (Teleport로 body에 렌더링) -->
+      <Teleport to="body">
+        <div v-if="contextMenu.visible" class="fixed z-[200]"
+          :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click.stop>
+          <div class="bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden w-[200px]">
+            <button v-if="selectedIds.length < 2" class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextZoom">확대</button>
+            <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextSummary">요약 진행</button>
+            <div class="h-px bg-gray-100"></div>
+            <button class="w-full text-left px-4 py-3 text-red-600 hover:bg-gray-50" @click.stop="contextDelete">{{ selectedIds.length > 1 ? `선택된 항목 삭제 (${selectedIds.length})` : '삭제' }}</button>
+          </div>
         </div>
-      </div>
+      </Teleport>
       <!-- 좌측 하단 Summary, Search 버튼 -->
-      <div class="absolute left-[2%] bottom-[4%] w-[21%] z-50 flex gap-4">
+      <div class="absolute left-[2%] bottom-[4%] w-[11%] z-50 flex gap-4">
         <button
-          class="w-[100%] text-[25px] px-5 py-3 rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-sm disabled:bg-gray-300 disabled:text-gray-100 disabled:shadow-none disabled:transform-none disabled:cursor-default transition-all duration-300 transform hover:scale-105 active:scale-95 font-semibold"
+          class="w-[100%] text-[140%] py-[5%] rounded-xl bg-gray-600 hover:bg-gray-700 text-white shadow-sm disabled:bg-gray-300 disabled:text-gray-100 disabled:shadow-none disabled:transform-none disabled:cursor-default transition-all duration-300 transform hover:scale-105 active:scale-95 font-semibold"
           :disabled="selectedIds.length === 0" @click="goToSearch">Search</button>
-        <button
-          class="w-[100%] text-[25px] px-5 py-3 rounded-xl bg-slate-600 hover:bg-slate-700 text-white shadow-sm disabled:bg-gray-300 disabled:text-gray-100 disabled:shadow-none disabled:transform-none disabled:cursor-default transition-all duration-300 transform hover:scale-105 active:scale-95 font-semibold"
-          :disabled="selectedIds.length === 0" @click="goToSummary">Summarize</button>
       </div>
 
       <!-- 중앙 팝업창 -->
       <Transition name="modal">
         <div v-if="showDeletePopup"
-          class="fixed inset-0 flex items-center justify-center z-[100] bg-black/50 backdrop-blur-sm">
+          class="fixed inset-0 flex items-center justify-center z-[100] bg-black/50 backdrop-blur-sm rounded-2xl">
           <div
             class="bg-white rounded-2xl shadow-2xl p-8 min-w-[350px] max-w-[90vw] relative transform transition-all duration-300">
             <div class="text-lg font-semibold mb-6 text-center text-gray-800">
@@ -221,241 +284,212 @@
         </div>
       </Transition>
 
-      <!-- Search 사이드바 메뉴 -->
-      <!-- 배경 오버레이 -->
-      <Transition name="overlay">
-        <div v-if="showSearchSidebar" class="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm"
-          @click="closeSearchSidebar">
-        </div>
-      </Transition>
+      <!-- Search 사이드 메뉴 (전체 인터페이스 기준, Teleport 사용) -->
+      <Teleport to="body">
+        <!-- 배경 오버레이 -->
+        <Transition name="overlay">
+          <div v-if="showSearchSidebar" class="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm"
+            @click="closeSearchSidebar">
+          </div>
+        </Transition>
 
-      <!-- 사이드바 패널 - ChatGPT 스타일 -->
-      <Transition name="sidebar">
-        <div v-if="showSearchSidebar"
-          class="fixed top-0 right-0 z-[151] bg-white w-[70%] h-full shadow-2xl flex flex-col" @click.stop>
-          <!-- 사이드바 헤더 -->
-          <div class="flex flex-col border-b border-gray-200 bg-gradient-to-r from-white to-gray-50">
-            <div class="flex items-center justify-between p-4">
-              <div class="flex items-center gap-3">
-                <div
-                  class="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"></path>
-                  </svg>
-                </div>
-                <h2 class="text-lg font-semibold text-gray-800">Video Search</h2>
-              </div>
-              <div class="flex items-center gap-2">
-                <!-- 신규 채팅창 추가 버튼 -->
-                <button @click="createNewChat"
-                  class="relative p-2 hover:bg-gray-100 rounded-full transition-colors group" title="신규 채팅창 추가">
-                  <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                  </svg>
-                  <!-- 툴팁 -->
+        <!-- 사이드바 패널 - ChatGPT 스타일 -->
+        <Transition name="sidebar">
+          <div v-if="showSearchSidebar"
+            class="fixed top-0 right-0 z-[151] bg-white w-[70%] h-full shadow-2xl flex flex-col" @click.stop>
+            <!-- 사이드바 헤더 -->
+            <div class="flex flex-col border-b border-gray-200 bg-gradient-to-r from-white to-gray-50">
+              <div class="flex items-center justify-between p-4">
+                <div class="flex items-center gap-3">
                   <div
-                    class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-2 py-1 bg-gray-800 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                    신규 채팅창 추가
+                    class="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"></path>
+                    </svg>
+                  </div>
+                  <h2 class="text-lg font-semibold text-gray-800">Video Search</h2>
+                </div>
+                <div class="flex items-center gap-2">
+                  <!-- 신규 채팅창 추가 버튼 -->
+                  <button @click="createNewChat"
+                    class="relative p-2 hover:bg-gray-100 rounded-full transition-colors group" title="신규 채팅창 추가">
+                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    <!-- 툴팍 -->
                     <div
-                      class="absolute bottom-full left-1/2 transform -translate-x-1/2 -mb-1 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-gray-800">
+                      class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-2 py-1 bg-gray-800 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                      신규 채팅창 추가
+                      <div
+                        class="absolute bottom-full left-1/2 transform -translate-x-1/2 -mb-1 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-gray-800">
+                      </div>
+                    </div>
+                  </button>
+                  <button @click="closeSearchSidebar" class="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                      </path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <!-- 채팅창 탭 -->
+              <div v-if="chatSessions.length > 0" class="flex gap-2 px-4 pb-2 overflow-x-auto">
+                <div v-for="(chat, index) in chatSessions" :key="chat.id"
+                  @click="editingChatIndex !== index && switchChat(index)" :class="{
+                    'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md': currentChatIndex === index,
+                    'bg-gray-100 text-gray-700 hover:bg-gray-200': currentChatIndex !== index
+                  }"
+                  class="px-3 py-1.5 rounded-t-xl text-sm font-medium transition-all duration-300 whitespace-nowrap flex items-center gap-2 cursor-pointer transform hover:scale-105">
+                  <!-- 편집 모드 -->
+                  <input v-if="editingChatIndex === index" v-model="editingChatName" @blur="saveChatName(index)"
+                    @keydown.enter="saveChatName(index)" @keydown.esc="cancelEditChatName"
+                    class="bg-transparent border-b border-current outline-none min-w-[60px] max-w-[120px] text-sm"
+                    ref="chatNameInput" />
+                  <!-- 일반 모드 -->
+                  <span v-else @dblclick.stop="startEditChatName(index)" class="select-none">
+                    {{ chat.name || `채팅 ${index + 1}` }}
+                  </span>
+                  <button v-if="chatSessions.length > 1 && editingChatIndex !== index" @click.stop="deleteChat(index)"
+                    class="hover:bg-black hover:bg-opacity-20 rounded-full p-0.5">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                      </path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 채팅 메시지 영역 -->
+            <div ref="chatContainer" class="flex-1 overflow-y-auto bg-gray-50 p-4 space-y-4">
+              <!-- 채팅 메시지들 -->
+              <div v-for="(message, index) in currentChatMessages" :key="index" class="flex items-start gap-3"
+                :class="{ 'flex-row-reverse': message.role === 'user' }">
+                <!-- AI 메시지 -->
+                <div v-if="message.role === 'assistant'"
+                  class="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden relative">
+                  <!-- 클립 썸네일 있을 경우 첫 번째 클립을 아바타로 표시 -->
+                  <template v-if="message.clips && message.clips.length > 0">
+                    <video :src="message.clips[0].url" class="w-full h-full object-cover" muted playsinline
+                      @error="(e) => console.warn('avatar video error', e, message.clips[0].url)"
+                      crossorigin="anonymous"></video>
+                    <div v-if="message.clips.length > 1"
+                      class="absolute bottom-0 right-0 bg-black/60 text-[10px] text-white px-1 rounded">
+                      +{{ message.clips.length - 1 }}
+                    </div>
+                  </template>
+                  <template v-else>
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"></path>
+                    </svg>
+                  </template>
+                </div>
+                <!-- 사용자 메시지 -->
+                <div v-else class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+                  <svg class="w-4 h-4 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
+                    <path
+                      d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z">
+                    </path>
+                  </svg>
+                </div>
+
+                <div class="flex-1" :class="{ 'flex flex-col items-end': message.role === 'user' }">
+                  <div :class="{
+                    'bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-md border border-gray-200': message.role === 'assistant',
+                    'bg-gradient-to-r from-green-500 to-green-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-md': message.role === 'user'
+                  }">
+                    <p :class="{
+                      'text-gray-800 text-sm leading-relaxed': message.role === 'assistant',
+                      'text-white text-sm leading-relaxed': message.role === 'user'
+                    }" v-html="message.content"></p>
+                    <!-- 초기 메시지의 선택된 동영상 목록 -->
+                    <div v-if="message.isInitial && message.selectedVideos && message.selectedVideos.length > 0"
+                      class="mt-3 space-y-2">
+                      <p class="text-xs text-gray-500 font-medium mb-2">선택된 동영상:</p>
+                      <div v-for="video in message.selectedVideos" :key="video.id"
+                        class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                        <video :src="video.displayUrl" class="w-12 h-8 object-cover rounded"></video>
+                        <div class="flex-1 min-w-0">
+                          <p class="text-xs font-medium text-gray-800 truncate">{{ video.title }}</p>
+                          <p class="text-xs text-gray-500">{{ video.date }}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- 검색 결과(클립) 표시 -->
+                    <div v-if="message.clips && message.clips.length > 0" class="mt-3 space-y-2">
+                      <p
+                        :class="message.role === 'assistant' ? 'text-xs text-gray-500 font-medium mb-2' : 'text-xs text-green-100 font-medium mb-2'">
+                        검색 결과 ({{ message.clips.length }}개):
+                      </p>
+                      <div v-for="clip in message.clips" :key="clip.id"
+                        :class="message.role === 'assistant' ? 'flex items-center gap-2 p-2 bg-gray-50 rounded-xl transition-all duration-200 hover:bg-gray-100' : 'flex items-center gap-2 p-2 bg-green-600/80 rounded-xl transition-all duration-200 hover:bg-green-600'">
+                        <video :src="clip.url" class="w-12 h-8 object-cover rounded cursor-pointer" preload="metadata"
+                          @click.stop="zoomClip(clip)" @error="(e) => console.warn('clip thumbnail error', e, clip.url)"
+                          crossorigin="anonymous"></video>
+                        <div class="flex-1 min-w-0">
+                          <p
+                            :class="message.role === 'assistant' ? 'text-xs font-medium text-gray-800 truncate' : 'text-xs font-medium text-white truncate'">
+                            {{ clip.title }}</p>
+                          <p :class="message.role === 'assistant' ? 'text-xs text-gray-500' : 'text-xs text-green-100'">{{
+                            clip.sourceVideo || clip.date }}</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </button>
-                <button @click="closeSearchSidebar" class="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                  <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
-                    </path>
-                  </svg>
-                </button>
+                  <p
+                    :class="message.role === 'assistant' ? 'text-xs text-gray-400 mt-1 ml-2' : 'text-xs text-gray-400 mt-1 mr-2'">
+                    {{ message.timestamp }}</p>
+                </div>
               </div>
-            </div>
-            <!-- 채팅창 탭 -->
-            <div v-if="chatSessions.length > 0" class="flex gap-2 px-4 pb-2 overflow-x-auto">
-              <div v-for="(chat, index) in chatSessions" :key="chat.id"
-                @click="editingChatIndex !== index && switchChat(index)" :class="{
-                  'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md': currentChatIndex === index,
-                  'bg-gray-100 text-gray-700 hover:bg-gray-200': currentChatIndex !== index
-                }"
-                class="px-3 py-1.5 rounded-t-xl text-sm font-medium transition-all duration-300 whitespace-nowrap flex items-center gap-2 cursor-pointer transform hover:scale-105">
-                <!-- 편집 모드 -->
-                <input v-if="editingChatIndex === index" v-model="editingChatName" @blur="saveChatName(index)"
-                  @keydown.enter="saveChatName(index)" @keydown.esc="cancelEditChatName"
-                  class="bg-transparent border-b border-current outline-none min-w-[60px] max-w-[120px] text-sm"
-                  ref="chatNameInput" />
-                <!-- 일반 모드 -->
-                <span v-else @dblclick.stop="startEditChatName(index)" class="select-none">
-                  {{ chat.name || `채팅 ${index + 1}` }}
-                </span>
-                <button v-if="chatSessions.length > 1 && editingChatIndex !== index" @click.stop="deleteChat(index)"
-                  class="hover:bg-black hover:bg-opacity-20 rounded-full p-0.5">
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
-                    </path>
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
 
-          <!-- 채팅 메시지 영역 -->
-          <div ref="chatContainer" class="flex-1 overflow-y-auto bg-gray-50 p-4 space-y-4">
-            <!-- 채팅 메시지들 -->
-            <div v-for="(message, index) in currentChatMessages" :key="index" class="flex items-start gap-3"
-              :class="{ 'flex-row-reverse': message.role === 'user' }">
-              <!-- AI 메시지 -->
-              <div v-if="message.role === 'assistant'"
-                class="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden relative">
-                <!-- 클립 썸네일 있을 경우 첫 번째 클립을 아바타로 표시 -->
-                <template v-if="message.clips && message.clips.length > 0">
-                  <video :src="message.clips[0].url" class="w-full h-full object-cover" muted playsinline
-                    @error="(e) => console.warn('avatar video error', e, message.clips[0].url)"
-                    crossorigin="anonymous"></video>
-                  <div v-if="message.clips.length > 1"
-                    class="absolute bottom-0 right-0 bg-black/60 text-[10px] text-white px-1 rounded">
-                    +{{ message.clips.length - 1 }}
-                  </div>
-                </template>
-                <template v-else>
+              <!-- 로딩 인디케이터 -->
+              <div v-if="isSearching" class="flex items-start gap-3">
+                <div
+                  class="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center flex-shrink-0">
                   <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                       d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"></path>
                   </svg>
-                </template>
-              </div>
-              <!-- 사용자 메시지 -->
-              <div v-else class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
-                <svg class="w-4 h-4 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
-                  <path
-                    d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z">
-                  </path>
-                </svg>
-              </div>
-
-              <div class="flex-1" :class="{ 'flex flex-col items-end': message.role === 'user' }">
-                <div :class="{
-                  'bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-md border border-gray-200': message.role === 'assistant',
-                  'bg-gradient-to-r from-green-500 to-green-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-md': message.role === 'user'
-                }">
-                  <p :class="{
-                    'text-gray-800 text-sm leading-relaxed': message.role === 'assistant',
-                    'text-white text-sm leading-relaxed': message.role === 'user'
-                  }" v-html="message.content"></p>
-                  <!-- 초기 메시지의 선택된 동영상 목록 -->
-                  <div v-if="message.isInitial && message.selectedVideos && message.selectedVideos.length > 0"
-                    class="mt-3 space-y-2">
-                    <p class="text-xs text-gray-500 font-medium mb-2">선택된 동영상:</p>
-                    <div v-for="video in message.selectedVideos" :key="video.id"
-                      class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                      <video :src="video.displayUrl" class="w-12 h-8 object-cover rounded"></video>
-                      <div class="flex-1 min-w-0">
-                        <p class="text-xs font-medium text-gray-800 truncate">{{ video.title }}</p>
-                        <p class="text-xs text-gray-500">{{ video.date }}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <!-- 검색 결과(클립) 표시 -->
-                  <div v-if="message.clips && message.clips.length > 0" class="mt-3 space-y-2">
-                    <p
-                      :class="message.role === 'assistant' ? 'text-xs text-gray-500 font-medium mb-2' : 'text-xs text-green-100 font-medium mb-2'">
-                      검색 결과 ({{ message.clips.length }}개):
-                    </p>
-                    <div v-for="clip in message.clips" :key="clip.id"
-                      :class="message.role === 'assistant' ? 'flex items-center gap-2 p-2 bg-gray-50 rounded-xl transition-all duration-200 hover:bg-gray-100' : 'flex items-center gap-2 p-2 bg-green-600/80 rounded-xl transition-all duration-200 hover:bg-green-600'">
-                      <video :src="clip.url" class="w-12 h-8 object-cover rounded cursor-pointer" preload="metadata"
-                        @click.stop="zoomClip(clip)" @error="(e) => console.warn('clip thumbnail error', e, clip.url)"
-                        crossorigin="anonymous"></video>
-                      <div class="flex-1 min-w-0">
-                        <p
-                          :class="message.role === 'assistant' ? 'text-xs font-medium text-gray-800 truncate' : 'text-xs font-medium text-white truncate'">
-                          {{ clip.title }}</p>
-                        <p :class="message.role === 'assistant' ? 'text-xs text-gray-500' : 'text-xs text-green-100'">{{
-                          clip.sourceVideo || clip.date }}</p>
-                      </div>
+                </div>
+                <div class="flex-1">
+                  <div class="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-200">
+                    <div class="flex gap-1">
+                      <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0s"></div>
+                      <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                      <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
                     </div>
                   </div>
                 </div>
-                <p
-                  :class="message.role === 'assistant' ? 'text-xs text-gray-400 mt-1 ml-2' : 'text-xs text-gray-400 mt-1 mr-2'">
-                  {{ message.timestamp }}</p>
               </div>
             </div>
 
-            <!-- 로딩 인디케이터 -->
-            <div v-if="isSearching" class="flex items-start gap-3">
-              <div
-                class="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center flex-shrink-0">
-                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"></path>
-                </svg>
-              </div>
-              <div class="flex-1">
-                <div class="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-200">
-                  <div class="flex gap-1">
-                    <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0s"></div>
-                    <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-                    <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
-                  </div>
+            <!-- 입력 영역 (하단 고정) -->
+            <div class="border-t border-gray-200 bg-white p-4">
+              <div class="flex items-end gap-2">
+                <div class="flex-1 relative">
+                  <textarea v-model="searchInput" @keydown.enter.exact.prevent="handleSearch"
+                    @keydown.shift.enter.exact="searchInput += '\n'" placeholder="검색할 장면에 대한 정보를 입력해주세요..." rows="1"
+                    class="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none max-h-32 overflow-y-auto text-sm"
+                    style="min-height: 44px;"></textarea>
+                  <button @click="handleSearch" :disabled="!searchInput.trim() || isSearching"
+                    class="absolute right-2 bottom-2 p-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-110 active:scale-95 shadow-md">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8">
+                      </path>
+                    </svg>
+                  </button>
                 </div>
               </div>
+              <p class="text-xs text-gray-400 mt-2 text-center">Enter를 눌러 검색하거나 Shift+Enter로 줄바꿈</p>
             </div>
           </div>
-
-          <!-- 입력 영역 (하단 고정) -->
-          <div class="border-t border-gray-200 bg-white p-4">
-            <div class="flex items-end gap-2">
-              <div class="flex-1 relative">
-                <textarea v-model="searchInput" @keydown.enter.exact.prevent="handleSearch"
-                  @keydown.shift.enter.exact="searchInput += '\n'" placeholder="검색할 장면에 대한 정보를 입력해주세요..." rows="1"
-                  class="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none max-h-32 overflow-y-auto text-sm"
-                  style="min-height: 44px;"></textarea>
-                <button @click="handleSearch" :disabled="!searchInput.trim() || isSearching"
-                  class="absolute right-2 bottom-2 p-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-110 active:scale-95 shadow-md">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8">
-                    </path>
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <p class="text-xs text-gray-400 mt-2 text-center">Enter를 눌러 검색하거나 Shift+Enter로 줄바꿈</p>
-          </div>
-        </div>
-      </Transition>
-
-      <!-- Search Menu -->
-      <div v-if="showSearchMenu" class="absolute top-4 right-4 z-50 bg-white p-4 rounded-lg shadow-lg">
-        <h3 class="text-lg font-semibold mb-2">Search Scenes</h3>
-        <input v-model="searchQuery" type="text" placeholder="Enter keyword..."
-          class="border border-gray-300 rounded-lg px-4 py-2 w-full mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        <button @click="searchScenes"
-          class="bg-blue-500 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-600 transition w-full mb-2">
-          Search
-        </button>
-        <button @click="closeSearchMenu"
-          class="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg shadow hover:bg-gray-400 transition w-full">
-          Close
-        </button>
-
-        <!-- Search Results -->
-        <div v-if="searchResults.length > 0" class="mt-4">
-          <h4 class="text-md font-medium mb-2">Results:</h4>
-          <ul class="list-disc pl-5">
-            <li v-for="scene in searchResults" :key="scene.id" class="mb-1">
-              <button @click="goToScene(scene)" class="text-blue-500 hover:underline">
-                {{ scene.description }} ({{ formatTime(scene.timestamp) }})
-              </button>
-            </li>
-          </ul>
-        </div>
-        <div v-else-if="searchPerformed" class="mt-4 text-gray-500">
-          No results found.
-        </div>
-      </div>
+        </Transition>
+      </Teleport>
     </div>
-
   </div>
 </template>
 
@@ -473,7 +507,6 @@ const zoomProgress = ref(0);   // 확대 모달 진행률 (그리드와 분리)
 const showSearchSidebar = ref(false);
 const hoveredVideoId = ref(null);
 const playingVideoIds = ref([]);
-const expandedVideoId = ref(null);
 const showDeletePopup = ref(false);
 const items = ref([]);
 const selectedIds = ref([]);
@@ -488,10 +521,6 @@ const chatContainer = ref(null);
 const editingChatIndex = ref(null);
 const editingChatName = ref('');
 const chatNameInput = ref(null);
-const showSearchMenu = ref(false);
-const searchQuery = ref('');
-const searchResults = ref([]);
-const searchPerformed = ref(false);
 
 // 시간 표시용 맵 (Summary.vue 스타일 이식)
 const currentTimeMap = ref({});
@@ -510,7 +539,40 @@ function onVideoContextMenu(video, e) {
       selectedIds.value = [video.id];
     }
   }
-  contextMenu.value = { visible: true, x: e.clientX, y: e.clientY, video };
+  
+  // 기본 좌표는 마우스 위치
+  let x = e.clientX;
+  let y = e.clientY;
+  
+  // 메뉴 크기 (너비 200px, 높이는 대략 200px 정도)
+  const menuWidth = 200;
+  const menuHeight = 200;
+  
+  // 화면 경계 확인 및 조정
+  const windowWidth = window.innerWidth;
+  const windowHeight = window.innerHeight;
+  
+  // 오른쪽 경계를 넘어가면 왼쪽으로 조정
+  if (x + menuWidth > windowWidth) {
+    x = windowWidth - menuWidth - 10; // 10px 여백
+  }
+  
+  // 아래쪽 경계를 넘어가면 위로 조정
+  if (y + menuHeight > windowHeight) {
+    y = windowHeight - menuHeight - 10; // 10px 여백
+  }
+  
+  // 왼쪽 경계 확인
+  if (x < 10) {
+    x = 10;
+  }
+  
+  // 위쪽 경계 확인
+  if (y < 10) {
+    y = 10;
+  }
+  
+  contextMenu.value = { visible: true, x, y, video };
 }
 
 function closeContextMenu() {
@@ -521,12 +583,6 @@ function closeContextMenu() {
 function contextZoom() {
   if (!contextMenu.value.video) return;
   zoomVideo(contextMenu.value.video);
-  closeContextMenu();
-}
-
-function contextOpenSettings() {
-  if (!contextMenu.value.video) return;
-  openSettings(contextMenu.value.video.id);
   closeContextMenu();
 }
 
@@ -973,6 +1029,7 @@ async function handleSearch() {
     const formData = new FormData();
     fileEntries.forEach(({ file }) => {
       formData.append('files', file, file.name);
+      formData.append('prompt', query);
     });
 
     const response = await fetch('http://localhost:8001/generate-clips', {
@@ -1110,10 +1167,6 @@ function togglePlay(videoId) {
   }
 }
 
-function openSettings(videoId) {
-  expandedVideoId.value = expandedVideoId.value === videoId ? null : videoId;
-}
-
 function updateProgress(videoId, event) {
   const video = items.value.find(v => v.id === videoId);
   if (video) {
@@ -1213,33 +1266,6 @@ function stopDragging() {
   document.removeEventListener('mouseup', stopDragging);
 }
 
-// Mock data for scenes (replace with actual data or API call)
-const scenes = ref([
-  { id: 1, videoId: 101, description: 'Scene 1', timestamp: 30 },
-  { id: 2, videoId: 101, description: 'Scene 2', timestamp: 120 },
-  { id: 3, videoId: 102, description: 'Scene 3', timestamp: 45 },
-]);
-
-const searchScenes = () => {
-  searchPerformed.value = true;
-  if (!searchQuery.value) {
-    searchResults.value = [];
-    return;
-  }
-
-  // Filter scenes based on selected video IDs and search query
-  searchResults.value = scenes.value.filter(
-    scene => selectedIds.value.includes(scene.videoId) &&
-      scene.description.toLowerCase().includes(searchQuery.value.toLowerCase())
-  );
-};
-
-const closeSearchMenu = () => {
-  showSearchMenu.value = false;
-  searchQuery.value = '';
-  searchResults.value = [];
-  searchPerformed.value = false;
-};
 </script>
 
 <style scoped>
@@ -1265,3 +1291,4 @@ const closeSearchMenu = () => {
   transform: translateX(100%);
 }
 </style>
+

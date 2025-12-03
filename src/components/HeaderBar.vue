@@ -39,7 +39,7 @@ function logout() {
 }
 
 function goToVideoList() {
-  router.push("/video_storage");
+  router.push("/search");
 }
 
 onMounted(() => {

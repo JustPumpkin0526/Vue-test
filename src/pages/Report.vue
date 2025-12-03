@@ -1,5 +1,5 @@
 <template>
-  <div class="grid lg:grid-cols-[1fr_1200px] gap-6 h-[calc(100vh-120px)] p-6">
+  <div class="grid lg:grid-cols-[1fr_1200px] gap-6 h-[calc(100vh-120px)] p-10">
     <section class="rounded-2xl border border-black p-4">
       <h2 class="font-semibold mb-3">현재 리포트</h2>
 

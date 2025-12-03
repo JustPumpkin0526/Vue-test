@@ -1,10 +1,10 @@
 <template>
   <aside :class="[collapsed ? 'w-[105px]' : 'w-64', ' h-[95.65vh] shrink-0 border-r bg-gray-100 p-6 flex flex-col justify-between relative transition-all duration-200']">
-    <nav class="space-y-3 flex flex-col flex-1">
+    <nav class="flex flex-col flex-1">
       <RouterLink
-        to="/video_storage"
+        to="/search"
         class="flex items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white active:scale-[0.97]"
-        :class="isActive('/video_storage')">
+        :class="isActive('/search')">
         <svg viewBox="0 0 24 24" class="w-6 h-6 transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3 icon-base">
           <circle cx="11" cy="11" r="7" />
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
