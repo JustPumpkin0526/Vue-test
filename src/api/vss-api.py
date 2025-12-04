@@ -13,6 +13,7 @@ import shutil
 import json
 import time
 import os
+import re
 from pathlib import Path
 
 # .env 파일 지원 (python-dotenv가 설치되어 있는 경우)
@@ -62,7 +63,7 @@ except Exception as e:
     logger.error(f"Failed to mount /sample endpoint: {e}")
 
 # VIA 서버 주소
-VIA_SERVER_URL = "http://172.16.7.64:8100"  # 환경에 맞게 수정
+VIA_SERVER_URL = "http://172.16.7.64:8101"  # 환경에 맞게 수정
 
 # Ollama 설정
 # Ollama 서버 주소 (기본값: http://localhost:11434)
@@ -124,16 +125,34 @@ class VSS:
     async def upload_video(self, video_path):
         session = await get_session()
         data = aiohttp.FormData()
-        with open(video_path, "rb") as f:
-            file_content = f.read()
-        data.add_field("file", file_content, filename=f"file_{self.f_count}")
-        data.add_field("purpose", "vision")
-        data.add_field("media_type", "video")
         
-        async with session.post(self.files_endpoint, data=data) as response:
-            self.f_count += 1
-            json_data = await self.check_response(response)
-            return json_data.get("id")  # return uploaded file id
+        # 파일을 스트리밍 방식으로 전송 (메모리에 전체 로드하지 않음)
+        # 파일 핸들을 직접 전달하여 메모리 효율성 향상
+        file_handle = open(video_path, "rb")
+        try:
+            # 파일 크기 확인 (로깅용)
+            file_size = os.path.getsize(video_path)
+            logger.info(f"Uploading video file: {video_path} (size: {file_size / (1024*1024):.2f} MB)")
+            
+            data.add_field("file", file_handle, filename=f"file_{self.f_count}")
+            data.add_field("purpose", "vision")
+            data.add_field("media_type", "video")
+            
+            # 타임아웃 설정: 큰 파일 업로드를 위해 충분한 시간 할당
+            # 파일 크기에 따라 동적으로 타임아웃 계산 (최소 60초, 최대 600초)
+            timeout_seconds = max(60, min(600, int(file_size / (1024 * 1024) * 10)))  # 1MB당 10초, 최소 60초, 최대 600초
+            
+            async with session.post(
+                self.files_endpoint, 
+                data=data,
+                timeout=aiohttp.ClientTimeout(total=timeout_seconds)
+            ) as response:
+                self.f_count += 1
+                json_data = await self.check_response(response)
+                return json_data.get("id")  # return uploaded file id
+        finally:
+            # 파일 핸들 닫기
+            file_handle.close()
 
     async def summarize_video(self, file_id, prompt, cs_prompt, sa_prompt, chunk_duration, model, num_frames_per_chunk, frame_width, frame_height, top_k, top_p, temperature, max_new_tokens, seed, batch_size, rag_batch_size, rag_top_k, summarize_top_p, summarize_temperature, summarize_max_tokens, chat_top_p, chat_temperature, chat_max_tokens, notification_top_p, notification_temperature, notification_max_tokens, enable_audio):
         body = {
@@ -250,6 +269,103 @@ def get_closest_chunk_size(CHUNK_SIZES, x):
     closest_value = min(values, key=lambda v: abs(v - x))  # find the value closest to x
     print(closest_value)
     return closest_value
+
+
+def parse_timestamps(timestamp_text, video_duration):
+    """
+    타임스탬프 텍스트에서 시간 구간을 파싱하여 (start_time, end_time) 튜플 리스트를 반환합니다.
+    
+    지원 형식:
+    - 초 단위: 10.5, 120.3
+    - 분:초 형식: 1:30, 2:45
+    - 범위: 10.5-15.3, 1:30-2:45, 10.5~15.3
+    - 여러 타임스탬프: "10.5, 20.3, 30.1" 또는 "1:30, 2:45"
+    
+    Args:
+        timestamp_text (str): 타임스탬프가 포함된 텍스트
+        video_duration (float): 동영상 전체 길이 (초)
+    
+    Returns:
+        List[tuple]: [(start_time, end_time), ...] 리스트. 각 구간은 최대 15초 길이.
+    """
+    if not timestamp_text or not isinstance(timestamp_text, str):
+        return []
+    
+    timestamps = []
+    
+    # 숫자 패턴 (초 단위 또는 분:초 형식)
+    # 초 단위: 10.5, 120.3 등
+    # 분:초 형식: 1:30, 2:45 등
+    # 범위: 10.5-15.3, 1:30-2:45, 10.5~15.3 등
+    
+    # 분:초 형식을 초로 변환하는 함수
+    def parse_time_to_seconds(time_str):
+        time_str = time_str.strip()
+        # 분:초 형식인지 확인
+        if ':' in time_str:
+            parts = time_str.split(':')
+            if len(parts) == 2:
+                try:
+                    minutes = float(parts[0])
+                    seconds = float(parts[1])
+                    return minutes * 60 + seconds
+                except ValueError:
+                    return None
+        # 초 단위 형식
+        try:
+            return float(time_str)
+        except ValueError:
+            return None
+    
+    # 타임스탬프 텍스트에서 숫자와 범위 패턴 찾기
+    # 패턴: 숫자(초 또는 분:초) 또는 범위(숫자-숫자, 숫자~숫자)
+    
+    # 1. 범위 패턴 찾기 (예: 10.5-15.3, 1:30-2:45)
+    range_pattern = r'(\d+(?:\.\d+)?(?::\d+(?:\.\d+)?)?)\s*[-~]\s*(\d+(?:\.\d+)?(?::\d+(?:\.\d+)?)?)'
+    for match in re.finditer(range_pattern, timestamp_text):
+        start_str = match.group(1)
+        end_str = match.group(2)
+        start_time = parse_time_to_seconds(start_str)
+        end_time = parse_time_to_seconds(end_str)
+        if start_time is not None and end_time is not None:
+            start_time = max(0, min(start_time, video_duration))
+            end_time = max(start_time, min(end_time, video_duration))
+            # 최대 15초 길이로 제한
+            if end_time - start_time > 15:
+                end_time = start_time + 15
+            timestamps.append((start_time, end_time))
+    
+    # 2. 단일 타임스탬프 찾기 (범위에 포함되지 않은 것들)
+    # 이미 범위로 처리된 부분을 제외하고 나머지에서 찾기
+    processed_text = re.sub(range_pattern, '', timestamp_text)
+    
+    # 숫자 패턴 찾기 (초 단위 또는 분:초)
+    number_pattern = r'\d+(?:\.\d+)?(?::\d+(?:\.\d+)?)?'
+    for match in re.finditer(number_pattern, processed_text):
+        time_str = match.group(0)
+        time_seconds = parse_time_to_seconds(time_str)
+        if time_seconds is not None:
+            start_time = max(0, min(time_seconds, video_duration))
+            # 단일 타임스탬프는 ±5초 범위로 클립 생성 (최대 15초)
+            end_time = min(start_time + 10, video_duration)  # 시작점부터 10초
+            if end_time - start_time > 15:
+                end_time = start_time + 15
+            timestamps.append((start_time, end_time))
+    
+    # 중복 제거 및 정렬
+    timestamps = sorted(set(timestamps), key=lambda x: x[0])
+    
+    # 겹치는 구간 병합 (5초 이내로 가까운 구간)
+    merged = []
+    for start, end in timestamps:
+        if merged and start - merged[-1][1] < 5:
+            # 이전 구간과 가까우면 병합
+            merged[-1] = (merged[-1][0], min(end, merged[-1][0] + 15))
+        else:
+            merged.append((start, min(end, start + 15)))
+    
+    logger.info(f"파싱된 타임스탬프: {merged}")
+    return merged
 
 
 async def get_recommended_chunk_size(video_length):
@@ -413,69 +529,9 @@ async def generate_clips(
 
             num_frames_per_chunk = chunk_duration // 4
 
-            # summarize_video 실행 전에 Ollama를 사용하여 prompt 값 변경
-            try:
-                logger.info(f"Ollama를 사용하여 prompt 개선: {OLLAMA_MODEL} (서버: {OLLAMA_BASE_URL})")
-                
-                # Ollama API 호출을 위한 프롬프트 구성
-                ollama_prompt = f"""다음은 동영상 요약을 위한 프롬프트입니다.
-                                원본 프롬프트: {prompt}
-                                위 프롬프트를 영어로 수정하고, 타임스탬프 출력을 요청하도록 자연스럽게 개선해주세요.
-                                또한 문장 구조를 이루게 하고 500자 이내로 작성해주세요. 개선된 prompt 이외에 내용은 출력하지 마세요."""
-                
-                # Ollama API 호출 (aiohttp 사용)
-                session = await get_session()
-                ollama_url = f"{OLLAMA_BASE_URL}/api/chat"
-                payload = {
-                    "model": OLLAMA_MODEL,
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "You are an expert at improving video summarization prompts. Improve the given prompt to be more effective and natural in English, and include a request for timestamp output."
-                        },
-                        {
-                            "role": "user",
-                            "content": ollama_prompt
-                        }
-                    ],
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.7,
-                        "num_predict": 1000  # 최대 토큰 수
-                    }
-                }
-                
-                async with session.post(
-                    ollama_url,
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=120)  # Ollama는 로컬 실행이므로 시간 여유 있게
-                ) as ollama_response:
-                    if ollama_response.status == 200:
-                        ollama_data = await ollama_response.json()
-                        improved_prompt = ollama_data.get("message", {}).get("content", "")
-                        if improved_prompt:
-                            print(f"Ollama로 prompt 개선 성공: {len(improved_prompt)} 문자")
-                            prompt = improved_prompt.strip()  # 개선된 prompt로 교체
-                            print(f"개선된 prompt: {prompt}")
-                        else:
-                            print("Ollama 응답에 content가 없습니다. 원본 prompt를 사용합니다.")
-                    else:
-                        error_text = await ollama_response.text()
-                        print(f"Ollama API 호출 실패 (HTTP {ollama_response.status}): {error_text}")
-                        print("원본 prompt를 사용합니다.")
-                        # 원본 prompt 사용
-            except aiohttp.ClientConnectorError as e:
-                print(f"Ollama 서버에 연결할 수 없습니다: {e}")
-                print("Ollama가 실행 중인지 확인하세요: ollama serve")
-                print("원본 prompt를 사용합니다.")
-            except Exception as e:
-                print(f"Ollama를 사용한 prompt 개선 중 오류 발생: {e}")
-                print("원본 prompt를 사용합니다.")
-                # 오류 발생 시 원본 prompt 사용
-
             result = await vss_client.summarize_video(
                 video_id,
-                prompt,
+                "You are a crime detection system. Analyze the scene and describe all events that may indicate criminal activity, such as assault, theft, vandalism, or suspicious behavior. Start each sentence with the start and end timestamps of the event, and highlight any anomalies or potential threats.",
                 "You will be given captions from sequential clips of a video. Aggregate captions in the format start_time:end_time:caption based on whether captions are related to one another or create a continuous scene.",
                 "Based on the available information, generate a summary that captures the important events in the video. The summary should be organized chronologically and in logical sections. This should be a concise, yet descriptive summary of all the important events. The format should be intuitive and easy for a user to read and understand what happened. Format the output in Markdown so it can be displayed nicely. Timestamps are in seconds so please format them as SS.SSS",
                 chunk_duration,
@@ -517,6 +573,8 @@ async def generate_clips(
                 query_max_tokens = 1024  # VIA 서버는 최대 1024까지만 허용
                 query_top_p = 0.9
                 query_top_k = 50
+
+                prompt += " 장면의 시작 타임스탬프와 종료 타임스탬프를 추출하여 출력해주세요."
                 
                 # VIA 서버로 질문 전달
                 query_result = await vss_client.query_video(
@@ -530,39 +588,169 @@ async def generate_clips(
                     query_top_k,
                     prompt  # 사용자가 입력한 prompt를 질문으로 전달
                 )
-                result = query_result  # VIA 서버의 답변으로 result 업데이트
-                logger.info(f"VIA 서버 질문-답변 성공: {len(result)} 문자")
-                print(f"VIA 서버 답변: {result}")
+                
+                # query_result를 Ollama LLM에 보내서 타임스탬프만 추출
+                extracted_timestamps_text = None
+                try:
+                    logger.info(f"Ollama를 사용하여 타임스탬프 추출: {OLLAMA_MODEL} (서버: {OLLAMA_BASE_URL})")
+                    
+                    # Ollama API 호출을 위한 프롬프트 구성
+                    timestamp_extraction_prompt = f"""다음은 동영상 질의 응답 결과입니다:
+{query_result}
+
+위 응답에서 타임스탬프만 추출하여 출력해주세요. 타임스탬프 형식은 초 단위(예: 10.5, 120.3) 또는 분:초 형식(예: 1:30, 2:45)일 수 있습니다. 타임스탬프만 출력하고 다른 설명은 포함하지 마세요."""
+                    
+                    # Ollama API 호출 (aiohttp 사용)
+                    session = await get_session()
+                    ollama_url = f"{OLLAMA_BASE_URL}/api/chat"
+                    payload = {
+                        "model": OLLAMA_MODEL,
+                        "messages": [
+                            {
+                                "role": "system",
+                                "content": "You are an expert at extracting timestamps from video query responses. Extract only timestamps and output them in a clear format."
+                            },
+                            {
+                                "role": "user",
+                                "content": timestamp_extraction_prompt
+                            }
+                        ],
+                        "stream": False,
+                        "options": {
+                            "temperature": 0,  # 타임스탬프 추출은 정확성이 중요하므로 낮은 temperature
+                            "num_predict": 500  # 타임스탬프만 추출하므로 적은 토큰 수
+                        }
+                    }
+                    
+                    async with session.post(
+                        ollama_url,
+                        json=payload,
+                        timeout=aiohttp.ClientTimeout(total=60)
+                    ) as ollama_response:
+                        if ollama_response.status == 200:
+                            ollama_data = await ollama_response.json()
+                            extracted_timestamps_text = ollama_data.get("message", {}).get("content", "")
+                            if extracted_timestamps_text:
+                                extracted_timestamps_text = extracted_timestamps_text.strip()
+                                print(f"Ollama로 타임스탬프 추출 성공: {len(extracted_timestamps_text)} 문자")
+                                print(f"추출된 타임스탬프: {extracted_timestamps_text}")
+                                logger.info(f"타임스탬프 추출 완료: {extracted_timestamps_text}")
+                            else:
+                                print("Ollama 응답에 content가 없습니다.")
+                        else:
+                            error_text = await ollama_response.text()
+                            print(f"Ollama API 호출 실패 (HTTP {ollama_response.status}): {error_text}")
+                except aiohttp.ClientConnectorError as e:
+                    print(f"Ollama 서버에 연결할 수 없습니다: {e}")
+                    print("Ollama가 실행 중인지 확인하세요: ollama serve")
+                except Exception as e:
+                    print(f"Ollama를 사용한 타임스탬프 추출 중 오류 발생: {e}")
+                
+                logger.info(f"VIA 서버 질문-답변 성공: {len(query_result)} 문자")
+                print(f"VIA 서버 답변: {query_result}")
+                
+                # 추출된 타임스탬프를 파싱하여 클립 생성에 사용
+                if extracted_timestamps_text:
+                    timestamp_ranges = parse_timestamps(extracted_timestamps_text, duration)
+                    logger.info(f"검색어 '{prompt}'에 대한 타임스탬프 구간: {timestamp_ranges}")
+                
+                # 타임스탬프 기반 클립 생성
+                base_name, _ = os.path.splitext(file_path)
+                
+                if timestamp_ranges:
+                    # 타임스탬프가 있으면 해당 구간의 클립 생성
+                    logger.info(f"검색어 기반 클립 생성: {len(timestamp_ranges)}개 구간")
+                    for clip_index, (start_time, end_time) in enumerate(timestamp_ranges):
+                        clip_filename = f"clip_{base_name}_{clip_index+1}.mp4"
+                        clip_path = os.path.join("./clips", clip_filename)
+                        try:
+                            # 타임스탬프 구간의 클립 생성
+                            video.subclip(start_time, end_time).write_videofile(
+                                clip_path,
+                                codec="libx264",
+                                audio=False,
+                                verbose=False
+                            )
+                            logger.info(f"검색어 기반 클립 저장: {clip_path} (구간: {start_time:.2f}s - {end_time:.2f}s)")
+                            base = str(request.base_url).rstrip('/')
+                            clip_url = f"{base}/clips/{clip_filename}"
+                            video_clips.append({
+                                "id": f"{base_name}_{clip_index}",
+                                "title": clip_filename,
+                                "url": clip_url,
+                                "start_time": start_time,
+                                "end_time": end_time,
+                                "search_query": prompt
+                            })
+                        except Exception as e:
+                            logger.error(f"Error generating clip {clip_filename}: {e}")
+                        time.sleep(0.5)
+                else:
+                    # 타임스탬프가 없으면 랜덤 클립 생성 (폴백)
+                    logger.warning(f"타임스탬프를 찾을 수 없어 랜덤 클립을 생성합니다. 검색어: '{prompt}'")
+                    num_clips = random.randint(1, 3)
+                    for clip_index in range(num_clips):
+                        start_time = random.uniform(0, max(0, duration - 15))
+                        end_time = min(start_time + 15, duration)
+                        clip_filename = f"clip_{base_name}_{clip_index+1}.mp4"
+                        clip_path = os.path.join("./clips", clip_filename)
+                        try:
+                            video.subclip(start_time, end_time).write_videofile(
+                                clip_path,
+                                codec="libx264",
+                                audio=False,
+                                verbose=False
+                            )
+                            logger.info(f"랜덤 클립 저장: {clip_path}")
+                            base = str(request.base_url).rstrip('/')
+                            clip_url = f"{base}/clips/{clip_filename}"
+                            video_clips.append({
+                                "id": f"{base_name}_{clip_index}",
+                                "title": clip_filename,
+                                "url": clip_url,
+                                "start_time": start_time,
+                                "end_time": end_time,
+                                "search_query": prompt,
+                                "note": "랜덤 생성 (타임스탬프 없음)"
+                            })
+                        except Exception as e:
+                            logger.error(f"Error generating clip {clip_filename}: {e}")
+                        time.sleep(0.5)
             except Exception as via_error:
                 logger.warning(f"VIA 서버 query_video 실패: {via_error}")
                 logger.warning("원본 result를 사용합니다.")
-            
-            num_clips = random.randint(0, 3)
-            logger.info(f"Number of clips to generate: {num_clips}")
-            base_name, _ = os.path.splitext(file_path)
-            for clip_index in range(num_clips):
-                start_time = random.uniform(0, max(0, duration - 15))
-                end_time = min(start_time + 15, duration)
-                clip_filename = f"clip_{base_name}_{clip_index+1}.mp4"
-                clip_path = os.path.join("./clips", clip_filename)
-                try:
-                    video.subclip(start_time, end_time).write_videofile(
-                        clip_path,
-                        codec="libx264",
-                        audio = False,
-                        verbose=False
-                    )
-                    logger.info(f"Clip saved: {clip_path}")
-                    base = str(request.base_url).rstrip('/')
-                    clip_url = f"{base}/clips/{clip_filename}"
-                    video_clips.append({
-                        "id": f"{base_name}_{clip_index}",
-                        "title": clip_filename,
-                        "url": clip_url,
-                    })
-                except Exception as e:
-                    logger.error(f"Error generating clip {clip_filename}: {e}")
-                time.sleep(0.5)
+                
+                # VIA 서버 실패 시 랜덤 클립 생성 (폴백)
+                num_clips = random.randint(1, 3)
+                logger.info(f"VIA 서버 실패로 인한 랜덤 클립 생성: {num_clips}개")
+                base_name, _ = os.path.splitext(file_path)
+                for clip_index in range(num_clips):
+                    start_time = random.uniform(0, max(0, duration - 15))
+                    end_time = min(start_time + 15, duration)
+                    clip_filename = f"clip_{base_name}_{clip_index+1}.mp4"
+                    clip_path = os.path.join("./clips", clip_filename)
+                    try:
+                        video.subclip(start_time, end_time).write_videofile(
+                            clip_path,
+                            codec="libx264",
+                            audio=False,
+                            verbose=False
+                        )
+                        logger.info(f"랜덤 클립 저장: {clip_path}")
+                        base = str(request.base_url).rstrip('/')
+                        clip_url = f"{base}/clips/{clip_filename}"
+                        video_clips.append({
+                            "id": f"{base_name}_{clip_index}",
+                            "title": clip_filename,
+                            "url": clip_url,
+                            "start_time": start_time,
+                            "end_time": end_time,
+                            "search_query": prompt,
+                            "note": "랜덤 생성 (VIA 서버 실패)"
+                        })
+                    except Exception as e:
+                        logger.error(f"Error generating clip {clip_filename}: {e}")
+                    time.sleep(0.5)
             video.close()
             del video
 
