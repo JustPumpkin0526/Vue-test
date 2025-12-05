@@ -9,6 +9,7 @@ import Report from "@/pages/Report.vue";
 import Setting from "@/pages/Setting.vue";
 import Login from "@/pages/Login.vue";
 import Register from "@/pages/Register.vue";
+import ResetPassword from "@/pages/ResetPassword.vue";
 
 const routes = [
   { path: "/", redirect: "/login" },
@@ -17,7 +18,8 @@ const routes = [
   { path: "/report", name: "Report", component: Report },
   { path: "/setting", name: "Setting", component: Setting },
   { path: "/login", name: "Login", component: Login },
-  { path: "/register", name: "Register", component: Register }
+  { path: "/register", name: "Register", component: Register },
+  { path: "/reset-password", name: "ResetPassword", component: ResetPassword }
 ];
 
 const router = createRouter({
@@ -33,12 +35,12 @@ router.beforeEach((to, from, next) => {
   if (to.path === "/login" && userId) {
     next("/search");
   }
-  // 회원가입 페이지는 로그인 여부와 관계없이 접근 가능
-  else if (to.path === "/register") {
+  // 회원가입 및 비밀번호 재설정 페이지는 로그인 여부와 관계없이 접근 가능
+  else if (to.path === "/register" || to.path === "/reset-password") {
     next();
   }
   // 보호된 페이지(로그인이 필요한 페이지)에 접근할 때
-  else if (to.path !== "/login" && to.path !== "/register" && !userId) {
+  else if (to.path !== "/login" && to.path !== "/register" && to.path !== "/reset-password" && !userId) {
     next("/login");
   }
   else {

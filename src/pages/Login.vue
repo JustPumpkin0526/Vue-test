@@ -177,10 +177,11 @@ async function login() {
 }
 
 function resetPw() {
-  if (!id.value.trim()) {
-    errorMessage.value = "ID를 먼저 입력해주세요.";
-    return;
+  // ID가 입력되어 있으면 쿼리 파라미터로 전달
+  if (id.value.trim()) {
+    router.push({ path: "/reset-password", query: { id: id.value.trim() } });
+  } else {
+    router.push("/reset-password");
   }
-  alert("비밀번호 재설정 기능은 준비 중입니다. 관리자에게 문의해주세요.");
 }
 </script>
