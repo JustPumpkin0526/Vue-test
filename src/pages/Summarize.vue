@@ -694,9 +694,65 @@ async function restoreAllMissingFiles() {
   }
 }
 
+// 현재 사용자의 동영상 ID 목록을 DB에서 가져오는 함수
+async function getCurrentUserVideoIds() {
+  const userId = localStorage.getItem("vss_user_id");
+  if (!userId) return new Set();
+
+  try {
+    const response = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+    if (!response.ok) {
+      console.warn('동영상 목록 조회 실패');
+      return new Set();
+    }
+    const data = await response.json();
+    if (data.success && data.videos) {
+      // DB ID 목록 반환
+      return new Set(data.videos.map(v => v.id));
+    }
+  } catch (error) {
+    console.warn('동영상 목록 조회 중 오류:', error);
+  }
+  return new Set();
+}
+
+// 동영상 목록에서 현재 사용자의 동영상만 필터링하는 함수
+async function filterVideosByCurrentUser(videos) {
+  if (!videos || videos.length === 0) return [];
+  
+  const userId = localStorage.getItem("vss_user_id");
+  if (!userId) {
+    // 사용자 ID가 없으면 모든 동영상 제거
+    return [];
+  }
+
+  // DB에서 현재 사용자의 동영상 ID 목록 가져오기
+  const userVideoIds = await getCurrentUserVideoIds();
+  if (userVideoIds.size === 0) {
+    // 사용자의 동영상이 없으면 모든 동영상 제거
+    return [];
+  }
+
+  // 현재 사용자의 동영상만 필터링 (dbId 또는 id로 비교)
+  return videos.filter(v => {
+    const videoId = v.dbId || v.id;
+    return videoId && userVideoIds.has(videoId);
+  });
+}
+
 // Pinia 스토어에서 동영상 목록을 불러와서 Summarize 메뉴의 로컬 배열에 복사
-onMounted(() => {
+onMounted(async () => {
   document.addEventListener('click', handleGlobalClick);
+
+  const userId = localStorage.getItem("vss_user_id");
+  if (!userId) {
+    // 사용자 ID가 없으면 모든 상태 초기화
+    videoFiles.value = [];
+    summaryVideoStore.clearVideos();
+    const storageKey = getStorageKey();
+    localStorage.removeItem(storageKey);
+    return;
+  }
 
   // 먼저 localStorage에서 상태 복원 시도
   const restored = restoreStateFromLocalStorage();
@@ -724,57 +780,152 @@ onMounted(() => {
     }
 
     if (Array.isArray(summaryVideoStore.videos) && summaryVideoStore.videos.length > 0) {
-      // Summarize 전용 표시 URL을 분리하여 Video Storage 원본 URL(ObjectURL)과 독립
-      videoFiles.value = summaryVideoStore.videos.map(v => {
-        const hasFile = v.file instanceof File;
-        // File 객체가 있으면 새로운 ObjectURL 생성, 없으면 기존 displayUrl 또는 originUrl 사용
-        const summaryObjectUrl = hasFile ? URL.createObjectURL(v.file) : null;
-        // displayUrl 우선순위: summaryObjectUrl > v.displayUrl > v.originUrl > v.url
-        const displayUrl = summaryObjectUrl || v.displayUrl || v.originUrl || v.url || '';
-        const originUrl = v.originUrl || v.url || displayUrl;
-        
-        return {
-          id: v.id,
-          name: v.name ?? v.title,
-          originUrl, // Video Storage에서 넘어온 원본 URL (삭제 시 revoke 금지)
-          displayUrl, // 렌더링에 사용할 URL
-          summaryObjectUrl, // Summarize가 관리/해제할 URL (없으면 null)
-          date: v.date ?? '',
-          summary: v.summary ?? '',
-          file: hasFile ? v.file : null
-        };
-      });
-      selectedIndexes.value = videoFiles.value.map(v => v.id);
-      zoomedIndex.value = videoFiles.value.length > 0 ? 0 : null;
-      // 동영상이 있으면 streaming을 true로 설정
-      streaming.value = videoFiles.value.length > 0;
-      // 초기 로딩 후 File 객체가 null인 항목 복원 시도 (세션 재진입, localStorage 경유 케스)
-      restoreAllMissingFiles();
+      // 현재 사용자의 동영상만 필터링
+      const filteredVideos = await filterVideosByCurrentUser(summaryVideoStore.videos);
+      
+      if (filteredVideos.length > 0) {
+        // Summarize 전용 표시 URL을 분리하여 Video Storage 원본 URL(ObjectURL)과 독립
+        videoFiles.value = filteredVideos.map(v => {
+          const hasFile = v.file instanceof File;
+          // File 객체가 있으면 새로운 ObjectURL 생성, 없으면 기존 displayUrl 또는 originUrl 사용
+          const summaryObjectUrl = hasFile ? URL.createObjectURL(v.file) : null;
+          // displayUrl 우선순위: summaryObjectUrl > v.displayUrl > v.originUrl > v.url
+          const displayUrl = summaryObjectUrl || v.displayUrl || v.originUrl || v.url || '';
+          const originUrl = v.originUrl || v.url || displayUrl;
+          
+          return {
+            id: v.id,
+            name: v.name ?? v.title,
+            originUrl, // Video Storage에서 넘어온 원본 URL (삭제 시 revoke 금지)
+            displayUrl, // 렌더링에 사용할 URL
+            summaryObjectUrl, // Summarize가 관리/해제할 URL (없으면 null)
+            date: v.date ?? '',
+            summary: v.summary ?? '',
+            file: hasFile ? v.file : null,
+            dbId: v.dbId || v.id // DB ID 저장
+          };
+        });
+        selectedIndexes.value = videoFiles.value.map(v => v.id);
+        zoomedIndex.value = videoFiles.value.length > 0 ? 0 : null;
+        // 동영상이 있으면 streaming을 true로 설정
+        streaming.value = videoFiles.value.length > 0;
+        // 초기 로딩 후 File 객체가 null인 항목 복원 시도 (세션 재진입, localStorage 경유 케스)
+        restoreAllMissingFiles();
 
-      // Video Storage에서 넘어온 동영상들에 대해 추천 chunk_size 계산
-      nextTick(() => {
-        setTimeout(() => {
-          videoFiles.value.forEach(video => {
-            updateRecommendedChunkSize(video.id);
-          });
-        }, 1000); // video element가 렌더링될 시간을 줌
-      });
+        // Video Storage에서 넘어온 동영상들에 대해 추천 chunk_size 계산
+        nextTick(() => {
+          setTimeout(() => {
+            videoFiles.value.forEach(video => {
+              updateRecommendedChunkSize(video.id);
+            });
+          }, 1000); // video element가 렌더링될 시간을 줌
+        });
+        
+        // DB에서 저장된 요약 결과 로드
+        await loadSummariesFromDB();
+      } else {
+        // 현재 사용자의 동영상이 없으면 summaryVideoStore도 정리
+        summaryVideoStore.clearVideos();
+      }
     }
   } else {
-    // 상태가 복원된 경우, 채팅 스크롤 처리
+    // 상태가 복원된 경우, 복원된 동영상들이 현재 사용자의 것인지 확인
+    if (videoFiles.value.length > 0) {
+      const filteredVideos = await filterVideosByCurrentUser(videoFiles.value);
+      if (filteredVideos.length !== videoFiles.value.length) {
+        // 일부 동영상이 현재 사용자의 것이 아니면 필터링된 목록으로 교체
+        videoFiles.value = filteredVideos;
+        if (videoFiles.value.length === 0) {
+          // 모든 동영상이 제거되었으면 상태 초기화
+          streaming.value = false;
+          selectedIndexes.value = [];
+          isZoomed.value = false;
+          zoomedIndex.value = null;
+          prompt.value = "";
+          response.value = "";
+          chatMessages.value = [];
+        }
+      }
+    }
+    
+    // DB에서 저장된 요약 결과 로드
+    await loadSummariesFromDB();
+    
+    // 채팅 스크롤 처리
     nextTick(() => {
       scrollChatToBottom();
     });
   }
 });
 
-// localStorage 키
-const STORAGE_KEY = 'summarize_page_state';
+// DB에서 저장된 요약 결과를 로드하는 함수
+async function loadSummariesFromDB() {
+  const userId = localStorage.getItem("vss_user_id");
+  if (!userId || videoFiles.value.length === 0) return;
+
+  try {
+    // 각 동영상의 요약 결과를 조회
+    for (const video of videoFiles.value) {
+      const dbId = video.dbId || video.id;
+      if (!dbId) continue;
+
+      try {
+        const response = await fetch(`http://localhost:8001/summaries/${dbId}?user_id=${userId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.summary) {
+            // 요약 결과를 동영상 객체에 저장
+            video.summary = data.summary.summary_text;
+            
+            // 요약된 비디오 ID 매핑 업데이트
+            summarizedVideoMap.value[video.id] = dbId;
+            summarizedVideoId.value = dbId;
+            
+            // 채팅 메시지에 요약 결과 추가 (이미 표시되지 않은 경우)
+            const existingSummary = chatMessages.value.find(
+              m => m.role === 'assistant' && m.content.includes(`'${video.name}'`)
+            );
+            if (!existingSummary) {
+              const markedsummary = marked.parse(data.summary.summary_text);
+              const summaryHtml = `<div class='font-semibold'>✅ '${video.name}' 요약 (저장된 결과)</div><br>${markedsummary}`;
+              addChatMessage({
+                id: Date.now() + Math.random(),
+                role: 'assistant',
+                content: summaryHtml
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.warn(`동영상 ${dbId}의 요약 결과 로드 실패:`, error);
+      }
+    }
+  } catch (error) {
+    console.warn('요약 결과 로드 중 오류:', error);
+  }
+}
+
+// localStorage 키 생성 함수 (사용자 ID 기반)
+function getStorageKey() {
+  const userId = localStorage.getItem("vss_user_id");
+  if (!userId) {
+    return 'summarize_page_state_no_user';
+  }
+  return `summarize_page_state_${userId}`;
+}
 
 // 상태를 localStorage에 저장하는 함수
 function saveStateToLocalStorage() {
   try {
+    const userId = localStorage.getItem("vss_user_id");
+    if (!userId) {
+      console.warn('사용자 ID가 없어 상태를 저장할 수 없습니다.');
+      return;
+    }
+
     const state = {
+      // 사용자 ID 저장 (복원 시 검증용)
+      userId: userId,
       // 동영상 정보 (File 객체는 제외하고 메타데이터만 저장)
       videoFiles: videoFiles.value.map(v => ({
         id: v.id,
@@ -817,7 +968,8 @@ function saveStateToLocalStorage() {
       // 저장 시간
       savedAt: new Date().toISOString()
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const storageKey = getStorageKey();
+    localStorage.setItem(storageKey, JSON.stringify(state));
     console.log('상태가 localStorage에 저장되었습니다.');
   } catch (e) {
     console.warn('localStorage 저장 실패:', e);
@@ -827,10 +979,24 @@ function saveStateToLocalStorage() {
 // localStorage에서 상태를 복원하는 함수
 function restoreStateFromLocalStorage() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const currentUserId = localStorage.getItem("vss_user_id");
+    if (!currentUserId) {
+      console.log('사용자 ID가 없어 상태를 복원할 수 없습니다.');
+      return false;
+    }
+
+    const storageKey = getStorageKey();
+    const saved = localStorage.getItem(storageKey);
     if (!saved) return false;
 
     const state = JSON.parse(saved);
+    
+    // 저장된 사용자 ID와 현재 사용자 ID 비교
+    if (state.userId && state.userId !== currentUserId) {
+      console.log('다른 사용자의 상태입니다. 복원하지 않습니다.');
+      // 다른 사용자의 상태는 삭제하지 않고 그대로 두고, 복원만 하지 않음
+      return false;
+    }
     
     // 프롬프트 및 요약 결과 복원
     if (state.prompt) prompt.value = state.prompt;
@@ -882,6 +1048,7 @@ function restoreStateFromLocalStorage() {
     
     // 동영상 정보 복원 (summaryVideoStore에서 File 객체를 가져와야 함)
     if (Array.isArray(state.videoFiles) && state.videoFiles.length > 0) {
+      // 현재 사용자의 동영상만 필터링 (비동기이므로 여기서는 일단 복원하고, onMounted에서 필터링)
       // summaryVideoStore의 videos와 병합하여 복원
       const restoredVideos = state.videoFiles.map(savedVideo => {
         // summaryVideoStore에서 해당 ID의 동영상 찾기
@@ -1443,6 +1610,36 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
     
     const startTime = Date.now();
 
+    // DB에서 VIA 서버의 video_id 조회
+    const userId = localStorage.getItem("vss_user_id");
+    let viaVideoId = null;
+    
+    if (userId && videoObj.dbId) {
+      try {
+        const videosResponse = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+        if (videosResponse.ok) {
+          const videosData = await videosResponse.json();
+          if (videosData.success && videosData.videos) {
+            const video = videosData.videos.find(v => v.id === videoObj.dbId);
+            if (video && video.video_id) {
+              viaVideoId = video.video_id; // vss_videos 테이블의 VIDEO_ID 컬럼 (VIA 서버의 video_id)
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('VIA video_id 조회 실패:', error);
+      }
+    }
+    
+    if (!viaVideoId) {
+      addChatMessage({
+        id: Date.now() + Math.random(),
+        role: 'system',
+        content: `❌ '${videoObj?.name || 'Unnamed'}'의 VIA 서버 video_id를 찾을 수 없습니다. 동영상을 먼저 업로드해주세요.`
+      });
+      continue;
+    }
+
     const formData = new FormData();
     formData.append('file', videoObj.file);
     formData.append('prompt', taskPrompt ?? prompt.value ?? '');
@@ -1470,6 +1667,7 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
     formData.append('alert_temperature', safeNum(settingStore.A_TEMPERATURE, 1.0));
     formData.append('alert_max_tokens', safeNum(settingStore.A_MAX_TOKENS, 512));
     formData.append('enable_audio', settingStore.enableAudio ? true : false);
+    formData.append('video_id', viaVideoId); // VIA 서버의 video_id 전달
 
     // 경과 시간 추적기 설정
     const intervalId = setInterval(() => {
@@ -1513,14 +1711,73 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
       }
       const data = await res.json();
       const serverVideoId = data.video_id;
+      const summaryText = data.summary || '';
       summarizedVideoMap.value[videoObj.id] = serverVideoId;
       summarizedVideoId.value = serverVideoId;
-      const markedsummary = marked.parse(data.summary || '');
+      const markedsummary = marked.parse(summaryText);
       const summaryHtml = `<div class='font-semibold'>✅ [${idx + 1}/${totalCount}] '${videoObj.name}' 요약 완료</div><br>${markedsummary}<br><div class='text-xs text-gray-500'>시간: ${elapsed}s | 서버 ID: ${serverVideoId}</div>`;
       response.value = summaryHtml;
       const loadingIdx = chatMessages.value.findIndex(m => m.id === loadingId);
       if (loadingIdx !== -1) chatMessages.value.splice(loadingIdx, 1);
       addChatMessage({ id: Date.now() + Math.random(), role: 'assistant', content: summaryHtml });
+      
+      // DB에 요약 결과 저장
+      const userId = localStorage.getItem("vss_user_id");
+      if (userId) {
+        try {
+          // video_id 찾기: dbId가 있으면 사용, 없으면 파일명으로 DB에서 찾기
+          let dbVideoId = videoObj.dbId;
+          
+          if (!dbVideoId) {
+            // 파일명으로 DB에서 video_id 찾기
+            try {
+              const videosResponse = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+              if (videosResponse.ok) {
+                const videosData = await videosResponse.json();
+                if (videosData.success && videosData.videos) {
+                  const video = videosData.videos.find(v => v.title === videoObj.name);
+                  if (video) {
+                    dbVideoId = video.id;
+                    // videoObj에 dbId 저장 (다음 요약 시 재사용)
+                    videoObj.dbId = dbVideoId;
+                  }
+                }
+              }
+            } catch (error) {
+              console.warn('동영상 목록 조회 실패:', error);
+            }
+          }
+          
+          if (dbVideoId) {
+            const saveResponse = await fetch('http://localhost:8001/save-summary', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                video_id: dbVideoId,
+                user_id: userId,
+                summary_text: summaryText,
+                via_video_id: serverVideoId  // VIA 서버의 video_id 저장
+              })
+            });
+            
+            if (saveResponse.ok) {
+              const saveData = await saveResponse.json();
+              console.log(`요약 결과 저장 완료: 동영상 ID ${dbVideoId}`, saveData);
+            } else {
+              const errorData = await saveResponse.json().catch(() => ({ detail: '알 수 없는 오류' }));
+              console.warn('요약 결과 저장 실패:', errorData);
+            }
+          } else {
+            console.warn(`요약 결과 저장 실패: 동영상 ID를 찾을 수 없습니다. (파일명: ${videoObj.name})`);
+          }
+        } catch (error) {
+          console.warn('요약 결과 저장 중 오류:', error);
+        }
+      } else {
+        console.warn('요약 결과 저장 실패: 사용자 ID가 없습니다.');
+      }
     } catch (e) {
       clearInterval(intervalId);
       delete activeIntervals.value[loadingId];
@@ -1858,8 +2115,9 @@ function clear() {
   summarizedVideoId.value = null;
   summarizedVideoMap.value = {};
   scrollChatToBottom();
-  // localStorage도 초기화
-  localStorage.removeItem(STORAGE_KEY);
+  // localStorage도 초기화 (사용자별 키 사용)
+  const storageKey = getStorageKey();
+  localStorage.removeItem(storageKey);
   console.log('초기화 완료: localStorage도 삭제되었습니다.');
 }
 

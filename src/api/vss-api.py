@@ -470,7 +470,9 @@ async def remove_media_endpoint(request: RemoveMediaRequest):
 async def generate_clips(
     request: Request,
     files: List[UploadFile] = File(None),
-    prompt: str = Form(...)
+    prompt: str = Form(...),
+    user_id: Optional[str] = Form(None),
+    video_ids: Optional[str] = Form(None)  # JSON 문자열로 전달: {"filename1": video_id1, "filename2": video_id2}
 ):
     os.makedirs("./clips", exist_ok=True)  # 클립 저장 디렉토리 생성
     # /clips 폴더 초기화 (기존 파일 삭제) - 요청 전체에서 단 한 번만 실행
@@ -501,6 +503,14 @@ async def generate_clips(
     os.makedirs("./tmp", exist_ok=True)
 
     try:
+        # video_ids 파싱 (JSON 문자열)
+        video_id_map = {}
+        if video_ids and user_id:
+            try:
+                video_id_map = json.loads(video_ids) if isinstance(video_ids, str) else video_ids
+            except:
+                video_id_map = {}
+        
         for upfile in upload_list:
             file_path = os.path.basename(upfile.filename)
             tmp_path = f"./tmp/{file_path}"
@@ -545,42 +555,64 @@ async def generate_clips(
 
             num_frames_per_chunk = chunk_duration // 4
 
-            result = await vss_client.summarize_video(
-                video_id,
-                "Analyze the entire video and identify all notable events, actions, and situations. Provide clear, objective descriptions with precise timestamps, explaining what occurs, who is involved, and any significant changes or interactions. Summarize the sequence of events in a structured, time-ordered manner.",
-                "You will be given captions from sequential clips of a video. Aggregate captions in the format start_time:end_time:caption based on whether captions are related to one another or create a continuous scene.",
-                "Based on the available information, generate a summary that captures the important events in the video. The summary should be organized chronologically and in logical sections. This should be a concise, yet descriptive summary of all the important events. The format should be intuitive and easy for a user to read and understand what happened. Format the output in Markdown so it can be displayed nicely. Timestamps are in seconds so please format them as SS.SSS",
-                chunk_duration,
-                model,
-                num_frames_per_chunk,
-                0,
-                0,
-                80,
-                1.0,
-                0.4,
-                512,
-                1,
-                6,
-                1,
-                5,
-                0.7,
-                0.2,
-                2048,
-                0.7,
-                0.2,
-                2048,
-                0.7,
-                0.2,
-                2048,
-                True  # enable_audio
-            )
+            # DB에서 요약 결과 확인 (user_id와 video_id가 있는 경우)
+            has_stored_summary = False
+            db_video_id = None
+            if user_id and video_id_map:
+                # 파일명으로 video_id 찾기
+                db_video_id = video_id_map.get(file_path) or video_id_map.get(upfile.filename)
+                if db_video_id:
+                    try:
+                        cursor.execute(
+                            """SELECT ID FROM vss_summaries 
+                               WHERE VIDEO_ID = ? AND USER_ID = ?""",
+                            (db_video_id, user_id)
+                        )
+                        if cursor.fetchone():
+                            has_stored_summary = True
+                            print(f"저장된 요약 결과 발견: 동영상 ID {db_video_id}, summarize_video 건너뛰기")
+                    except Exception as e:
+                        print(f"요약 결과 확인 중 오류: {e}")
 
-            print(result)
+            # 저장된 요약이 있으면 summarize_video 건너뛰기
+            if not has_stored_summary:
+                result = await vss_client.summarize_video(
+                    video_id,
+                    "Analyze the entire video and identify all notable events, actions, and situations. Provide clear, objective descriptions with precise timestamps, explaining what occurs, who is involved, and any significant changes or interactions. Summarize the sequence of events in a structured, time-ordered manner.",
+                    "You will be given captions from sequential clips of a video. Aggregate captions in the format start_time:end_time:caption based on whether captions are related to one another or create a continuous scene.",
+                    "Based on the available information, generate a summary that captures the important events in the video. The summary should be organized chronologically and in logical sections. This should be a concise, yet descriptive summary of all the important events. The format should be intuitive and easy for a user to read and understand what happened. Format the output in Markdown so it can be displayed nicely. Timestamps are in seconds so please format them as SS.SSS",
+                    chunk_duration,
+                    model,
+                    num_frames_per_chunk,
+                    0,
+                    0,
+                    80,
+                    1.0,
+                    0.4,
+                    512,
+                    1,
+                    6,
+                    1,
+                    5,
+                    0.7,
+                    0.2,
+                    2048,
+                    0.7,
+                    0.2,
+                    2048,
+                    0.7,
+                    0.2,
+                    2048,
+                    True  # enable_audio
+                )
+                print(result)
+            else:
+                print(f"저장된 요약 결과가 있어 summarize_video를 건너뜁니다. 바로 query_video로 진행합니다.")
             
             # prompt를 질문으로 처리: VIA 서버의 query_video 사용
             # 동영상 컨텍스트를 직접 활용하여 질문에 답변
             try:
-                logger.info(f"VIA 서버의 query_video를 사용하여 질문 처리: {prompt}")
+                print(f"VIA 서버의 query_video를 사용하여 질문 처리: {prompt}")
                 
                 # query_video 파라미터 설정
                 query_chunk_size = chunk_duration  # 요약에 사용한 chunk_duration과 동일하게
@@ -608,7 +640,7 @@ async def generate_clips(
                 # query_result를 Ollama LLM에 보내서 타임스탬프만 추출
                 extracted_timestamps_text = None
                 try:
-                    logger.info(f"Ollama를 사용하여 타임스탬프 추출: {OLLAMA_MODEL} (서버: {OLLAMA_BASE_URL})")
+                    print(f"Ollama를 사용하여 타임스탬프 추출: {OLLAMA_MODEL} (서버: {OLLAMA_BASE_URL})")
                     
                     # Ollama API 호출을 위한 프롬프트 구성
                     timestamp_extraction_prompt = f"""다음은 동영상 질의 응답 결과입니다:
@@ -669,14 +701,14 @@ async def generate_clips(
                 timestamp_ranges = []
                 if extracted_timestamps_text:
                     timestamp_ranges = parse_timestamps(extracted_timestamps_text, duration)
-                    logger.info(f"검색어 '{prompt}'에 대한 타임스탬프 구간: {timestamp_ranges}")
+                    print(f"검색어 '{prompt}'에 대한 타임스탬프 구간: {timestamp_ranges}")
                 
                 # 타임스탬프 기반 클립 생성
                 base_name, _ = os.path.splitext(file_path)
                 
                 if timestamp_ranges:
                     # 타임스탬프가 있으면 해당 구간의 클립 생성
-                    logger.info(f"검색어 기반 클립 생성: {len(timestamp_ranges)}개 구간")
+                    print(f"검색어 기반 클립 생성: {len(timestamp_ranges)}개 구간")
                     for clip_index, (start_time, end_time) in enumerate(timestamp_ranges):
                         clip_filename = f"clip_{base_name}_{clip_index+1}.mp4"
                         clip_path = os.path.join("./clips", clip_filename)
@@ -688,7 +720,7 @@ async def generate_clips(
                                 audio=False,
                                 verbose=False
                             )
-                            logger.info(f"검색어 기반 클립 저장: {clip_path} (구간: {start_time:.2f}s - {end_time:.2f}s)")
+                            print(f"검색어 기반 클립 저장: {clip_path} (구간: {start_time:.2f}s - {end_time:.2f}s)")
                             base = str(request.base_url).rstrip('/')
                             clip_url = f"{base}/clips/{clip_filename}"
                             video_clips.append({
@@ -700,11 +732,11 @@ async def generate_clips(
                                 "search_query": prompt
                             })
                         except Exception as e:
-                            logger.error(f"Error generating clip {clip_filename}: {e}")
+                            print(f"Error generating clip {clip_filename}: {e}")
                         time.sleep(0.5)
                 else:
                     # 타임스탬프가 없으면 랜덤 클립 생성 (폴백)
-                    logger.warning(f"타임스탬프를 찾을 수 없어 랜덤 클립을 생성합니다. 검색어: '{prompt}'")
+                    print(f"타임스탬프를 찾을 수 없어 랜덤 클립을 생성합니다. 검색어: '{prompt}'")
                     num_clips = random.randint(1, 3)
                     for clip_index in range(num_clips):
                         start_time = random.uniform(0, max(0, duration - 15))
@@ -813,6 +845,7 @@ async def vss_summarize(
     alert_temperature: float = Form(...),
     alert_max_tokens: int = Form(...),
     enable_audio: bool = Form(...),
+    video_id: Optional[str] = Form(None),  # VIA 서버의 video_id (이미 업로드된 경우)
 ):
     global vss_client
     if vss_client is None:
@@ -835,13 +868,13 @@ async def vss_summarize(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to contact VIA server: {e}")
 
-    os.makedirs("./tmp", exist_ok=True)
-    file_path = f"./tmp/{file.filename}"
-    # 업로드용 임시 파일 실제 저장 (기존 누락으로 인해 FileNotFoundError / 빈 처리 발생 가능)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    video_id = await vss_client.upload_video(file_path)
+    # video_id가 제공되지 않은 경우에만 업로드 (하지만 사용자 요청에 따라 업로드하지 않음)
+    if not video_id:
+        # video_id가 없으면 에러 반환 (업로드를 하지 않도록 수정)
+        raise HTTPException(status_code=400, detail="video_id가 필요합니다. 이미 업로드된 동영상의 video_id를 제공해주세요.")
+    
+    # video_id가 제공된 경우, 업로드 없이 바로 사용
+    # upload_video 호출 제거됨
 
     #print(video_id)
     #print(prompt)
@@ -969,6 +1002,10 @@ cursor = conn.cursor()
 # 구조: {email: {"code": "123456", "expires_at": datetime, "verified": False}}
 email_verification_codes = {}
 
+# 비밀번호 재설정용 인증 코드 저장소
+# 구조: {email: {"code": "123456", "expires_at": datetime, "verified": False, "username": "user_id"}}
+reset_password_codes = {}
+
 # 이메일 설정 (환경 변수에서 가져오거나 기본값 사용)
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
@@ -989,14 +1026,15 @@ def generate_verification_code():
     """6자리 인증 코드 생성"""
     return str(random.randint(100000, 999999))
 
-def send_verification_email(to_email: str, code: str):
+def send_verification_email(to_email: str, code: str, is_reset_password: bool = False):
     """인증 코드를 이메일로 전송"""
     try:
         # 이메일 메시지 생성
         msg = MIMEMultipart()
         msg['From'] = SMTP_FROM_EMAIL
         msg['To'] = to_email
-        msg['Subject'] = "VSS 회원가입 이메일 인증"
+        purpose_text = "비밀번호 재설정" if is_reset_password else "회원가입"
+        msg['Subject'] = f"VSS {purpose_text} 이메일 인증"
         
         # 이메일 본문 (HTML 형식으로 개선)
         html_body = f"""
@@ -1017,11 +1055,11 @@ def send_verification_email(to_email: str, code: str):
 <body>
     <div class="container">
         <div class="header">
-            <h1>VSS 회원가입 인증</h1>
+            <h1>VSS {purpose_text} 인증</h1>
         </div>
         <div class="content">
             <p>안녕하세요,</p>
-            <p>VSS 회원가입을 위한 이메일 인증 코드입니다.</p>
+            <p>VSS {purpose_text}을 위한 이메일 인증 코드입니다.</p>
             <div class="code-box">
                 <div class="code">{code}</div>
             </div>
@@ -1040,7 +1078,7 @@ def send_verification_email(to_email: str, code: str):
         text_body = f"""
 안녕하세요,
 
-VSS 회원가입을 위한 이메일 인증 코드입니다.
+VSS {purpose_text}을 위한 이메일 인증 코드입니다.
 
 인증 코드: {code}
 
@@ -1316,6 +1354,206 @@ def register(user: User):
         else:
             raise HTTPException(status_code=400, detail="이미 존재하는 사용자입니다.")
 
+# 비밀번호 재설정용 인증 코드 전송 요청 모델
+class SendResetPasswordCodeRequest(BaseModel):
+    username: str
+    email: str
+
+# 비밀번호 재설정용 인증 코드 검증 요청 모델
+class VerifyResetPasswordCodeRequest(BaseModel):
+    username: str
+    email: str
+    code: str
+
+# 비밀번호 재설정 요청 모델
+class ResetPasswordRequest(BaseModel):
+    username: str
+    email: str
+    verification_code: str
+    new_password: str
+
+def cleanup_expired_reset_codes():
+    """만료된 비밀번호 재설정 인증 코드 정리"""
+    current_time = datetime.now()
+    expired_emails = [
+        email for email, data in reset_password_codes.items()
+        if data["expires_at"] < current_time
+    ]
+    for email in expired_emails:
+        del reset_password_codes[email]
+
+@app.post("/send-reset-password-code")
+def send_reset_password_code(request: SendResetPasswordCodeRequest):
+    """비밀번호 재설정용 이메일 인증 코드 전송"""
+    try:
+        username = request.username.strip()
+        email = request.email.strip().lower()
+        
+        if not username or not email:
+            raise HTTPException(status_code=400, detail="ID와 이메일을 모두 입력해주세요.")
+        
+        # 이메일 형식 검증
+        email_regex = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
+        if not re.match(email_regex, email):
+            raise HTTPException(status_code=400, detail="올바른 이메일 형식이 아닙니다.")
+        
+        # 사용자 ID와 이메일 일치 확인
+        cursor.execute("SELECT ID, EMAIL FROM vss_user WHERE ID = ?", (username,))
+        user = cursor.fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        
+        db_email = user[1].strip().lower() if user[1] else ""
+        if db_email != email:
+            raise HTTPException(status_code=400, detail="등록된 이메일과 일치하지 않습니다.")
+        
+        # 만료된 코드 정리
+        cleanup_expired_reset_codes()
+        
+        # 인증 코드 생성 및 저장
+        code = generate_verification_code()
+        expires_at = datetime.now() + timedelta(minutes=10)  # 10분 유효
+        
+        reset_password_codes[email] = {
+            "code": code,
+            "expires_at": expires_at,
+            "verified": False,
+            "username": username
+        }
+        logger.info(f"비밀번호 재설정 인증 코드 생성 완료: {email} (코드: {code})")
+        
+        # 이메일 전송
+        if send_verification_email(email, code, is_reset_password=True):
+            logger.info(f"비밀번호 재설정 인증 코드 이메일 전송 성공: {email}")
+            return {"success": True, "message": "인증 코드가 이메일로 전송되었습니다."}
+        else:
+            logger.error(f"이메일 전송 실패: {email}")
+            raise HTTPException(status_code=500, detail="이메일 전송에 실패했습니다. SMTP 설정을 확인하거나 다시 시도해주세요.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"비밀번호 재설정 인증 코드 전송 중 예상치 못한 오류: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"서버 오류가 발생했습니다: {str(e)}")
+
+@app.post("/verify-reset-password-code")
+def verify_reset_password_code(request: VerifyResetPasswordCodeRequest):
+    """비밀번호 재설정용 이메일 인증 코드 검증"""
+    username = request.username.strip()
+    email = request.email.strip().lower()
+    code = request.code.strip()
+    
+    # 만료된 코드 정리
+    cleanup_expired_reset_codes()
+    
+    # 인증 코드 확인
+    if email not in reset_password_codes:
+        raise HTTPException(status_code=400, detail="인증 코드가 만료되었거나 존재하지 않습니다. 다시 요청해주세요.")
+    
+    verification_data = reset_password_codes[email]
+    
+    # 사용자 ID 일치 확인
+    if verification_data["username"] != username:
+        raise HTTPException(status_code=400, detail="사용자 ID가 일치하지 않습니다.")
+    
+    # 만료 확인
+    if verification_data["expires_at"] < datetime.now():
+        del reset_password_codes[email]
+        raise HTTPException(status_code=400, detail="인증 코드가 만료되었습니다. 다시 요청해주세요.")
+    
+    # 코드 일치 확인
+    if verification_data["code"] != code:
+        raise HTTPException(status_code=400, detail="인증 코드가 일치하지 않습니다.")
+    
+    # 인증 성공 표시
+    verification_data["verified"] = True
+    logger.info(f"비밀번호 재설정 이메일 인증 성공: {email}")
+    return {"success": True, "message": "이메일 인증이 완료되었습니다."}
+
+@app.post("/reset-password")
+def reset_password(request: ResetPasswordRequest):
+    """비밀번호 재설정"""
+    username = request.username.strip()
+    email = request.email.strip().lower()
+    code = request.verification_code.strip()
+    new_password = request.new_password
+    
+    # 비밀번호 길이 검증
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="비밀번호는 8자 이상이어야 합니다.")
+    
+    # 이메일 인증 확인
+    cleanup_expired_reset_codes()
+    if email not in reset_password_codes:
+        raise HTTPException(status_code=400, detail="이메일 인증이 필요합니다. 인증 코드를 먼저 요청해주세요.")
+    
+    verification_data = reset_password_codes[email]
+    
+    # 인증 코드 검증 확인
+    if not verification_data["verified"]:
+        raise HTTPException(status_code=400, detail="이메일 인증이 완료되지 않았습니다. 인증 코드를 먼저 검증해주세요.")
+    
+    # 인증 코드 만료 확인
+    if verification_data["expires_at"] < datetime.now():
+        del reset_password_codes[email]
+        raise HTTPException(status_code=400, detail="인증 코드가 만료되었습니다. 다시 요청해주세요.")
+    
+    # 최종 인증 코드 확인 (추가 보안)
+    if verification_data["code"] != code:
+        raise HTTPException(status_code=400, detail="인증 코드가 일치하지 않습니다.")
+    
+    # 사용자 ID 일치 확인
+    if verification_data["username"] != username:
+        raise HTTPException(status_code=400, detail="사용자 ID가 일치하지 않습니다.")
+    
+    try:
+        # 기존 비밀번호 조회
+        cursor.execute("SELECT PW FROM vss_user WHERE ID = ? AND EMAIL = ?", (username, email))
+        user_row = cursor.fetchone()
+        if not user_row:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없거나 이메일이 일치하지 않습니다.")
+        
+        db_pw = user_row[0]
+        
+        # 기존 비밀번호와 새 비밀번호 비교
+        password_match = False
+        try:
+            # bcrypt 해시로 저장된 경우
+            if bcrypt.checkpw(new_password.encode('utf-8'), db_pw.encode('utf-8')):
+                password_match = True
+        except (ValueError, AttributeError):
+            # bcrypt 해시가 아닌 경우 (기존 평문 비밀번호 호환성 유지)
+            if db_pw == new_password:
+                password_match = True
+        
+        if password_match:
+            raise HTTPException(status_code=400, detail="새 비밀번호는 기존 비밀번호와 동일할 수 없습니다.")
+        
+        # 비밀번호를 bcrypt로 해시화
+        hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+        hashed_password_str = hashed_password.decode('utf-8')
+        
+        # 비밀번호 업데이트
+        cursor.execute(
+            "UPDATE vss_user SET PW = ? WHERE ID = ? AND EMAIL = ?",
+            (hashed_password_str, username, email)
+        )
+        
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없거나 이메일이 일치하지 않습니다.")
+        
+        conn.commit()
+        
+        # 비밀번호 재설정 성공 후 인증 코드 삭제
+        del reset_password_codes[email]
+        
+        logger.info(f"비밀번호 재설정 성공: {username} ({email})")
+        return {"success": True, "message": "비밀번호가 성공적으로 재설정되었습니다."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"비밀번호 재설정 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"비밀번호 재설정 중 오류가 발생했습니다: {str(e)}")
+
 # 동영상 메타데이터 추출 함수 (백그라운드 작업)
 def extract_video_metadata(file_path: str, video_id: int, filename: str):
     """동영상 메타데이터를 추출하여 DB에 업데이트"""
@@ -1340,7 +1578,7 @@ def extract_video_metadata(file_path: str, video_id: int, filename: str):
 
 # 동영상 업로드 및 조회 API
 @app.post("/upload-video")
-async def upload_video(
+async def upload_video_to_db(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     user_id: str = Form(...)
@@ -1385,18 +1623,33 @@ async def upload_video(
         # 파일 URL 생성 (정적 파일 경로 사용)
         file_url = f"/video-files/{unique_filename}"
         
-        # DB에 먼저 저장 (메타데이터 없이 - 빠른 응답을 위해)
+        # VSS 클라이언트 초기화
+        global vss_client
+        if vss_client is None:
+            vss_client = VSS(VIA_SERVER_URL)
+            vss_client.model = await vss_client.get_model()
+        
+        # VIA 서버에 동영상 업로드하여 video_id 얻기
+        via_video_id = None
+        try:
+            via_video_id = await vss_client.upload_video(str(file_path))
+            logger.info(f"VIA 서버 업로드 성공: {file.filename} (VIA video_id: {via_video_id})")
+        except Exception as e:
+            logger.warning(f"VIA 서버 업로드 실패: {e} (로컬 저장은 계속 진행)")
+            # VIA 서버 업로드 실패해도 로컬 저장은 계속 진행
+        
+        # DB에 저장 (VIA video_id 포함)
         cursor.execute(
             """INSERT INTO vss_videos 
-               (USER_ID, FILE_NAME, FILE_PATH, FILE_SIZE, FILE_URL, WIDTH, HEIGHT, DURATION) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (user_id, file.filename, str(file_path), file_size, file_url, None, None, None)
+               (USER_ID, FILE_NAME, FILE_PATH, FILE_SIZE, FILE_URL, WIDTH, HEIGHT, DURATION, VIDEO_ID) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, file.filename, str(file_path), file_size, file_url, None, None, None, via_video_id)
         )
         conn.commit()
         
         video_id = cursor.lastrowid
         
-        logger.info(f"동영상 업로드 성공: {file.filename} (ID: {video_id}, URL: {file_url})")
+        logger.info(f"동영상 업로드 성공: {file.filename} (DB ID: {video_id}, VIA video_id: {via_video_id}, URL: {file_url})")
         
         # 메타데이터 추출을 백그라운드 작업으로 처리 (즉시 응답 반환 후 처리)
         background_tasks.add_task(extract_video_metadata, str(file_path), video_id, file.filename)
@@ -1424,7 +1677,7 @@ async def get_videos(user_id: str):
     """사용자의 동영상 목록 조회"""
     try:
         cursor.execute(
-            """SELECT ID, FILE_NAME, FILE_URL, FILE_SIZE, WIDTH, HEIGHT, DURATION, CREATED_AT 
+            """SELECT ID, FILE_NAME, FILE_URL, FILE_SIZE, WIDTH, HEIGHT, DURATION, CREATED_AT, VIDEO_ID 
                FROM vss_videos 
                WHERE USER_ID = ? 
                ORDER BY CREATED_AT DESC""",
@@ -1442,7 +1695,8 @@ async def get_videos(user_id: str):
                 "width": row[4],
                 "height": row[5],
                 "duration": row[6],
-                "date": row[7].strftime("%Y-%m-%d") if row[7] else None
+                "date": row[7].strftime("%Y-%m-%d") if row[7] else None,
+                "video_id": row[8]  # VIA 서버의 video_id
             })
         
         return {"success": True, "videos": videos}
@@ -1456,9 +1710,9 @@ async def delete_video(video_id: int, user_id: str = Query(...)):
     try:
         logger.info(f"동영상 삭제 요청: video_id={video_id}, user_id={user_id}")
         
-        # 동영상 소유권 확인
+        # 동영상 소유권 확인 및 파일 경로 조회
         cursor.execute(
-            "SELECT FILE_PATH FROM vss_videos WHERE ID = ? AND USER_ID = ?",
+            "SELECT FILE_PATH, FILE_URL FROM vss_videos WHERE ID = ? AND USER_ID = ?",
             (video_id, user_id)
         )
         row = cursor.fetchone()
@@ -1466,20 +1720,48 @@ async def delete_video(video_id: int, user_id: str = Query(...)):
             logger.warning(f"동영상을 찾을 수 없음: video_id={video_id}, user_id={user_id}")
             raise HTTPException(status_code=404, detail="동영상을 찾을 수 없거나 권한이 없습니다.")
         
-        file_path = Path(row[0])
+        db_file_path = row[0]  # DB에 저장된 FILE_PATH
+        file_url = row[1]  # FILE_URL (예: /video-files/filename_timestamp.ext)
         
-        # DB에서 삭제
+        # DB에서 삭제 (CASCADE로 요약도 자동 삭제됨)
         cursor.execute("DELETE FROM vss_videos WHERE ID = ? AND USER_ID = ?", (video_id, user_id))
         conn.commit()
         logger.info(f"DB에서 동영상 삭제 완료: video_id={video_id}")
         
-        # 파일 삭제
-        if file_path.exists():
+        # videos 폴더에서 파일 삭제
+        file_path = None
+        
+        # 방법 1: FILE_PATH 사용 (절대 경로 또는 상대 경로)
+        if db_file_path:
+            file_path = Path(db_file_path)
+            # 상대 경로인 경우 videos_dir 기준으로 절대 경로 생성
+            if not file_path.is_absolute():
+                # 파일명만 추출하여 videos_dir에 있는 파일 찾기
+                filename = file_path.name if file_path.name else Path(db_file_path).name
+                file_path = videos_dir.resolve() / filename
+            else:
+                # 절대 경로인 경우 그대로 사용
+                file_path = file_path.resolve()
+        
+        # 방법 2: FILE_PATH가 없거나 파일이 없으면 FILE_URL에서 파일명 추출
+        if not file_path or not file_path.exists():
+            if file_url:
+                # FILE_URL에서 파일명 추출 (예: /video-files/filename.ext -> filename.ext)
+                filename = file_url.replace("/video-files/", "").lstrip("/")
+                if filename:
+                    file_path = videos_dir.resolve() / filename
+        
+        # 파일 삭제 시도
+        if file_path and file_path.exists():
             try:
                 file_path.unlink()
-                logger.info(f"동영상 파일 삭제: {file_path}")
+                logger.info(f"동영상 파일 삭제 성공: {file_path}")
             except Exception as e:
-                logger.warning(f"동영상 파일 삭제 실패: {e}")
+                logger.warning(f"동영상 파일 삭제 실패: {file_path}, 오류: {e}")
+        elif file_path:
+            logger.warning(f"동영상 파일이 존재하지 않음: {file_path}")
+        else:
+            logger.warning(f"동영상 파일 경로를 확인할 수 없음: FILE_PATH={db_file_path}, FILE_URL={file_url}")
         
         return {"success": True, "message": "동영상이 삭제되었습니다."}
     except HTTPException:
@@ -1487,6 +1769,155 @@ async def delete_video(video_id: int, user_id: str = Query(...)):
     except Exception as e:
         logger.error(f"동영상 삭제 실패: {e}")
         raise HTTPException(status_code=500, detail=f"동영상 삭제 중 오류가 발생했습니다: {str(e)}")
+
+# 요약 결과 저장 모델
+class SaveSummaryRequest(BaseModel):
+    video_id: int
+    user_id: str
+    summary_text: str
+    via_video_id: Optional[str] = None  # VIA 서버의 video_id
+
+@app.post("/save-summary")
+async def save_summary(request: SaveSummaryRequest):
+    """요약 결과를 DB에 저장"""
+    try:
+        video_id = request.video_id
+        user_id = request.user_id
+        summary_text = request.summary_text
+        
+        # 사용자 ID 검증
+        cursor.execute("SELECT ID FROM vss_user WHERE ID = ?", (user_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        
+        # 동영상 소유권 확인
+        cursor.execute(
+            "SELECT ID FROM vss_videos WHERE ID = ? AND USER_ID = ?",
+            (video_id, user_id)
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="동영상을 찾을 수 없거나 권한이 없습니다.")
+        
+        # 요약 결과 저장 또는 업데이트 (UNIQUE KEY로 중복 방지)
+        # vss_summaries 테이블 구조:
+        # - VIDEO_ID (INT): 외래키, vss_videos.ID 참조
+        # - USER_ID (VARCHAR): 사용자 ID
+        # - SUMMARY_TEXT (LONGTEXT): 요약 텍스트
+        # - CREATED_AT (TIMESTAMP): 자동 설정
+        # - UPDATED_AT (TIMESTAMP): 자동 설정
+        cursor.execute(
+            """INSERT INTO vss_summaries (VIDEO_ID, USER_ID, SUMMARY_TEXT) 
+               VALUES (?, ?, ?)
+               ON DUPLICATE KEY UPDATE 
+               SUMMARY_TEXT = VALUES(SUMMARY_TEXT),
+               UPDATED_AT = CURRENT_TIMESTAMP""",
+            (video_id, user_id, summary_text)
+        )
+        conn.commit()
+        
+        summary_id = cursor.lastrowid if cursor.rowcount == 1 else None
+        if summary_id is None:
+            # UPDATE인 경우 ID 조회
+            cursor.execute(
+                "SELECT ID FROM vss_summaries WHERE VIDEO_ID = ? AND USER_ID = ?",
+                (video_id, user_id)
+            )
+            row = cursor.fetchone()
+            summary_id = row[0] if row else None
+        
+        logger.info(f"요약 결과 저장 성공: 동영상 ID {video_id} (사용자: {user_id})")
+        return {
+            "success": True,
+            "summary_id": summary_id,
+            "message": "요약 결과가 저장되었습니다."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"요약 결과 저장 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"요약 결과 저장 중 오류가 발생했습니다: {str(e)}")
+
+@app.get("/summaries/{video_id}")
+async def get_summary(video_id: int, user_id: str = Query(...)):
+    """특정 동영상의 요약 결과 조회"""
+    try:
+        # 사용자 ID 검증
+        cursor.execute("SELECT ID FROM vss_user WHERE ID = ?", (user_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        
+        # 요약 결과 조회 (소유권 확인 포함)
+        cursor.execute(
+            """SELECT s.ID, s.SUMMARY_TEXT, s.CREATED_AT, s.UPDATED_AT
+               FROM vss_summaries s
+               INNER JOIN vss_videos v ON s.VIDEO_ID = v.ID
+               WHERE s.VIDEO_ID = ? AND s.USER_ID = ? AND v.USER_ID = ?""",
+            (video_id, user_id, user_id)
+        )
+        row = cursor.fetchone()
+        
+        if not row:
+            return {
+                "success": False,
+                "message": "요약 결과를 찾을 수 없습니다."
+            }
+        
+        return {
+            "success": True,
+            "summary": {
+                "id": row[0],
+                "summary_text": row[1],
+                "created_at": row[2].isoformat() if row[2] else None,
+                "updated_at": row[3].isoformat() if row[3] else None
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"요약 결과 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"요약 결과 조회 중 오류가 발생했습니다: {str(e)}")
+
+@app.get("/summaries")
+async def get_user_summaries(user_id: str = Query(...)):
+    """사용자의 모든 요약 결과 조회"""
+    try:
+        # 사용자 ID 검증
+        cursor.execute("SELECT ID FROM vss_user WHERE ID = ?", (user_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        
+        # 사용자의 모든 요약 결과 조회
+        cursor.execute(
+            """SELECT s.ID, s.VIDEO_ID, s.SUMMARY_TEXT, s.CREATED_AT, s.UPDATED_AT, v.FILE_NAME
+               FROM vss_summaries s
+               INNER JOIN vss_videos v ON s.VIDEO_ID = v.ID
+               WHERE s.USER_ID = ? AND v.USER_ID = ?
+               ORDER BY s.CREATED_AT DESC""",
+            (user_id, user_id)
+        )
+        rows = cursor.fetchall()
+        
+        summaries = []
+        for row in rows:
+            summaries.append({
+                "id": row[0],
+                "video_id": row[1],
+                "summary_text": row[2],
+                "created_at": row[3].isoformat() if row[3] else None,
+                "updated_at": row[4].isoformat() if row[4] else None,
+                "video_name": row[5]
+            })
+        
+        return {
+            "success": True,
+            "summaries": summaries,
+            "count": len(summaries)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"요약 결과 목록 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"요약 결과 목록 조회 중 오류가 발생했습니다: {str(e)}")
 
 # CORS 설정 (Vue와 통신 가능하게)
 app.add_middleware(

@@ -24,8 +24,8 @@ import './assets/tailwind.css';
 
 const route = useRoute();
 
-// 로그인/회원가입 페이지인지 확인
+// 로그인/회원가입/비밀번호 재설정 페이지인지 확인
 const isAuthPage = computed(() => {
-  return route.path === '/login' || route.path === '/register';
+  return route.path === '/login' || route.path === '/register' || route.path === '/reset-password';
 });
 </script>

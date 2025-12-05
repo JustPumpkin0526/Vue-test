@@ -1297,11 +1297,30 @@ async function handleSearch() {
       return;
     }
 
+    const userId = localStorage.getItem("vss_user_id");
+    
+    // 파일명과 video_id 매핑 생성
+    const videoIdMap = {};
+    fileEntries.forEach(({ file, video }) => {
+      const dbId = video.dbId || video.id;
+      if (dbId) {
+        videoIdMap[file.name] = dbId;
+      }
+    });
+
     const formData = new FormData();
     fileEntries.forEach(({ file }) => {
       formData.append('files', file, file.name);
       formData.append('prompt', query);
     });
+    
+    // user_id와 video_ids 전달 (요약 결과 확인용)
+    if (userId) {
+      formData.append('user_id', userId);
+    }
+    if (Object.keys(videoIdMap).length > 0) {
+      formData.append('video_ids', JSON.stringify(videoIdMap));
+    }
 
     const response = await fetch('http://localhost:8001/generate-clips', {
       method: 'POST',
