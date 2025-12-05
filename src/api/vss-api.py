@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, Form, UploadFile, Body, HTTPException, Request
+from fastapi import FastAPI, File, Form, UploadFile, Body, HTTPException, Request, BackgroundTasks, Query
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -15,6 +15,11 @@ import time
 import os
 import re
 from pathlib import Path
+import bcrypt
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime, timedelta
 
 # .env 파일 지원 (python-dotenv가 설치되어 있는 경우)
 try:
@@ -37,6 +42,11 @@ app = FastAPI()
 # Serve generated clips as static files under /clips
 os.makedirs("./clips", exist_ok=True)
 app.mount("/clips", StaticFiles(directory="clips"), name="clips")
+
+# Serve uploaded videos as static files under /video-files (API 엔드포인트와 충돌 방지)
+videos_dir = Path("./videos")
+videos_dir.mkdir(exist_ok=True)
+app.mount("/video-files", StaticFiles(directory=str(videos_dir.resolve())), name="video-files")
 
 # Serve sample videos as static files under /sample
 # 절대 경로를 사용하여 현재 스크립트 위치 기준으로 sample 폴더 찾기
@@ -281,22 +291,20 @@ def parse_timestamps(timestamp_text, video_duration):
     - 범위: 10.5-15.3, 1:30-2:45, 10.5~15.3
     - 여러 타임스탬프: "10.5, 20.3, 30.1" 또는 "1:30, 2:45"
     
+    타임스탬프는 짝으로 처리되며, 첫 번째 타임스탬프가 시작 시간, 두 번째 타임스탬프가 끝 시간이 됩니다.
+    타임스탬프가 명시적으로 주어진 경우 실제 범위를 그대로 사용합니다.
+    
     Args:
         timestamp_text (str): 타임스탬프가 포함된 텍스트
         video_duration (float): 동영상 전체 길이 (초)
     
     Returns:
-        List[tuple]: [(start_time, end_time), ...] 리스트. 각 구간은 최대 15초 길이.
+        List[tuple]: [(start_time, end_time), ...] 리스트. 타임스탬프가 명시된 경우 실제 범위를 사용.
     """
     if not timestamp_text or not isinstance(timestamp_text, str):
         return []
     
     timestamps = []
-    
-    # 숫자 패턴 (초 단위 또는 분:초 형식)
-    # 초 단위: 10.5, 120.3 등
-    # 분:초 형식: 1:30, 2:45 등
-    # 범위: 10.5-15.3, 1:30-2:45, 10.5~15.3 등
     
     # 분:초 형식을 초로 변환하는 함수
     def parse_time_to_seconds(time_str):
@@ -322,6 +330,7 @@ def parse_timestamps(timestamp_text, video_duration):
     
     # 1. 범위 패턴 찾기 (예: 10.5-15.3, 1:30-2:45)
     range_pattern = r'(\d+(?:\.\d+)?(?::\d+(?:\.\d+)?)?)\s*[-~]\s*(\d+(?:\.\d+)?(?::\d+(?:\.\d+)?)?)'
+    range_timestamps = []
     for match in re.finditer(range_pattern, timestamp_text):
         start_str = match.group(1)
         end_str = match.group(2)
@@ -330,10 +339,8 @@ def parse_timestamps(timestamp_text, video_duration):
         if start_time is not None and end_time is not None:
             start_time = max(0, min(start_time, video_duration))
             end_time = max(start_time, min(end_time, video_duration))
-            # 최대 15초 길이로 제한
-            if end_time - start_time > 15:
-                end_time = start_time + 15
-            timestamps.append((start_time, end_time))
+            # 범위 패턴으로 명시된 경우 실제 범위를 그대로 사용 (15초 제한 없음)
+            range_timestamps.append((start_time, end_time))
     
     # 2. 단일 타임스탬프 찾기 (범위에 포함되지 않은 것들)
     # 이미 범위로 처리된 부분을 제외하고 나머지에서 찾기
@@ -341,16 +348,24 @@ def parse_timestamps(timestamp_text, video_duration):
     
     # 숫자 패턴 찾기 (초 단위 또는 분:초)
     number_pattern = r'\d+(?:\.\d+)?(?::\d+(?:\.\d+)?)?'
+    single_timestamps = []
     for match in re.finditer(number_pattern, processed_text):
         time_str = match.group(0)
         time_seconds = parse_time_to_seconds(time_str)
         if time_seconds is not None:
-            start_time = max(0, min(time_seconds, video_duration))
-            # 단일 타임스탬프는 ±5초 범위로 클립 생성 (최대 15초)
-            end_time = min(start_time + 10, video_duration)  # 시작점부터 10초
-            if end_time - start_time > 15:
-                end_time = start_time + 15
-            timestamps.append((start_time, end_time))
+            time_seconds = max(0, min(time_seconds, video_duration))
+            single_timestamps.append(time_seconds)
+    
+    # 범위 패턴으로 찾은 타임스탬프는 그대로 사용
+    timestamps.extend(range_timestamps)
+    
+    # 단일 타임스탬프는 짝으로 묶어서 처리
+    # 첫 번째 타임스탬프가 시작 시간, 두 번째 타임스탬프가 끝 시간
+    for i in range(0, len(single_timestamps) - 1, 2):
+        start_time = single_timestamps[i]
+        end_time = single_timestamps[i + 1]
+        # 타임스탬프가 짝으로 명시된 경우 실제 범위를 그대로 사용 (15초 제한 없음)
+        timestamps.append((start_time, end_time))
     
     # 중복 제거 및 정렬
     timestamps = sorted(set(timestamps), key=lambda x: x[0])
@@ -359,10 +374,11 @@ def parse_timestamps(timestamp_text, video_duration):
     merged = []
     for start, end in timestamps:
         if merged and start - merged[-1][1] < 5:
-            # 이전 구간과 가까우면 병합
-            merged[-1] = (merged[-1][0], min(end, merged[-1][0] + 15))
+            # 이전 구간과 가까우면 병합 (실제 범위 유지)
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
         else:
-            merged.append((start, min(end, start + 15)))
+            # 실제 범위를 그대로 사용
+            merged.append((start, end))
     
     logger.info(f"파싱된 타임스탬프: {merged}")
     return merged
@@ -531,7 +547,7 @@ async def generate_clips(
 
             result = await vss_client.summarize_video(
                 video_id,
-                "You are a crime detection system. Analyze the scene and describe all events that may indicate criminal activity, such as assault, theft, vandalism, or suspicious behavior. Start each sentence with the start and end timestamps of the event, and highlight any anomalies or potential threats.",
+                "Analyze the entire video and identify all notable events, actions, and situations. Provide clear, objective descriptions with precise timestamps, explaining what occurs, who is involved, and any significant changes or interactions. Summarize the sequence of events in a structured, time-ordered manner.",
                 "You will be given captions from sequential clips of a video. Aggregate captions in the format start_time:end_time:caption based on whether captions are related to one another or create a continuous scene.",
                 "Based on the available information, generate a summary that captures the important events in the video. The summary should be organized chronologically and in logical sections. This should be a concise, yet descriptive summary of all the important events. The format should be intuitive and easy for a user to read and understand what happened. Format the output in Markdown so it can be displayed nicely. Timestamps are in seconds so please format them as SS.SSS",
                 chunk_duration,
@@ -574,7 +590,7 @@ async def generate_clips(
                 query_top_p = 0.9
                 query_top_k = 50
 
-                prompt += " 장면의 시작 타임스탬프와 종료 타임스탬프를 추출하여 출력해주세요."
+                prompt += " 장면의 시작 타임스탬프와 종료 타임스탬프를 추출하여 출력해주세요. 타임스탬프 형식은 초 단위(예: 10.5, 120.3) 또는 분:초 형식(예: 1:30, 2:45)일 수 있습니다. 타임스탬프만 출력하고 다른 설명은 포함하지 마세요."
                 
                 # VIA 서버로 질문 전달
                 query_result = await vss_client.query_video(
@@ -633,8 +649,9 @@ async def generate_clips(
                             if extracted_timestamps_text:
                                 extracted_timestamps_text = extracted_timestamps_text.strip()
                                 print(f"Ollama로 타임스탬프 추출 성공: {len(extracted_timestamps_text)} 문자")
+                                #list_text = extracted_timestamps_text.split("")
                                 print(f"추출된 타임스탬프: {extracted_timestamps_text}")
-                                logger.info(f"타임스탬프 추출 완료: {extracted_timestamps_text}")
+                                #print(f"추출된 타임스탬프: {list_text}")
                             else:
                                 print("Ollama 응답에 content가 없습니다.")
                         else:
@@ -646,10 +663,10 @@ async def generate_clips(
                 except Exception as e:
                     print(f"Ollama를 사용한 타임스탬프 추출 중 오류 발생: {e}")
                 
-                logger.info(f"VIA 서버 질문-답변 성공: {len(query_result)} 문자")
                 print(f"VIA 서버 답변: {query_result}")
                 
                 # 추출된 타임스탬프를 파싱하여 클립 생성에 사용
+                timestamp_ranges = []
                 if extracted_timestamps_text:
                     timestamp_ranges = parse_timestamps(extracted_timestamps_text, duration)
                     logger.info(f"검색어 '{prompt}'에 대한 타임스탬프 구간: {timestamp_ranges}")
@@ -931,6 +948,13 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
+# 동영상 업로드 응답 모델
+class VideoUploadResponse(BaseModel):
+    success: bool
+    video_id: int
+    file_url: str
+    message: str
+
 # DB 연결 설정
 conn = mariadb.connect(
     user="root",
@@ -941,6 +965,142 @@ conn = mariadb.connect(
 )
 cursor = conn.cursor()
 
+# 이메일 인증 코드 저장소 (실제 운영에서는 Redis 등 사용 권장)
+# 구조: {email: {"code": "123456", "expires_at": datetime, "verified": False}}
+email_verification_codes = {}
+
+# 이메일 설정 (환경 변수에서 가져오거나 기본값 사용)
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", SMTP_USER)
+
+# SMTP 설정 로드 확인 로깅
+if SMTP_USER and SMTP_PASSWORD:
+    logger.info(f"SMTP 설정 로드 완료: SERVER={SMTP_SERVER}, PORT={SMTP_PORT}, USER={SMTP_USER[:3]}***")
+else:
+    logger.warning("⚠️ SMTP 설정이 로드되지 않았습니다!")
+    logger.warning(f"   SMTP_USER: {'설정됨' if SMTP_USER else '비어있음'}")
+    logger.warning(f"   SMTP_PASSWORD: {'설정됨' if SMTP_PASSWORD else '비어있음'}")
+    logger.warning("   .env 파일을 확인하거나 setup_smtp.py를 실행하여 설정하세요.")
+
+def generate_verification_code():
+    """6자리 인증 코드 생성"""
+    return str(random.randint(100000, 999999))
+
+def send_verification_email(to_email: str, code: str):
+    """인증 코드를 이메일로 전송"""
+    try:
+        # 이메일 메시지 생성
+        msg = MIMEMultipart()
+        msg['From'] = SMTP_FROM_EMAIL
+        msg['To'] = to_email
+        msg['Subject'] = "VSS 회원가입 이메일 인증"
+        
+        # 이메일 본문 (HTML 형식으로 개선)
+        html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }}
+        .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }}
+        .code-box {{ background: white; border: 2px dashed #667eea; padding: 20px; text-align: center; margin: 20px 0; border-radius: 5px; }}
+        .code {{ font-size: 32px; font-weight: bold; color: #667eea; letter-spacing: 5px; }}
+        .footer {{ text-align: center; margin-top: 20px; color: #666; font-size: 12px; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>VSS 회원가입 인증</h1>
+        </div>
+        <div class="content">
+            <p>안녕하세요,</p>
+            <p>VSS 회원가입을 위한 이메일 인증 코드입니다.</p>
+            <div class="code-box">
+                <div class="code">{code}</div>
+            </div>
+            <p>이 코드는 <strong>10분간</strong> 유효합니다.</p>
+            <p style="color: #999; font-size: 12px;">본인이 요청한 것이 아니라면 이 이메일을 무시하세요.</p>
+        </div>
+        <div class="footer">
+            <p>감사합니다.<br>VSS Team</p>
+        </div>
+    </div>
+</body>
+</html>
+        """
+        
+        # 텍스트 버전도 포함 (HTML을 지원하지 않는 클라이언트용)
+        text_body = f"""
+안녕하세요,
+
+VSS 회원가입을 위한 이메일 인증 코드입니다.
+
+인증 코드: {code}
+
+이 코드는 10분간 유효합니다.
+본인이 요청한 것이 아니라면 이 이메일을 무시하세요.
+
+감사합니다.
+VSS Team
+        """
+        
+        # HTML과 텍스트 버전 모두 첨부
+        msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
+        msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+        
+        # SMTP 서버 연결 및 이메일 전송
+        if SMTP_USER and SMTP_PASSWORD:
+            # 포트 465는 SSL, 포트 587은 TLS 사용
+            if SMTP_PORT == 465:
+                # SSL 사용 (Naver, Daum 등)
+                server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
+                server.login(SMTP_USER, SMTP_PASSWORD)
+            else:
+                # TLS 사용 (Gmail, Outlook 등)
+                server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+                server.starttls()
+                server.login(SMTP_USER, SMTP_PASSWORD)
+            
+            text = msg.as_string()
+            server.sendmail(SMTP_FROM_EMAIL, to_email, text)
+            server.quit()
+            logger.info(f"인증 코드 이메일 전송 성공: {to_email}")
+            return True
+        else:
+            # SMTP 설정이 없으면 로그만 출력 (개발 환경)
+            logger.warning(f"SMTP 설정이 없어 이메일을 전송하지 않습니다.")
+            logger.warning(f"인증 코드: {code} (이메일: {to_email})")
+            logger.warning(f"실제 운영 환경에서는 .env 파일에 SMTP 설정을 추가하세요.")
+            return True  # 개발 환경에서는 항상 성공으로 처리
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error(f"SMTP 인증 실패: {e}")
+        logger.error(f"사용자명과 비밀번호를 확인하세요. Gmail의 경우 앱 비밀번호를 사용해야 합니다.")
+        return False
+    except smtplib.SMTPException as e:
+        logger.error(f"SMTP 오류: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"이메일 전송 실패: {e}")
+        logger.error(f"SMTP 설정 확인: SERVER={SMTP_SERVER}, PORT={SMTP_PORT}, USER={SMTP_USER[:3] + '***' if SMTP_USER else 'None'}")
+        return False
+
+def cleanup_expired_codes():
+    """만료된 인증 코드 정리"""
+    current_time = datetime.now()
+    expired_emails = [
+        email for email, data in email_verification_codes.items()
+        if data["expires_at"] < current_time
+    ]
+    for email in expired_emails:
+        del email_verification_codes[email]
+
 # 로그인 엔드포인트
 @app.post("/login")
 def login(data: LoginRequest = Body(...)):
@@ -950,28 +1110,383 @@ def login(data: LoginRequest = Body(...)):
     )
     row = cursor.fetchone()
     if row is None:
-        return {"success": False, "message": "가입되지 않은 ID입니다."}
+        # ID가 없는 경우
+        return {"success": False, "message": "계정이 없습니다."}
     db_pw = row[0]
-    if db_pw != data.password:
-        return {"success": False, "message": "비밀번호가 올바르지 않습니다."}
-    return {"success": True}
+    
+    # 해시화된 비밀번호와 입력된 비밀번호 비교
+    # 기존 데이터베이스에 평문 비밀번호가 있을 수 있으므로 둘 다 확인
+    password_correct = False
+    try:
+        # bcrypt 해시로 저장된 경우
+        if bcrypt.checkpw(data.password.encode('utf-8'), db_pw.encode('utf-8')):
+            password_correct = True
+    except (ValueError, AttributeError):
+        # bcrypt 해시가 아닌 경우 (기존 평문 비밀번호 호환성 유지)
+        # 새로운 회원가입은 모두 해시화되므로 이 부분은 점진적으로 제거 가능
+        if db_pw == data.password:
+            password_correct = True
+            # 기존 평문 비밀번호를 해시화하여 업데이트 (마이그레이션)
+            try:
+                hashed_password = bcrypt.hashpw(data.password.encode('utf-8'), bcrypt.gensalt())
+                cursor.execute(
+                    "UPDATE vss_user SET PW = ? WHERE ID = ?",
+                    (hashed_password.decode('utf-8'), data.username)
+                )
+                conn.commit()
+                logger.info(f"비밀번호를 해시화하여 업데이트했습니다: {data.username}")
+            except Exception as e:
+                logger.warning(f"비밀번호 해시화 업데이트 실패: {e}")
+    
+    if password_correct:
+        return {"success": True}
+    else:
+        # ID는 있지만 비밀번호가 틀린 경우
+        return {"success": False, "message": "비밀번호가 틀렸습니다."}
 
+# 이메일 인증 코드 전송 요청 모델
+class SendVerificationCodeRequest(BaseModel):
+    email: str
+
+# 이메일 인증 코드 검증 요청 모델
+class VerifyEmailRequest(BaseModel):
+    email: str
+    code: str
+
+# 회원가입 요청 모델 (인증 코드 포함)
 class User(BaseModel):
     username: str
     password: str
     email: str
+    verification_code: str
+
+@app.get("/debug/email-check/{email}")
+def debug_email_check(email: str):
+    """이메일 검증 디버깅용 엔드포인트"""
+    email_lower = email.strip().lower()
+    email_regex = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
+    is_valid_format = bool(re.match(email_regex, email_lower))
+    
+    cursor.execute("SELECT ID FROM vss_user WHERE EMAIL = ?", (email_lower,))
+    existing_user = cursor.fetchone()
+    is_existing = existing_user is not None
+    
+    return {
+        "email": email_lower,
+        "is_valid_format": is_valid_format,
+        "is_existing": is_existing,
+        "existing_user_id": existing_user[0] if existing_user else None
+    }
+
+@app.post("/send-verification-code")
+def send_verification_code(request: SendVerificationCodeRequest):
+    """이메일 인증 코드 전송"""
+    try:
+        # 요청 데이터 로깅
+        logger.info(f"인증 코드 전송 요청 수신: {request.email}")
+        
+        if not request.email or not request.email.strip():
+            logger.warning("이메일이 비어있습니다.")
+            raise HTTPException(status_code=400, detail="이메일 주소를 입력해주세요.")
+        
+        email = request.email.strip().lower()
+        logger.info(f"처리할 이메일: {email}")
+        
+        # 이메일 형식 검증
+        email_regex = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
+        if not re.match(email_regex, email):
+            logger.warning(f"이메일 형식 검증 실패: {email}")
+            raise HTTPException(status_code=400, detail="올바른 이메일 형식이 아닙니다.")
+        
+        # 기존 사용자 이메일 중복 확인
+        try:
+            cursor.execute("SELECT ID FROM vss_user WHERE EMAIL = ?", (email,))
+            existing_user = cursor.fetchone()
+            if existing_user:
+                logger.warning(f"이미 사용 중인 이메일: {email}")
+                raise HTTPException(status_code=400, detail="이미 사용 중인 이메일입니다.")
+        except Exception as db_error:
+            logger.error(f"데이터베이스 조회 오류: {db_error}")
+            raise HTTPException(status_code=500, detail="데이터베이스 오류가 발생했습니다.")
+        
+        # 만료된 코드 정리
+        cleanup_expired_codes()
+        
+        # 인증 코드 생성 및 저장
+        code = generate_verification_code()
+        expires_at = datetime.now() + timedelta(minutes=10)  # 10분 유효
+        
+        email_verification_codes[email] = {
+            "code": code,
+            "expires_at": expires_at,
+            "verified": False
+        }
+        logger.info(f"인증 코드 생성 완료: {email} (코드: {code})")
+        
+        # 이메일 전송
+        if send_verification_email(email, code):
+            logger.info(f"인증 코드 이메일 전송 성공: {email}")
+            return {"success": True, "message": "인증 코드가 이메일로 전송되었습니다."}
+        else:
+            logger.error(f"이메일 전송 실패: {email}")
+            raise HTTPException(status_code=500, detail="이메일 전송에 실패했습니다. SMTP 설정을 확인하거나 다시 시도해주세요.")
+    except HTTPException:
+        # HTTPException은 그대로 전달
+        raise
+    except Exception as e:
+        logger.error(f"인증 코드 전송 중 예상치 못한 오류: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"서버 오류가 발생했습니다: {str(e)}")
+
+@app.post("/verify-email-code")
+def verify_email_code(request: VerifyEmailRequest):
+    """이메일 인증 코드 검증"""
+    email = request.email.strip().lower()
+    code = request.code.strip()
+    
+    # 만료된 코드 정리
+    cleanup_expired_codes()
+    
+    # 인증 코드 확인
+    if email not in email_verification_codes:
+        raise HTTPException(status_code=400, detail="인증 코드가 만료되었거나 존재하지 않습니다. 다시 요청해주세요.")
+    
+    verification_data = email_verification_codes[email]
+    
+    # 만료 확인
+    if verification_data["expires_at"] < datetime.now():
+        del email_verification_codes[email]
+        raise HTTPException(status_code=400, detail="인증 코드가 만료되었습니다. 다시 요청해주세요.")
+    
+    # 코드 일치 확인
+    if verification_data["code"] != code:
+        raise HTTPException(status_code=400, detail="인증 코드가 일치하지 않습니다.")
+    
+    # 인증 성공 표시
+    verification_data["verified"] = True
+    logger.info(f"이메일 인증 성공: {email}")
+    return {"success": True, "message": "이메일 인증이 완료되었습니다."}
 
 @app.post("/register")
 def register(user: User):
+    """회원가입 (이메일 인증 필수)"""
+    email = user.email.strip().lower()
+    
+    # 이메일 인증 확인
+    cleanup_expired_codes()
+    if email not in email_verification_codes:
+        raise HTTPException(status_code=400, detail="이메일 인증이 필요합니다. 인증 코드를 먼저 요청해주세요.")
+    
+    verification_data = email_verification_codes[email]
+    
+    # 인증 코드 검증 확인
+    if not verification_data["verified"]:
+        raise HTTPException(status_code=400, detail="이메일 인증이 완료되지 않았습니다. 인증 코드를 먼저 검증해주세요.")
+    
+    # 인증 코드 만료 확인
+    if verification_data["expires_at"] < datetime.now():
+        del email_verification_codes[email]
+        raise HTTPException(status_code=400, detail="인증 코드가 만료되었습니다. 다시 요청해주세요.")
+    
+    # 최종 인증 코드 확인 (추가 보안)
+    if verification_data["code"] != user.verification_code.strip():
+        raise HTTPException(status_code=400, detail="인증 코드가 일치하지 않습니다.")
+    
     try:
+        # 비밀번호를 bcrypt로 해시화
+        hashed_password = bcrypt.hashpw(user.password.encode('utf-8'), bcrypt.gensalt())
+        hashed_password_str = hashed_password.decode('utf-8')
+        
         cursor.execute(
             "INSERT INTO vss_user (ID, PW, EMAIL) VALUES (?, ?, ?)",
-            (user.username, user.password, user.email)
+            (user.username, hashed_password_str, email)
         )
         conn.commit()
+        
+        # 회원가입 성공 후 인증 코드 삭제
+        del email_verification_codes[email]
+        
+        logger.info(f"회원가입 성공: {user.username} ({email})")
         return {"message": "회원가입 성공"}
-    except mariadb.IntegrityError:
-        raise HTTPException(status_code=400, detail="이미 존재하는 사용자입니다.")
+    except mariadb.IntegrityError as e:
+        error_msg = str(e)
+        if "ID" in error_msg or "PRIMARY" in error_msg:
+            raise HTTPException(status_code=400, detail="이미 존재하는 사용자 ID입니다.")
+        elif "EMAIL" in error_msg:
+            raise HTTPException(status_code=400, detail="이미 사용 중인 이메일입니다.")
+        else:
+            raise HTTPException(status_code=400, detail="이미 존재하는 사용자입니다.")
+
+# 동영상 메타데이터 추출 함수 (백그라운드 작업)
+def extract_video_metadata(file_path: str, video_id: int, filename: str):
+    """동영상 메타데이터를 추출하여 DB에 업데이트"""
+    try:
+        video = VideoFileClip(str(file_path))
+        width = int(video.w) if video.w else None
+        height = int(video.h) if video.h else None
+        duration = float(video.duration) if video.duration else None
+        video.close()
+        
+        # 메타데이터 업데이트
+        cursor.execute(
+            """UPDATE vss_videos 
+               SET WIDTH = ?, HEIGHT = ?, DURATION = ? 
+               WHERE ID = ?""",
+            (width, height, duration, video_id)
+        )
+        conn.commit()
+        logger.info(f"동영상 메타데이터 업데이트 완료: {filename} (ID: {video_id})")
+    except Exception as e:
+        logger.warning(f"동영상 메타데이터 추출 실패: {e}")
+
+# 동영상 업로드 및 조회 API
+@app.post("/upload-video")
+async def upload_video(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    user_id: str = Form(...)
+):
+    """동영상 파일을 서버에 업로드하고 DB에 저장"""
+    try:
+        # 사용자 ID 검증
+        cursor.execute("SELECT ID FROM vss_user WHERE ID = ?", (user_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        
+        # 파일 확장자 검증
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="파일명이 없습니다.")
+        
+        file_ext = Path(file.filename).suffix.lower()
+        allowed_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv']
+        if file_ext not in allowed_extensions:
+            raise HTTPException(status_code=400, detail=f"지원하지 않는 파일 형식입니다: {file_ext}")
+        
+        # 중복 파일명 체크 (같은 사용자의 동일한 파일명)
+        cursor.execute(
+            "SELECT ID FROM vss_videos WHERE USER_ID = ? AND FILE_NAME = ?",
+            (user_id, file.filename)
+        )
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail=f"이미 업로드된 동영상입니다: {file.filename}")
+        
+        # 파일명 중복 체크 및 고유 파일명 생성
+        base_filename = Path(file.filename).stem
+        timestamp = int(time.time() * 1000)
+        unique_filename = f"{base_filename}_{timestamp}{file_ext}"
+        file_path = videos_dir / unique_filename
+        
+        # 파일 저장
+        file_size = 0
+        with open(file_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+            file_size = len(content)
+        
+        # 파일 URL 생성 (정적 파일 경로 사용)
+        file_url = f"/video-files/{unique_filename}"
+        
+        # DB에 먼저 저장 (메타데이터 없이 - 빠른 응답을 위해)
+        cursor.execute(
+            """INSERT INTO vss_videos 
+               (USER_ID, FILE_NAME, FILE_PATH, FILE_SIZE, FILE_URL, WIDTH, HEIGHT, DURATION) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, file.filename, str(file_path), file_size, file_url, None, None, None)
+        )
+        conn.commit()
+        
+        video_id = cursor.lastrowid
+        
+        logger.info(f"동영상 업로드 성공: {file.filename} (ID: {video_id}, URL: {file_url})")
+        
+        # 메타데이터 추출을 백그라운드 작업으로 처리 (즉시 응답 반환 후 처리)
+        background_tasks.add_task(extract_video_metadata, str(file_path), video_id, file.filename)
+        
+        return {
+            "success": True,
+            "video_id": video_id,
+            "file_url": f"http://localhost:8001{file_url}",
+            "message": "동영상 업로드가 완료되었습니다."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"동영상 업로드 실패: {e}")
+        # 파일이 저장되었지만 DB 저장 실패 시 파일 삭제
+        if 'file_path' in locals() and file_path.exists():
+            try:
+                file_path.unlink()
+            except:
+                pass
+        raise HTTPException(status_code=500, detail=f"동영상 업로드 중 오류가 발생했습니다: {str(e)}")
+
+@app.get("/videos")
+async def get_videos(user_id: str):
+    """사용자의 동영상 목록 조회"""
+    try:
+        cursor.execute(
+            """SELECT ID, FILE_NAME, FILE_URL, FILE_SIZE, WIDTH, HEIGHT, DURATION, CREATED_AT 
+               FROM vss_videos 
+               WHERE USER_ID = ? 
+               ORDER BY CREATED_AT DESC""",
+            (user_id,)
+        )
+        rows = cursor.fetchall()
+        
+        videos = []
+        for row in rows:
+            videos.append({
+                "id": row[0],
+                "title": row[1],
+                "file_url": f"http://localhost:8001{row[2]}",  # DB에 저장된 URL 그대로 사용
+                "fileSize": row[3],
+                "width": row[4],
+                "height": row[5],
+                "duration": row[6],
+                "date": row[7].strftime("%Y-%m-%d") if row[7] else None
+            })
+        
+        return {"success": True, "videos": videos}
+    except Exception as e:
+        logger.error(f"동영상 목록 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"동영상 목록 조회 중 오류가 발생했습니다: {str(e)}")
+
+@app.delete("/videos/{video_id}")
+async def delete_video(video_id: int, user_id: str = Query(...)):
+    """동영상 삭제"""
+    try:
+        logger.info(f"동영상 삭제 요청: video_id={video_id}, user_id={user_id}")
+        
+        # 동영상 소유권 확인
+        cursor.execute(
+            "SELECT FILE_PATH FROM vss_videos WHERE ID = ? AND USER_ID = ?",
+            (video_id, user_id)
+        )
+        row = cursor.fetchone()
+        if not row:
+            logger.warning(f"동영상을 찾을 수 없음: video_id={video_id}, user_id={user_id}")
+            raise HTTPException(status_code=404, detail="동영상을 찾을 수 없거나 권한이 없습니다.")
+        
+        file_path = Path(row[0])
+        
+        # DB에서 삭제
+        cursor.execute("DELETE FROM vss_videos WHERE ID = ? AND USER_ID = ?", (video_id, user_id))
+        conn.commit()
+        logger.info(f"DB에서 동영상 삭제 완료: video_id={video_id}")
+        
+        # 파일 삭제
+        if file_path.exists():
+            try:
+                file_path.unlink()
+                logger.info(f"동영상 파일 삭제: {file_path}")
+            except Exception as e:
+                logger.warning(f"동영상 파일 삭제 실패: {e}")
+        
+        return {"success": True, "message": "동영상이 삭제되었습니다."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"동영상 삭제 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"동영상 삭제 중 오류가 발생했습니다: {str(e)}")
 
 # CORS 설정 (Vue와 통신 가능하게)
 app.add_middleware(
