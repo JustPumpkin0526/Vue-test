@@ -65,6 +65,7 @@
           <h2 class="font-semibold mb-3">num_frames_per_chunk</h2>
           <p class="text-xs text-gray-500 mt-2">The number of frames to choose from chunk</p>
           <input v-model.number="settingStore.nfmc" type="number" min="0" max="256" step="1"
+            @input="clampValue('nfmc', 256, 0)"
             class="border-2 border-gray-300 rounded-md px-3 py-2 w-full mt-3" />
         </section>
 
@@ -72,6 +73,7 @@
           <h2 class="font-semibold mb-3">VLM Input Width</h2>
           <p class="text-xs text-gray-500 mt-2">Provide VLM frame's width details</p>
           <input v-model.number="settingStore.frameWidth" type="number" min="0" max="4096" step="1"
+            @input="clampValue('frameWidth', 4096, 0)"
             class="border-2 border-gray-300 rounded-md px-3 py-2 w-full mt-3" />
         </section>
 
@@ -79,6 +81,7 @@
           <h2 class="font-semibold mb-3">VLM Input Height</h2>
           <p class="text-xs text-gray-500 mt-2">Provide VLM frame's height details</p>
           <input v-model.number="settingStore.frameHeight" type="number" min="0" max="4096" step="1"
+            @input="clampValue('frameHeight', 4096, 0)"
             class="border-2 border-gray-300 rounded-md px-3 py-2 w-full mt-3" />
         </section>
       </div>
@@ -89,6 +92,7 @@
           <p class="text-xs text-gray-500 mt-2">The number of highest probability vocabulary tokens to keep for
             top-k-filtering</p>
           <input v-model.number="settingStore.topk" type="number" min="1" max="1000" step="1"
+            @input="clampValue('topk', 1000, 1)"
             class="border-2 border-gray-300 rounded-md px-3 py-2 w-full mt-3" />
         </section>
 
@@ -99,7 +103,9 @@
             likely tokens (summing to 0.2 cumulative probability) will be sampled. It is not recommended to modify both
             temperature and top_p in the same call.</p>
           <div>
-            <input v-model.number="settingStore.topp" type="number" min="0" max="1" step="0.1" class="border-2 border-gray-300 w-20 mt-3 text-center" />
+            <input v-model.number="settingStore.topp" type="number" min="0" max="1" step="0.1"
+              @input="clampValue('topp', 1, 0)"
+              class="border-2 border-gray-300 w-20 mt-3 text-center" />
             <button class="border-2 border-gray-300 w-7" @click="reset_TopP">↺</button>
           </div>
           
@@ -115,7 +121,9 @@
             temperature value is, the less deterministic the output text will be. It is not recommended to modify both
             temperature and top_p in the same call.</p>
           <div>
-            <input v-model.number="settingStore.temp" type="number" min="0" max="1" step="0.1" class="border-2 border-gray-300 w-20 mt-3 text-center" />
+            <input v-model.number="settingStore.temp" type="number" min="0" max="1" step="0.1"
+              @input="clampValue('temp', 1, 0)"
+              class="border-2 border-gray-300 w-20 mt-3 text-center" />
             <button class="border-2 border-gray-300 w-7" @click="reset_Temperature">↺</button>
           </div>
           
@@ -136,7 +144,9 @@
             </div>
 
             <div class="ml-auto">
-              <input v-model.number="settingStore.maxTokens" type="number" min="1" max="1024" step="1" class="border-2 border-gray-300 w-[70%] text-center" />
+              <input v-model.number="settingStore.maxTokens" type="number" min="1" max="1024" step="1"
+                @input="clampValue('maxTokens', 1024, 1)"
+                class="border-2 border-gray-300 w-[70%] text-center" />
               <button class="border-2 border-gray-300 w-7" @click="reset_MaxTokens">↺</button>
             </div>
           </div>
@@ -153,7 +163,9 @@
           <h2 class="font-semibold mb-3">seed</h2>
           <p class="text-xs text-gray-500 mt-2">Seed value to use for sampling. Repeated requests with the same seed and
             parameters should return the same result.</p>
-          <input v-model.number="settingStore.seed" type="number" min="1" max="4294967295" step="1" class="border-2 border-gray-300 rounded-md px-3 py-2 w-full mt-3" />
+          <input v-model.number="settingStore.seed" type="number" min="1" max="4294967295" step="1"
+            @input="clampValue('seed', 4294967295, 1)"
+            class="border-2 border-gray-300 rounded-md px-3 py-2 w-full mt-3" />
         </section>
       </div>
     </div>
@@ -183,6 +195,7 @@
             </label>
             <div class="ml-auto">
               <input v-model.number="settingStore.S_TopP" type="number" min="0" max="1" step="0.05"
+                @input="clampValue('S_TopP', 1, 0)"
                 class="border-2 border-gray-300 w-28 text-center" />
               <button class="border-2 border-gray-300 w-7" @click="resetS_TopP">↺</button>
             </div>
@@ -203,6 +216,7 @@
             </label>
             <div class="ml-auto">
               <input v-model.number="settingStore.S_TEMPERATURE" type="number" min="0" max="1" step="0.05"
+                @input="clampValue('S_TEMPERATURE', 1, 0)"
                 class="border-2 border-gray-300 w-28 text-center" />
               <button class="border-2 border-gray-300 w-7" @click="resetS_TEMPERATURE">↺</button>
             </div>
@@ -223,7 +237,8 @@
             </label>
             <div class="ml-auto">
               <input v-model.number="settingStore.SMAX_TOKENS" type="number" min="1" max="10240" step="1"
-              class="border-2 border-gray-300 w-28 text-center" />
+                @input="clampValue('SMAX_TOKENS', 10240, 1)"
+                class="border-2 border-gray-300 w-28 text-center" />
               <button class="border-2 border-gray-300 w-7" @click="resetSMAX_TOKENS">↺</button>
             </div>
           </div>
@@ -256,6 +271,7 @@
             </label>
             <div class="ml-auto">
               <input v-model.number="settingStore.C_TopP" type="number" min="0" max="1" step="0.05"
+                @input="clampValue('C_TopP', 1, 0)"
                 class="border-2 border-gray-300 w-28 text-center" />
               <button class="border-2 border-gray-300 w-7" @click="resetC_TopP">↺</button>
             </div>
@@ -276,6 +292,7 @@
             </label>
             <div class="ml-auto">
               <input v-model.number="settingStore.C_TEMPERATURE" type="number" min="0" max="1" step="0.05"
+                @input="clampValue('C_TEMPERATURE', 1, 0)"
                 class="border-2 border-gray-300 w-28 text-center" />
               <button class="border-2 border-gray-300 w-7" @click="resetC_TEMPERATURE">↺</button>
             </div>
@@ -296,7 +313,8 @@
             </label>
             <div class="ml-auto">
               <input v-model.number="settingStore.C_MAX_TOKENS" type="number" min="1" max="10240" step="1"
-              class="border-2 border-gray-300 w-28 text-center" />
+                @input="clampValue('C_MAX_TOKENS', 10240, 1)"
+                class="border-2 border-gray-300 w-28 text-center" />
               <button class="border-2 border-gray-300 w-7" @click="resetC_MAX_TOKENS">↺</button>
             </div>
           </div>
@@ -329,6 +347,7 @@
             </label>
             <div class="ml-auto">
               <input v-model.number="settingStore.A_TopP" type="number" min="0" max="1" step="0.05"
+                @input="clampValue('A_TopP', 1, 0)"
                 class="border-2 border-gray-300 w-28 text-center" />
               <button class="border-2 border-gray-300 w-7" @click="resetA_TopP">↺</button>
             </div>
@@ -349,6 +368,7 @@
             </label>
             <div class="ml-auto">
               <input v-model.number="settingStore.A_TEMPERATURE" type="number" min="0" max="1" step="0.05"
+                @input="clampValue('A_TEMPERATURE', 1, 0)"
                 class="border-2 border-gray-300 w-28 text-center" />
               <button class="border-2 border-gray-300 w-7" @click="resetA_TEMPERATURE">↺</button>
             </div>
@@ -369,7 +389,8 @@
             </label>
             <div class="ml-auto">
               <input v-model.number="settingStore.A_MAX_TOKENS" type="number" min="1" max="10240" step="1"
-              class="border-2 border-gray-300 w-28 text-center" />
+                @input="clampValue('A_MAX_TOKENS', 10240, 1)"
+                class="border-2 border-gray-300 w-28 text-center" />
               <button class="border-2 border-gray-300 w-7" @click="resetA_MAX_TOKENS">↺</button>
             </div>
           </div>
@@ -391,6 +412,7 @@
         <h2 class="font-semibold mb-3">Summarize Batch Size</h2>
           <p class="text-xs text-gray-500 mt-2">Batch size for summarization.</p>
           <input v-model.number="settingStore.batch" type="number" min="1" max="1024" step="1"
+            @input="clampValue('batch', 1024, 1)"
             class="border-2 border-gray-300 rounded-md px-3 py-2 w-full mt-3" />
       </section>
     </div>
@@ -401,12 +423,14 @@
         <h2 class="font-semibold mb-3">RAG Batch Size</h2>
           <p class="text-xs text-gray-500 mt-2">Batch size for RAG processing.</p>
           <input v-model.number="settingStore.RAG_batch" type="number" min="1" max="1024" step="1"
+            @input="clampValue('RAG_batch', 1024, 1)"
             class="border-2 border-gray-300 rounded-md px-3 py-2 w-full mt-3" />
       </section>
       <section class="rounded-2xl border-2 px-2 py-3 min-w-[220px] bg-white">
         <h2 class="font-semibold mb-3">RAG Top K</h2>
           <p class="text-xs text-gray-500 mt-2">The number of highest probability vocabulary tokens to keep for RAG top-k-filtering.</p>
           <input v-model.number="settingStore.RAG_topk" type="number" min="1" max="1024" step="1"
+            @input="clampValue('RAG_topk', 1024, 1)"
             class="border-2 border-gray-300 rounded-md px-3 py-2 w-full mt-3" />
       </section>
     </div>
@@ -441,6 +465,16 @@ const toggleAlertParams = () => showAlertParams.value = !showAlertParams.value;
 // 공통 reset 함수
 const resetParameter = (paramName, defaultValue) => {
   settingStore[paramName] = defaultValue;
+};
+
+// 값 범위 제한 함수
+const clampValue = (paramName, maxValue, minValue = null) => {
+  const currentValue = settingStore[paramName];
+  if (currentValue > maxValue) {
+    settingStore[paramName] = maxValue;
+  } else if (minValue !== null && currentValue < minValue) {
+    settingStore[paramName] = minValue;
+  }
 };
 
 // Reset 함수들
