@@ -14,6 +14,7 @@ import json
 import time
 import os
 import re
+import asyncio
 from pathlib import Path
 import bcrypt
 import smtplib
@@ -198,6 +199,26 @@ class VSS:
 
         session = await get_session()
         async with session.post(self.summarize_endpoint, json=body) as response:
+            # 에러 응답 처리
+            if response.status != 200:
+                error_text = await response.text()
+                logger.error(f"VIA 서버 summarize_video 오류 (HTTP {response.status}): {error_text}")
+                
+                # GStreamer 에러인 경우 더 명확한 메시지 제공
+                if "gst-stream-error" in error_text or "qtdemux" in error_text or "not-negotiated" in error_text:
+                    error_msg = (
+                        "동영상 파일 처리 중 오류가 발생했습니다. "
+                        "가능한 원인:\n"
+                        "1. 손상된 동영상 파일\n"
+                        "2. 지원하지 않는 코덱 또는 포맷\n"
+                        "3. 파일이 완전히 업로드되지 않음\n"
+                        "4. 파일 메타데이터 문제\n\n"
+                        f"VIA 서버 오류: {error_text}"
+                    )
+                    raise HTTPException(status_code=500, detail=error_msg)
+                else:
+                    raise HTTPException(status_code=response.status, detail=f"VIA 서버 summarize_video 오류: {error_text}")
+            
             # check response
             json_data = await self.check_response(response)
             if isinstance(json_data, dict) and "choices" in json_data:
@@ -208,10 +229,6 @@ class VSS:
                 return json_data
 
     async def query_video(self, video_id, model, chunk_size, temperature, seed, max_new_tokens, top_p, top_k, query):
-        # VIA 서버는 max_tokens가 최대 1024까지만 허용
-        if max_new_tokens > 1024:
-            logger.warning(f"max_tokens {max_new_tokens}가 1024를 초과합니다. 1024로 제한합니다.")
-            max_new_tokens = 1024
         
         body = {
             "id": video_id,
@@ -277,7 +294,6 @@ def get_closest_chunk_size(CHUNK_SIZES, x):
     """
     _, values = zip(*CHUNK_SIZES)  # extract just the values from CHUNK_SIZES
     closest_value = min(values, key=lambda v: abs(v - x))  # find the value closest to x
-    print(closest_value)
     return closest_value
 
 
@@ -475,17 +491,24 @@ async def generate_clips(
     video_ids: Optional[str] = Form(None)  # JSON 문자열로 전달: {"filename1": video_id1, "filename2": video_id2}
 ):
     os.makedirs("./clips", exist_ok=True)  # 클립 저장 디렉토리 생성
-    # /clips 폴더 초기화 (기존 파일 삭제) - 요청 전체에서 단 한 번만 실행
-    if getattr(request, "_clips_cleared", None) is None:
+    # /clips 폴더 초기화는 제거 - 타임스탬프 기반 고유 파일명으로 중복 방지
+    # 오래된 클립 파일 정리 (24시간 이상 된 파일만 삭제)
+    try:
+        current_time = time.time()
         for existing_file in os.listdir("./clips"):
             file_path = os.path.join("./clips", existing_file)
             try:
                 if os.path.isfile(file_path):
-                    os.remove(file_path)
-                    logger.info(f"Deleted existing clip: {file_path}")
+                    # 파일 수정 시간 확인
+                    file_mtime = os.path.getmtime(file_path)
+                    # 24시간(86400초) 이상 된 파일만 삭제
+                    if current_time - file_mtime > 86400:
+                        os.remove(file_path)
+                        logger.info(f"Deleted old clip: {file_path}")
             except Exception as e:
-                logger.error(f"Error deleting file {file_path}: {e}")
-        setattr(request, "_clips_cleared", True)
+                logger.error(f"Error deleting old clip {file_path}: {e}")
+    except Exception as e:
+        logger.warning(f"Error cleaning old clips: {e}")
 
     grouped_clips = []
 
@@ -542,7 +565,32 @@ async def generate_clips(
 
             logger.info(f"Uploaded video saved to {tmp_path}")
 
-            video_id = await vss_client.upload_video(tmp_path)
+            # video_ids에서 내부 DB ID 가져오기 (VIA 서버의 video_id로 변환 필요)
+            video_id = None
+            db_internal_id = None
+            if user_id and video_id_map:
+                # 파일명으로 내부 DB ID 찾기
+                db_internal_id = video_id_map.get(file_path) or video_id_map.get(upfile.filename)
+                if db_internal_id:
+                    try:
+                        # 내부 DB ID로 vss_videos 테이블에서 VIDEO_ID (VIA 서버의 video_id) 조회
+                        cursor.execute(
+                            "SELECT VIDEO_ID FROM vss_videos WHERE ID = ? AND USER_ID = ?",
+                            (db_internal_id, user_id)
+                        )
+                        video_row = cursor.fetchone()
+                        if video_row and video_row[0]:
+                            video_id = video_row[0]  # VIA 서버의 video_id
+                            logger.info(f"video_ids에서 내부 DB ID {db_internal_id}로 VIDEO_ID {video_id} 조회 성공 (파일명: {file_path})")
+                        else:
+                            logger.warning(f"내부 DB ID {db_internal_id}에 해당하는 VIDEO_ID를 찾을 수 없습니다.")
+                    except Exception as e:
+                        logger.warning(f"VIDEO_ID 조회 중 오류: {e}")
+            
+            # video_id가 없으면 VIA 서버에 업로드하여 video_id 얻기
+            if not video_id:
+                video_id = await vss_client.upload_video(tmp_path)
+                logger.info(f"VIA 서버에 업로드하여 video_id 획득: {video_id}")
 
             video_clips = []
             # MoviePy에 파일 경로(문자열)로 전달
@@ -553,37 +601,32 @@ async def generate_clips(
             # chunk_duration 계산: 동영상 길이의 1/10을 가장 가까운 값으로 반올림
             chunk_duration = await get_recommended_chunk_size(duration)
 
-            num_frames_per_chunk = chunk_duration // 4
-
             # DB에서 요약 결과 확인 (user_id와 video_id가 있는 경우)
             has_stored_summary = False
-            db_video_id = None
-            if user_id and video_id_map:
-                # 파일명으로 video_id 찾기
-                db_video_id = video_id_map.get(file_path) or video_id_map.get(upfile.filename)
-                if db_video_id:
-                    try:
-                        cursor.execute(
-                            """SELECT ID FROM vss_summaries 
-                               WHERE VIDEO_ID = ? AND USER_ID = ?""",
-                            (db_video_id, user_id)
-                        )
-                        if cursor.fetchone():
-                            has_stored_summary = True
-                            print(f"저장된 요약 결과 발견: 동영상 ID {db_video_id}, summarize_video 건너뛰기")
-                    except Exception as e:
-                        print(f"요약 결과 확인 중 오류: {e}")
+            if user_id and video_id:
+                try:
+                    # VIDEO_ID (VIA 서버의 video_id)로 요약 결과 확인
+                    cursor.execute(
+                        """SELECT ID FROM vss_summaries 
+                           WHERE VIDEO_ID = ? AND USER_ID = ?""",
+                        (video_id, user_id)
+                    )
+                    if cursor.fetchone():
+                        has_stored_summary = True
+                        print(f"저장된 요약 결과 발견: VIDEO_ID {video_id}, summarize_video 건너뛰기")
+                except Exception as e:
+                    print(f"요약 결과 확인 중 오류: {e}")
 
             # 저장된 요약이 있으면 summarize_video 건너뛰기
             if not has_stored_summary:
                 result = await vss_client.summarize_video(
                     video_id,
-                    "Analyze the entire video and identify all notable events, actions, and situations. Provide clear, objective descriptions with precise timestamps, explaining what occurs, who is involved, and any significant changes or interactions. Summarize the sequence of events in a structured, time-ordered manner.",
+                    "Analyze the video and detect any threatening behavior, antisocial actions, or criminal activities. Identify events such as violence, aggression, property damage, theft, weapon-related actions, or any safety-risk situations. For each detected event, provide a clear description and output the start and end timestamps in seconds. Use the format: start_time - end_time - event_description.",
                     "You will be given captions from sequential clips of a video. Aggregate captions in the format start_time:end_time:caption based on whether captions are related to one another or create a continuous scene.",
                     "Based on the available information, generate a summary that captures the important events in the video. The summary should be organized chronologically and in logical sections. This should be a concise, yet descriptive summary of all the important events. The format should be intuitive and easy for a user to read and understand what happened. Format the output in Markdown so it can be displayed nicely. Timestamps are in seconds so please format them as SS.SSS",
                     chunk_duration,
                     model,
-                    num_frames_per_chunk,
+                    chunk_duration // 4,
                     0,
                     0,
                     80,
@@ -605,22 +648,44 @@ async def generate_clips(
                     2048,
                     True  # enable_audio
                 )
-                print(result)
+                
+                # 요약 결과를 DB에 저장
+                if user_id and video_id and result:
+                    try:
+                        # 요약 텍스트 추출 (result가 문자열인 경우 그대로 사용, dict인 경우 content 추출)
+                        summary_text = result
+                        if isinstance(result, dict):
+                            summary_text = result.get("content", str(result))
+                        elif not isinstance(result, str):
+                            summary_text = str(result)
+                        
+                        # vss_summaries 테이블에 저장 또는 업데이트
+                        cursor.execute(
+                            """INSERT INTO vss_summaries (VIDEO_ID, USER_ID, SUMMARY_TEXT) 
+                               VALUES (?, ?, ?)
+                               ON DUPLICATE KEY UPDATE 
+                               SUMMARY_TEXT = VALUES(SUMMARY_TEXT),
+                               UPDATED_AT = CURRENT_TIMESTAMP""",
+                            (video_id, user_id, summary_text)
+                        )
+                        conn.commit()
+                        logger.info(f"요약 결과 DB 저장 완료: VIDEO_ID={video_id}, USER_ID={user_id}")
+                    except Exception as e:
+                        logger.error(f"요약 결과 DB 저장 실패: {e}")
+                        # DB 저장 실패해도 요약은 계속 진행
             else:
                 print(f"저장된 요약 결과가 있어 summarize_video를 건너뜁니다. 바로 query_video로 진행합니다.")
             
             # prompt를 질문으로 처리: VIA 서버의 query_video 사용
             # 동영상 컨텍스트를 직접 활용하여 질문에 답변
-            try:
-                print(f"VIA 서버의 query_video를 사용하여 질문 처리: {prompt}")
-                
+            try:                
                 # query_video 파라미터 설정
                 query_chunk_size = chunk_duration  # 요약에 사용한 chunk_duration과 동일하게
-                query_temperature = 0.7
+                query_temperature = 0.3
                 query_seed = 42
                 query_max_tokens = 1024  # VIA 서버는 최대 1024까지만 허용
-                query_top_p = 0.9
-                query_top_k = 50
+                query_top_p = 1
+                query_top_k = 80
 
                 prompt += " 장면의 시작 타임스탬프와 종료 타임스탬프를 추출하여 출력해주세요. 타임스탬프 형식은 초 단위(예: 10.5, 120.3) 또는 분:초 형식(예: 1:30, 2:45)일 수 있습니다. 타임스탬프만 출력하고 다른 설명은 포함하지 마세요."
                 
@@ -640,7 +705,6 @@ async def generate_clips(
                 # query_result를 Ollama LLM에 보내서 타임스탬프만 추출
                 extracted_timestamps_text = None
                 try:
-                    print(f"Ollama를 사용하여 타임스탬프 추출: {OLLAMA_MODEL} (서버: {OLLAMA_BASE_URL})")
                     
                     # Ollama API 호출을 위한 프롬프트 구성
                     timestamp_extraction_prompt = f"""다음은 동영상 질의 응답 결과입니다:
@@ -680,10 +744,6 @@ async def generate_clips(
                             extracted_timestamps_text = ollama_data.get("message", {}).get("content", "")
                             if extracted_timestamps_text:
                                 extracted_timestamps_text = extracted_timestamps_text.strip()
-                                print(f"Ollama로 타임스탬프 추출 성공: {len(extracted_timestamps_text)} 문자")
-                                #list_text = extracted_timestamps_text.split("")
-                                print(f"추출된 타임스탬프: {extracted_timestamps_text}")
-                                #print(f"추출된 타임스탬프: {list_text}")
                             else:
                                 print("Ollama 응답에 content가 없습니다.")
                         else:
@@ -701,16 +761,22 @@ async def generate_clips(
                 timestamp_ranges = []
                 if extracted_timestamps_text:
                     timestamp_ranges = parse_timestamps(extracted_timestamps_text, duration)
-                    print(f"검색어 '{prompt}'에 대한 타임스탬프 구간: {timestamp_ranges}")
                 
                 # 타임스탬프 기반 클립 생성
                 base_name, _ = os.path.splitext(file_path)
+                # 고유한 파일명을 위해 타임스탬프 추가 (중복 방지 및 브라우저 캐시 문제 해결)
+                timestamp_suffix = int(time.time() * 1000)  # 밀리초 단위 타임스탬프
                 
                 if timestamp_ranges:
                     # 타임스탬프가 있으면 해당 구간의 클립 생성
-                    print(f"검색어 기반 클립 생성: {len(timestamp_ranges)}개 구간")
-                    for clip_index, (start_time, end_time) in enumerate(timestamp_ranges):
-                        clip_filename = f"clip_{base_name}_{clip_index+1}.mp4"
+                    clip_index = 0
+                    for start_time, end_time in timestamp_ranges:
+                        # 타임스탬프 간격이 0초인 클립은 건너뛰기
+                        if end_time - start_time <= 0:
+                            logger.warning(f"타임스탬프 간격이 0초 이하인 클립을 건너뜁니다: {start_time} - {end_time}")
+                            continue
+                        
+                        clip_filename = f"clip_{base_name}_{timestamp_suffix}_{clip_index+1}.mp4"
                         clip_path = os.path.join("./clips", clip_filename)
                         try:
                             # 타임스탬프 구간의 클립 생성
@@ -720,86 +786,43 @@ async def generate_clips(
                                 audio=False,
                                 verbose=False
                             )
-                            print(f"검색어 기반 클립 저장: {clip_path} (구간: {start_time:.2f}s - {end_time:.2f}s)")
                             base = str(request.base_url).rstrip('/')
                             clip_url = f"{base}/clips/{clip_filename}"
                             video_clips.append({
-                                "id": f"{base_name}_{clip_index}",
+                                "id": f"{base_name}_{timestamp_suffix}_{clip_index}",
                                 "title": clip_filename,
                                 "url": clip_url,
                                 "start_time": start_time,
                                 "end_time": end_time,
                                 "search_query": prompt
                             })
+                            clip_index += 1
                         except Exception as e:
                             print(f"Error generating clip {clip_filename}: {e}")
                         time.sleep(0.5)
                 else:
-                    # 타임스탬프가 없으면 랜덤 클립 생성 (폴백)
-                    print(f"타임스탬프를 찾을 수 없어 랜덤 클립을 생성합니다. 검색어: '{prompt}'")
-                    num_clips = random.randint(1, 3)
-                    for clip_index in range(num_clips):
-                        start_time = random.uniform(0, max(0, duration - 15))
-                        end_time = min(start_time + 15, duration)
-                        clip_filename = f"clip_{base_name}_{clip_index+1}.mp4"
-                        clip_path = os.path.join("./clips", clip_filename)
-                        try:
-                            video.subclip(start_time, end_time).write_videofile(
-                                clip_path,
-                                codec="libx264",
-                                audio=False,
-                                verbose=False
-                            )
-                            logger.info(f"랜덤 클립 저장: {clip_path}")
-                            base = str(request.base_url).rstrip('/')
-                            clip_url = f"{base}/clips/{clip_filename}"
-                            video_clips.append({
-                                "id": f"{base_name}_{clip_index}",
-                                "title": clip_filename,
-                                "url": clip_url,
-                                "start_time": start_time,
-                                "end_time": end_time,
-                                "search_query": prompt,
-                                "note": "랜덤 생성 (타임스탬프 없음)"
-                            })
-                        except Exception as e:
-                            logger.error(f"Error generating clip {clip_filename}: {e}")
-                        time.sleep(0.5)
+                    # 타임스탬프가 없으면 VIA 서버 답변을 그대로 반환
+                    logger.warning(f"타임스탬프를 찾을 수 없습니다. 검색어: '{prompt}'. VIA 서버 답변을 반환합니다.")
+                    # 클립 없이 VIA 서버 답변만 포함하여 반환
+                    video_clips.append({
+                        "id": f"{base_name}_{timestamp_suffix}_no_timestamp",
+                        "title": "VIA 서버 응답",
+                        "url": None,
+                        "start_time": None,
+                        "end_time": None,
+                        "search_query": prompt,
+                        "via_response": query_result  # VIA 서버 답변 추가
+                    })
+            except HTTPException:
+                # HTTPException은 그대로 전파
+                raise
             except Exception as via_error:
-                logger.warning(f"VIA 서버 query_video 실패: {via_error}")
-                logger.warning("원본 result를 사용합니다.")
-                
-                # VIA 서버 실패 시 랜덤 클립 생성 (폴백)
-                num_clips = random.randint(1, 3)
-                logger.info(f"VIA 서버 실패로 인한 랜덤 클립 생성: {num_clips}개")
-                base_name, _ = os.path.splitext(file_path)
-                for clip_index in range(num_clips):
-                    start_time = random.uniform(0, max(0, duration - 15))
-                    end_time = min(start_time + 15, duration)
-                    clip_filename = f"clip_{base_name}_{clip_index+1}.mp4"
-                    clip_path = os.path.join("./clips", clip_filename)
-                    try:
-                        video.subclip(start_time, end_time).write_videofile(
-                            clip_path,
-                            codec="libx264",
-                            audio=False,
-                            verbose=False
-                        )
-                        logger.info(f"랜덤 클립 저장: {clip_path}")
-                        base = str(request.base_url).rstrip('/')
-                        clip_url = f"{base}/clips/{clip_filename}"
-                        video_clips.append({
-                            "id": f"{base_name}_{clip_index}",
-                            "title": clip_filename,
-                            "url": clip_url,
-                            "start_time": start_time,
-                            "end_time": end_time,
-                            "search_query": prompt,
-                            "note": "랜덤 생성 (VIA 서버 실패)"
-                        })
-                    except Exception as e:
-                        logger.error(f"Error generating clip {clip_filename}: {e}")
-                    time.sleep(0.5)
+                logger.error(f"VIA 서버 query_video 실패: {via_error}")
+                # 검색 실패 에러 반환
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"검색 실패: VIA 서버에서 장면 검색 중 오류가 발생했습니다. ({str(via_error)})"
+                )
             video.close()
             del video
 
@@ -812,9 +835,20 @@ async def generate_clips(
         logger.error(f"Error processing uploaded video(s): {e}")
         raise HTTPException(status_code=500, detail=f"Error processing uploaded video(s): {e}")
 
+    # 클립 추출 여부 확인 (실제 URL이 있는 클립이 있는지 확인)
+    clips_extracted = False
+    for group in grouped_clips:
+        for clip in group.get("clips", []):
+            # url이 있고 via_response가 없는 경우에만 추출된 것으로 간주
+            if clip.get("url") and not clip.get("via_response"):
+                clips_extracted = True
+                break
+        if clips_extracted:
+            break
+    
     print("All clips generated successfully.")
-    print(f"Returned clips payload: {json.dumps({'clips': grouped_clips}, ensure_ascii=False)}")
-    return JSONResponse(content={"clips": grouped_clips})
+    print(f"Returned clips payload: {json.dumps({'clips': grouped_clips, 'clips_extracted': clips_extracted}, ensure_ascii=False)}")
+    return JSONResponse(content={"clips": grouped_clips, "clips_extracted": clips_extracted})
 
 
 @app.post("/vss-summarize")
@@ -903,36 +937,61 @@ async def vss_summarize(
     #print(alert_temperature)
     #print(alert_max_tokens)
 
-    result = await vss_client.summarize_video(
-        video_id,
-        prompt,
-        csprompt,
-        saprompt,
-        chunk_duration,
-        model,
-        num_frames_per_chunk,
-        frame_width,
-        frame_height,
-        top_k,
-        top_p,
-        temperature,
-        max_tokens,
-        seed,
-        batch_size,
-        rag_batch_size,
-        rag_top_k,
-        summary_top_p,
-        summary_temperature,
-        summary_max_tokens,
-        chat_top_p,
-        chat_temperature,
-        chat_max_tokens,
-        alert_top_p,
-        alert_temperature,
-        alert_max_tokens,
-        enable_audio,
-    )
-    return {"summary": result, "video_id": video_id}
+    try:
+        result = await vss_client.summarize_video(
+            video_id,
+            prompt,
+            csprompt,
+            saprompt,
+            chunk_duration,
+            model,
+            num_frames_per_chunk,
+            frame_width,
+            frame_height,
+            top_k,
+            top_p,
+            temperature,
+            max_tokens,
+            seed,
+            batch_size,
+            rag_batch_size,
+            rag_top_k,
+            summary_top_p,
+            summary_temperature,
+            summary_max_tokens,
+            chat_top_p,
+            chat_temperature,
+            chat_max_tokens,
+            alert_top_p,
+            alert_temperature,
+            alert_max_tokens,
+            enable_audio,
+        )
+        return {"summary": result, "video_id": video_id}
+    except HTTPException:
+        # HTTPException은 그대로 전파
+        raise
+    except Exception as e:
+        # 기타 예외 처리
+        logger.error(f"vss_summarize 실행 중 오류: {e}")
+        error_msg = str(e)
+        
+        # GStreamer 관련 에러인 경우 더 명확한 메시지 제공
+        if "gst-stream-error" in error_msg or "qtdemux" in error_msg or "not-negotiated" in error_msg:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "동영상 파일 처리 중 오류가 발생했습니다.\n\n"
+                    "가능한 원인:\n"
+                    "1. 손상된 동영상 파일 - 파일을 다시 다운로드하거나 다른 파일로 시도해보세요.\n"
+                    "2. 지원하지 않는 코덱 또는 포맷 - H.264 코덱의 MP4 파일을 권장합니다.\n"
+                    "3. 파일이 완전히 업로드되지 않음 - 네트워크 연결을 확인하고 다시 시도해보세요.\n"
+                    "4. 파일 메타데이터 문제 - 동영상 편집 프로그램으로 파일을 다시 저장해보세요.\n\n"
+                    f"기술적 오류: {error_msg}"
+                )
+            )
+        else:
+            raise HTTPException(status_code=500, detail=f"요약 생성 중 오류가 발생했습니다: {error_msg}")
 
 @app.post("/vss-query")
 async def vss_query(
@@ -988,15 +1047,98 @@ class VideoUploadResponse(BaseModel):
     file_url: str
     message: str
 
-# DB 연결 설정
-conn = mariadb.connect(
+# DB 연결 설정 (커넥션 풀 사용)
+import threading
+from queue import Queue, Empty
+
+class ConnectionPool:
+    """DB 커넥션 풀 (동시 요청 처리 최적화)"""
+    def __init__(self, max_connections=10, **kwargs):
+        self.max_connections = max_connections
+        self.connection_kwargs = kwargs
+        self.pool = Queue(maxsize=max_connections)
+        self.lock = threading.Lock()
+        self.created_connections = 0
+        
+        # 초기 연결 생성
+        for _ in range(min(3, max_connections)):  # 최소 3개 연결 미리 생성
+            conn = self._create_connection()
+            self.pool.put(conn)
+            self.created_connections += 1
+    
+    def _create_connection(self):
+        """새 DB 연결 생성"""
+        conn = mariadb.connect(
+            autocommit=True,  # 자동 커밋으로 성능 향상
+            **self.connection_kwargs
+        )
+        return conn
+    
+    def get_connection(self, timeout=5):
+        """풀에서 연결 가져오기"""
+        try:
+            conn = self.pool.get(timeout=timeout)
+            # 연결이 살아있는지 확인
+            try:
+                conn.ping()
+            except:
+                # 연결이 끊어진 경우 새로 생성
+                conn = self._create_connection()
+            return conn
+        except Empty:
+            # 풀이 비어있으면 새 연결 생성 (최대치 내에서)
+            with self.lock:
+                if self.created_connections < self.max_connections:
+                    self.created_connections += 1
+                    return self._create_connection()
+                else:
+                    # 최대치 도달 시 대기
+                    return self.pool.get(timeout=timeout)
+    
+    def return_connection(self, conn):
+        """연결을 풀에 반환"""
+        try:
+            self.pool.put_nowait(conn)
+        except:
+            # 풀이 가득 찬 경우 연결 종료
+            try:
+                conn.close()
+            except:
+                pass
+            with self.lock:
+                self.created_connections -= 1
+
+# DB 커넥션 풀 초기화
+db_pool = ConnectionPool(
+    max_connections=20,  # 최대 20개 동시 연결
     user="root",
     password="pass0001!",
-    host="127.0.0.1",
+    host="172.16.15.69",  # 원격 MariaDB 서버 IP
     port=3306,
     database="vss"
 )
+
+# 하위 호환성을 위한 전역 연결 (점진적 마이그레이션용)
+# autocommit 활성화로 커밋 오버헤드 감소
+conn = db_pool.get_connection()
+conn.autocommit = True  # 자동 커밋 활성화
 cursor = conn.cursor()
+
+def get_db_connection():
+    """DB 연결 가져오기 (컨텍스트 매니저)"""
+    return DBConnectionContext()
+
+class DBConnectionContext:
+    """DB 연결 컨텍스트 매니저"""
+    def __enter__(self):
+        self.conn = db_pool.get_connection()
+        self.conn.autocommit = True  # 자동 커밋 활성화
+        self.cursor = self.conn.cursor()
+        return self.cursor
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # autocommit이 활성화되어 있으므로 명시적 커밋 불필요
+        db_pool.return_connection(self.conn)
 
 # 이메일 인증 코드 저장소 (실제 운영에서는 Redis 등 사용 권장)
 # 구조: {email: {"code": "123456", "expires_at": datetime, "verified": False}}
@@ -1583,75 +1725,74 @@ async def upload_video_to_db(
     file: UploadFile = File(...),
     user_id: str = Form(...)
 ):
-    """동영상 파일을 서버에 업로드하고 DB에 저장"""
+    """동영상 파일을 서버에 업로드하고 DB에 저장 (최적화됨)"""
     try:
-        # 사용자 ID 검증
-        cursor.execute("SELECT ID FROM vss_user WHERE ID = ?", (user_id,))
-        if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
-        
-        # 파일 확장자 검증
+        # 1. 파일 검증 (빠른 실패 - DB 쿼리 전에 검증)
         if not file.filename:
             raise HTTPException(status_code=400, detail="파일명이 없습니다.")
         
         file_ext = Path(file.filename).suffix.lower()
-        allowed_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv']
+        allowed_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv'}
         if file_ext not in allowed_extensions:
             raise HTTPException(status_code=400, detail=f"지원하지 않는 파일 형식입니다: {file_ext}")
         
-        # 중복 파일명 체크 (같은 사용자의 동일한 파일명)
+        # 2. DB 쿼리 최적화: 사용자 검증과 중복 체크를 하나의 쿼리로 통합
         cursor.execute(
-            "SELECT ID FROM vss_videos WHERE USER_ID = ? AND FILE_NAME = ?",
-            (user_id, file.filename)
+            """SELECT 
+                   (SELECT COUNT(*) FROM vss_user WHERE ID = ?) as user_exists,
+                   (SELECT COUNT(*) FROM vss_videos WHERE USER_ID = ? AND FILE_NAME = ?) as duplicate_exists""",
+            (user_id, user_id, file.filename)
         )
-        if cursor.fetchone():
+        result = cursor.fetchone()
+        user_exists, duplicate_exists = result[0], result[1]
+        
+        if not user_exists:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        
+        if duplicate_exists:
             raise HTTPException(status_code=400, detail=f"이미 업로드된 동영상입니다: {file.filename}")
         
-        # 파일명 중복 체크 및 고유 파일명 생성
+        # 3. 파일명 생성 (타임스탬프는 미리 생성)
         base_filename = Path(file.filename).stem
         timestamp = int(time.time() * 1000)
         unique_filename = f"{base_filename}_{timestamp}{file_ext}"
         file_path = videos_dir / unique_filename
-        
-        # 파일 저장
-        file_size = 0
-        with open(file_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
-            file_size = len(content)
-        
-        # 파일 URL 생성 (정적 파일 경로 사용)
         file_url = f"/video-files/{unique_filename}"
         
-        # VSS 클라이언트 초기화
+        # 4. 파일 저장 (최적화된 버퍼 크기 사용)
+        # 버퍼 크기를 8MB로 설정하여 대용량 파일 처리 성능 향상
+        BUFFER_SIZE = 8 * 1024 * 1024  # 8MB
+        file_size = 0
+        with open(file_path, "wb", buffering=BUFFER_SIZE) as buffer:
+            shutil.copyfileobj(file.file, buffer, length=BUFFER_SIZE)
+            file_size = buffer.tell()
+        
+        # 5. VIA 서버에 업로드하여 video_id 얻기
         global vss_client
         if vss_client is None:
             vss_client = VSS(VIA_SERVER_URL)
             vss_client.model = await vss_client.get_model()
         
-        # VIA 서버에 동영상 업로드하여 video_id 얻기
         via_video_id = None
         try:
             via_video_id = await vss_client.upload_video(str(file_path))
-            logger.info(f"VIA 서버 업로드 성공: {file.filename} (VIA video_id: {via_video_id})")
+            logger.info(f"VIA 서버 업로드 성공: video_id={via_video_id}")
         except Exception as e:
-            logger.warning(f"VIA 서버 업로드 실패: {e} (로컬 저장은 계속 진행)")
-            # VIA 서버 업로드 실패해도 로컬 저장은 계속 진행
+            logger.warning(f"VIA 서버 업로드 실패: {e}")
+            # VIA 업로드 실패 시에도 DB에는 저장하되 VIDEO_ID는 None으로 저장
+            # 나중에 재시도할 수 있도록
         
-        # DB에 저장 (VIA video_id 포함)
+        # 6. DB 저장 (VIA 서버의 video_id 포함)
         cursor.execute(
             """INSERT INTO vss_videos 
                (USER_ID, FILE_NAME, FILE_PATH, FILE_SIZE, FILE_URL, WIDTH, HEIGHT, DURATION, VIDEO_ID) 
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (user_id, file.filename, str(file_path), file_size, file_url, None, None, None, via_video_id)
         )
-        conn.commit()
-        
+        # autocommit이 활성화되어 있으므로 명시적 커밋 불필요
         video_id = cursor.lastrowid
         
-        logger.info(f"동영상 업로드 성공: {file.filename} (DB ID: {video_id}, VIA video_id: {via_video_id}, URL: {file_url})")
-        
-        # 메타데이터 추출을 백그라운드 작업으로 처리 (즉시 응답 반환 후 처리)
+        # 7. 백그라운드 작업 설정 (메타데이터 추출)
         background_tasks.add_task(extract_video_metadata, str(file_path), video_id, file.filename)
         
         return {
@@ -1710,9 +1851,9 @@ async def delete_video(video_id: int, user_id: str = Query(...)):
     try:
         logger.info(f"동영상 삭제 요청: video_id={video_id}, user_id={user_id}")
         
-        # 동영상 소유권 확인 및 파일 경로 조회
+        # 동영상 소유권 확인 및 파일 경로, VIDEO_ID 조회
         cursor.execute(
-            "SELECT FILE_PATH, FILE_URL FROM vss_videos WHERE ID = ? AND USER_ID = ?",
+            "SELECT FILE_PATH, FILE_URL, VIDEO_ID FROM vss_videos WHERE ID = ? AND USER_ID = ?",
             (video_id, user_id)
         )
         row = cursor.fetchone()
@@ -1722,8 +1863,24 @@ async def delete_video(video_id: int, user_id: str = Query(...)):
         
         db_file_path = row[0]  # DB에 저장된 FILE_PATH
         file_url = row[1]  # FILE_URL (예: /video-files/filename_timestamp.ext)
+        via_video_id = row[2]  # VIA 서버의 video_id (vss_summaries 테이블의 VIDEO_ID)
         
-        # DB에서 삭제 (CASCADE로 요약도 자동 삭제됨)
+        # vss_summaries 테이블에서 요약 결과 삭제 (VIDEO_ID는 VIA 서버의 video_id)
+        if via_video_id:
+            try:
+                cursor.execute(
+                    "DELETE FROM vss_summaries WHERE VIDEO_ID = ? AND USER_ID = ?",
+                    (via_video_id, user_id)
+                )
+                deleted_summaries = cursor.rowcount
+                if deleted_summaries > 0:
+                    logger.info(f"요약 결과 삭제 완료: VIDEO_ID={via_video_id}, 삭제된 요약 수={deleted_summaries}")
+                else:
+                    logger.info(f"삭제할 요약 결과 없음: VIDEO_ID={via_video_id}")
+            except Exception as e:
+                logger.warning(f"요약 결과 삭제 중 오류 발생: {e}")
+        
+        # vss_videos 테이블에서 동영상 삭제
         cursor.execute("DELETE FROM vss_videos WHERE ID = ? AND USER_ID = ?", (video_id, user_id))
         conn.commit()
         logger.info(f"DB에서 동영상 삭제 완료: video_id={video_id}")
@@ -1763,6 +1920,42 @@ async def delete_video(video_id: int, user_id: str = Query(...)):
         else:
             logger.warning(f"동영상 파일 경로를 확인할 수 없음: FILE_PATH={db_file_path}, FILE_URL={file_url}")
         
+        # 클립 삭제: 동영상 파일명으로 시작하는 모든 클립 파일 삭제
+        clips_dir = Path("./clips")
+        if clips_dir.exists():
+            try:
+                # 동영상 파일명에서 확장자 제거하여 base_name 추출
+                if file_path:
+                    base_name = file_path.stem  # 확장자 제거
+                elif file_url:
+                    # FILE_URL에서 파일명 추출 후 확장자 제거
+                    filename = file_url.replace("/video-files/", "").lstrip("/")
+                    if filename:
+                        base_name = Path(filename).stem
+                    else:
+                        base_name = None
+                else:
+                    base_name = None
+                
+                if base_name:
+                    deleted_clips = 0
+                    # clips 디렉토리의 모든 파일 확인
+                    for clip_file in clips_dir.iterdir():
+                        if clip_file.is_file() and clip_file.name.startswith(f"clip_{base_name}_"):
+                            try:
+                                clip_file.unlink()
+                                deleted_clips += 1
+                                logger.info(f"클립 파일 삭제 성공: {clip_file.name}")
+                            except Exception as e:
+                                logger.warning(f"클립 파일 삭제 실패: {clip_file.name}, 오류: {e}")
+                    
+                    if deleted_clips > 0:
+                        logger.info(f"총 {deleted_clips}개의 클립 파일이 삭제되었습니다.")
+                    else:
+                        logger.info(f"삭제할 클립 파일이 없습니다. (base_name: {base_name})")
+            except Exception as e:
+                logger.warning(f"클립 삭제 중 오류 발생: {e}")
+        
         return {"success": True, "message": "동영상이 삭제되었습니다."}
     except HTTPException:
         raise
@@ -1770,12 +1963,65 @@ async def delete_video(video_id: int, user_id: str = Query(...)):
         logger.error(f"동영상 삭제 실패: {e}")
         raise HTTPException(status_code=500, detail=f"동영상 삭제 중 오류가 발생했습니다: {str(e)}")
 
+# 클립 삭제 요청 모델
+class DeleteClipsRequest(BaseModel):
+    clip_urls: List[str]  # 삭제할 클립 URL 리스트
+
+@app.post("/delete-clips")
+async def delete_clips(request: DeleteClipsRequest):
+    """클립 파일들을 삭제하는 엔드포인트"""
+    try:
+        clips_dir = Path("./clips")
+        if not clips_dir.exists():
+            return {"success": True, "message": "클립 디렉토리가 없습니다.", "deleted_count": 0}
+        
+        deleted_count = 0
+        failed_count = 0
+        
+        for clip_url in request.clip_urls:
+            try:
+                # URL에서 파일명 추출
+                # 예: http://localhost:8001/clips/clip_filename.mp4 -> clip_filename.mp4
+                if "/clips/" in clip_url:
+                    filename = clip_url.split("/clips/")[-1].split("?")[0]  # 쿼리 파라미터 제거
+                else:
+                    # 상대 경로인 경우
+                    filename = clip_url.replace("/clips/", "").split("?")[0]
+                
+                if not filename:
+                    logger.warning(f"클립 파일명을 추출할 수 없습니다: {clip_url}")
+                    failed_count += 1
+                    continue
+                
+                clip_file_path = clips_dir / filename
+                
+                if clip_file_path.exists() and clip_file_path.is_file():
+                    clip_file_path.unlink()
+                    deleted_count += 1
+                    logger.info(f"클립 파일 삭제 성공: {filename}")
+                else:
+                    logger.warning(f"클립 파일을 찾을 수 없습니다: {filename}")
+                    failed_count += 1
+            except Exception as e:
+                logger.error(f"클립 삭제 중 오류 발생 ({clip_url}): {e}")
+                failed_count += 1
+        
+        return {
+            "success": True,
+            "message": f"{deleted_count}개의 클립이 삭제되었습니다.",
+            "deleted_count": deleted_count,
+            "failed_count": failed_count
+        }
+    except Exception as e:
+        logger.error(f"클립 삭제 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"클립 삭제 중 오류가 발생했습니다: {str(e)}")
+
 # 요약 결과 저장 모델
 class SaveSummaryRequest(BaseModel):
-    video_id: int
+    video_id: str  # VIA 서버의 video_id (vss_videos.VIDEO_ID 컬럼 값)
     user_id: str
     summary_text: str
-    via_video_id: Optional[str] = None  # VIA 서버의 video_id
+    via_video_id: Optional[str] = None  # VIA 서버의 video_id (하위 호환성을 위해 유지)
 
 @app.post("/save-summary")
 async def save_summary(request: SaveSummaryRequest):
@@ -1790,9 +2036,9 @@ async def save_summary(request: SaveSummaryRequest):
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
         
-        # 동영상 소유권 확인
+        # 동영상 소유권 확인 (VIDEO_ID는 VIA 서버의 video_id이므로 vss_videos.VIDEO_ID로 조회)
         cursor.execute(
-            "SELECT ID FROM vss_videos WHERE ID = ? AND USER_ID = ?",
+            "SELECT ID FROM vss_videos WHERE VIDEO_ID = ? AND USER_ID = ?",
             (video_id, user_id)
         )
         if not cursor.fetchone():
@@ -1800,7 +2046,7 @@ async def save_summary(request: SaveSummaryRequest):
         
         # 요약 결과 저장 또는 업데이트 (UNIQUE KEY로 중복 방지)
         # vss_summaries 테이블 구조:
-        # - VIDEO_ID (INT): 외래키, vss_videos.ID 참조
+        # - VIDEO_ID (VARCHAR): VIA 서버의 video_id (vss_videos.VIDEO_ID 컬럼 값)
         # - USER_ID (VARCHAR): 사용자 ID
         # - SUMMARY_TEXT (LONGTEXT): 요약 텍스트
         # - CREATED_AT (TIMESTAMP): 자동 설정
@@ -1838,7 +2084,7 @@ async def save_summary(request: SaveSummaryRequest):
         raise HTTPException(status_code=500, detail=f"요약 결과 저장 중 오류가 발생했습니다: {str(e)}")
 
 @app.get("/summaries/{video_id}")
-async def get_summary(video_id: int, user_id: str = Query(...)):
+async def get_summary(video_id: str, user_id: str = Query(...)):
     """특정 동영상의 요약 결과 조회"""
     try:
         # 사용자 ID 검증
@@ -1847,10 +2093,11 @@ async def get_summary(video_id: int, user_id: str = Query(...)):
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
         
         # 요약 결과 조회 (소유권 확인 포함)
+        # VIDEO_ID는 VIA 서버의 video_id이므로 vss_videos.VIDEO_ID와 조인
         cursor.execute(
             """SELECT s.ID, s.SUMMARY_TEXT, s.CREATED_AT, s.UPDATED_AT
                FROM vss_summaries s
-               INNER JOIN vss_videos v ON s.VIDEO_ID = v.ID
+               INNER JOIN vss_videos v ON s.VIDEO_ID = v.VIDEO_ID
                WHERE s.VIDEO_ID = ? AND s.USER_ID = ? AND v.USER_ID = ?""",
             (video_id, user_id, user_id)
         )
@@ -1887,10 +2134,11 @@ async def get_user_summaries(user_id: str = Query(...)):
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
         
         # 사용자의 모든 요약 결과 조회
+        # VIDEO_ID는 VIA 서버의 video_id이므로 vss_videos.VIDEO_ID와 조인
         cursor.execute(
             """SELECT s.ID, s.VIDEO_ID, s.SUMMARY_TEXT, s.CREATED_AT, s.UPDATED_AT, v.FILE_NAME
                FROM vss_summaries s
-               INNER JOIN vss_videos v ON s.VIDEO_ID = v.ID
+               INNER JOIN vss_videos v ON s.VIDEO_ID = v.VIDEO_ID
                WHERE s.USER_ID = ? AND v.USER_ID = ?
                ORDER BY s.CREATED_AT DESC""",
             (user_id, user_id)
@@ -1918,6 +2166,71 @@ async def get_user_summaries(user_id: str = Query(...)):
     except Exception as e:
         logger.error(f"요약 결과 목록 조회 실패: {e}")
         raise HTTPException(status_code=500, detail=f"요약 결과 목록 조회 중 오류가 발생했습니다: {str(e)}")
+
+# 요약 결과 삭제 요청 모델
+class DeleteSummaryRequest(BaseModel):
+    video_ids: List[int]  # vss_videos 테이블의 ID 목록 (내부 DB ID)
+    user_id: str
+
+@app.delete("/summaries")
+async def delete_summaries(request: DeleteSummaryRequest):
+    """선택된 동영상들의 요약 결과 삭제"""
+    try:
+        user_id = request.user_id
+        video_ids = request.video_ids
+        
+        if not video_ids or len(video_ids) == 0:
+            raise HTTPException(status_code=400, detail="동영상 ID 목록이 필요합니다.")
+        
+        # 사용자 ID 검증
+        cursor.execute("SELECT ID FROM vss_user WHERE ID = ?", (user_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        
+        # 선택된 동영상들의 VIDEO_ID (VIA 서버의 video_id) 조회
+        placeholders = ','.join(['?'] * len(video_ids))
+        cursor.execute(
+            f"SELECT VIDEO_ID FROM vss_videos WHERE ID IN ({placeholders}) AND USER_ID = ?",
+            (*video_ids, user_id)
+        )
+        rows = cursor.fetchall()
+        via_video_ids = [row[0] for row in rows if row[0]]  # None이 아닌 것만
+        
+        if not via_video_ids:
+            return {
+                "success": True,
+                "message": "삭제할 요약 결과가 없습니다.",
+                "deleted_count": 0
+            }
+        
+        # 요약 결과 삭제
+        via_placeholders = ','.join(['?'] * len(via_video_ids))
+        cursor.execute(
+            f"DELETE FROM vss_summaries WHERE VIDEO_ID IN ({via_placeholders}) AND USER_ID = ?",
+            (*via_video_ids, user_id)
+        )
+        conn.commit()
+        deleted_count = cursor.rowcount
+        
+        logger.info(f"요약 결과 삭제 완료: USER_ID={user_id}, 삭제된 요약 수={deleted_count}")
+
+        if deleted_count <= 0:
+            return {
+                "success": False,
+                "message": "삭제할 요약 결과가 없습니다.",
+                "deleted_count": 0
+            }
+        
+        return {
+            "success": True,
+            "message": f"{deleted_count}개의 요약 결과가 삭제되었습니다.",
+            "deleted_count": deleted_count
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"요약 결과 삭제 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"요약 결과 삭제 중 오류가 발생했습니다: {str(e)}")
 
 # CORS 설정 (Vue와 통신 가능하게)
 app.add_middleware(

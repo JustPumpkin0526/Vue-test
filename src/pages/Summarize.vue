@@ -866,38 +866,49 @@ async function loadSummariesFromDB() {
   try {
     // 각 동영상의 요약 결과를 조회
     for (const video of videoFiles.value) {
-      const dbId = video.dbId || video.id;
-      if (!dbId) continue;
+      const dbInternalId = video.dbId || video.id;
+      if (!dbInternalId) continue;
 
       try {
-        const response = await fetch(`http://localhost:8001/summaries/${dbId}?user_id=${userId}`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.summary) {
-            // 요약 결과를 동영상 객체에 저장
-            video.summary = data.summary.summary_text;
-            
-            // 요약된 비디오 ID 매핑 업데이트
-            summarizedVideoMap.value[video.id] = dbId;
-            summarizedVideoId.value = dbId;
-            
-            // 채팅 메시지에 요약 결과 추가 (이미 표시되지 않은 경우)
-            const existingSummary = chatMessages.value.find(
-              m => m.role === 'assistant' && m.content.includes(`'${video.name}'`)
-            );
-            if (!existingSummary) {
-              const markedsummary = marked.parse(data.summary.summary_text);
-              const summaryHtml = `<div class='font-semibold'>✅ '${video.name}' 요약 (저장된 결과)</div><br>${markedsummary}`;
-              addChatMessage({
-                id: Date.now() + Math.random(),
-                role: 'assistant',
-                content: summaryHtml
-              });
+        // 먼저 내부 DB ID로 vss_videos 테이블에서 VIDEO_ID (VIA 서버의 video_id) 조회
+        const videosResponse = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+        if (videosResponse.ok) {
+          const videosData = await videosResponse.json();
+          if (videosData.success && videosData.videos) {
+            const dbVideo = videosData.videos.find(v => v.id === dbInternalId);
+            if (dbVideo && dbVideo.video_id) {
+              // VIDEO_ID (VIA 서버의 video_id)로 요약 결과 조회
+              const response = await fetch(`http://localhost:8001/summaries/${dbVideo.video_id}?user_id=${userId}`);
+              if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.summary) {
+                  // 요약 결과를 동영상 객체에 저장
+                  video.summary = data.summary.summary_text;
+                  
+                  // 요약된 비디오 ID 매핑 업데이트 (VIA 서버의 video_id 사용)
+                  summarizedVideoMap.value[video.id] = dbVideo.video_id;
+                  summarizedVideoId.value = dbVideo.video_id;
+                  
+                  // 채팅 메시지에 요약 결과 추가 (이미 표시되지 않은 경우)
+                  const existingSummary = chatMessages.value.find(
+                    m => m.role === 'assistant' && m.content.includes(`'${video.name}'`)
+                  );
+                  if (!existingSummary) {
+                    const markedsummary = marked.parse(data.summary.summary_text);
+                    const summaryHtml = `<div class='font-semibold'>✅ '${video.name}' 요약 (저장된 결과)</div><br>${markedsummary}`;
+                    addChatMessage({
+                      id: Date.now() + Math.random(),
+                      role: 'assistant',
+                      content: summaryHtml
+                    });
+                  }
+                }
+              }
             }
           }
         }
       } catch (error) {
-        console.warn(`동영상 ${dbId}의 요약 결과 로드 실패:`, error);
+        console.warn(`동영상 ${dbInternalId}의 요약 결과 로드 실패:`, error);
       }
     }
   } catch (error) {
@@ -1725,11 +1736,14 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
       const userId = localStorage.getItem("vss_user_id");
       if (userId) {
         try {
-          // video_id 찾기: dbId가 있으면 사용, 없으면 파일명으로 DB에서 찾기
-          let dbVideoId = videoObj.dbId;
+          // vss_videos 테이블의 VIDEO_ID 컬럼 (VIA 서버의 video_id) 찾기
+          let dbVideoId = null;
           
-          if (!dbVideoId) {
-            // 파일명으로 DB에서 video_id 찾기
+          // 먼저 videoObj.dbId로 동영상 찾기
+          let dbInternalId = videoObj.dbId;
+          
+          if (!dbInternalId) {
+            // 파일명으로 DB에서 내부 ID 찾기
             try {
               const videosResponse = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
               if (videosResponse.ok) {
@@ -1737,14 +1751,32 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
                 if (videosData.success && videosData.videos) {
                   const video = videosData.videos.find(v => v.title === videoObj.name);
                   if (video) {
-                    dbVideoId = video.id;
+                    dbInternalId = video.id;
                     // videoObj에 dbId 저장 (다음 요약 시 재사용)
-                    videoObj.dbId = dbVideoId;
+                    videoObj.dbId = dbInternalId;
                   }
                 }
               }
             } catch (error) {
               console.warn('동영상 목록 조회 실패:', error);
+            }
+          }
+          
+          // 내부 ID로 vss_videos 테이블에서 VIDEO_ID 컬럼 (VIA 서버의 video_id) 가져오기
+          if (dbInternalId) {
+            try {
+              const videosResponse = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+              if (videosResponse.ok) {
+                const videosData = await videosResponse.json();
+                if (videosData.success && videosData.videos) {
+                  const video = videosData.videos.find(v => v.id === dbInternalId);
+                  if (video && video.video_id) {
+                    dbVideoId = video.video_id; // vss_videos 테이블의 VIDEO_ID 컬럼 (VIA 서버의 video_id)
+                  }
+                }
+              }
+            } catch (error) {
+              console.warn('VIDEO_ID 조회 실패:', error);
             }
           }
           
@@ -1873,45 +1905,13 @@ async function runInference() {
   await continueInferenceFromIndex(taskId, targetVideos, 0, targetVideos.length, taskPrompt);
 }
 
-// 서버에서 미디어 삭제하는 함수
-async function removeMediaFromServer(mediaIds) {
-  if (!mediaIds || mediaIds.length === 0) return;
-
-  const VSS_API_URL = 'http://localhost:8001/remove-media';
-
-  try {
-    const response = await fetch(VSS_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ media_ids: mediaIds })
-    });
-
-    if (!response.ok) {
-      console.warn('서버 미디어 삭제 실패:', response.status);
-      return false;
-    }
-
-    const data = await response.json();
-    console.log('서버 미디어 삭제 성공:', data);
-    return true;
-  } catch (error) {
-    console.warn('서버 미디어 삭제 중 오류:', error);
-    return false;
-  }
-}
-
 // 동영상이 1개일 때 삭제
 async function removeSingleVideo() {
   if (videoFiles.value.length === 1) {
     const target = videoFiles.value[0];
 
-    // 서버에서 미디어 삭제 (요약된 경우에만)
-    const serverVideoId = summarizedVideoMap.value[target.id];
-    if (serverVideoId) {
-      await removeMediaFromServer([serverVideoId]);
-      // 매핑에서도 제거
+    // 매핑에서 제거 (미디어 삭제는 Search.vue에서 처리)
+    if (summarizedVideoMap.value[target.id]) {
       delete summarizedVideoMap.value[target.id];
     }
 
@@ -1967,20 +1967,12 @@ function confirmWarning() {
 async function batchRemoveSelectedVideos() {
   const videosToRemove = videoFiles.value.filter(v => selectedIndexes.value.includes(v.id));
 
-  // 서버에서 미디어 삭제 (요약된 경우에만)
-  const serverVideoIds = videosToRemove
-    .map(v => summarizedVideoMap.value[v.id])
-    .filter(id => id != null); // null이 아닌 것만 필터링
-
-  if (serverVideoIds.length > 0) {
-    await removeMediaFromServer(serverVideoIds);
-    // 매핑에서도 제거
-    videosToRemove.forEach(v => {
-      if (summarizedVideoMap.value[v.id]) {
-        delete summarizedVideoMap.value[v.id];
-      }
-    });
-  }
+  // 매핑에서 제거 (미디어 삭제는 Search.vue에서 처리)
+  videosToRemove.forEach(v => {
+    if (summarizedVideoMap.value[v.id]) {
+      delete summarizedVideoMap.value[v.id];
+    }
+  });
 
   videosToRemove.forEach(v => {
     if (v.summaryObjectUrl) {

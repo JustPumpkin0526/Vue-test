@@ -58,16 +58,34 @@
         </div>
       </header>
         <!-- 동영상 출력 영역 -->
-        <div class="relative w-full h-[90%] border border-slate-200/80 bg-gray-50 rounded-2xl overflow-y-auto shadow-inner mt-4">
+        <div 
+          class="relative w-full h-[90%] border border-slate-200/80 rounded-2xl overflow-y-auto shadow-inner mt-4 transition-all duration-300"
+          :class="isDragOverUpload ? 'bg-blue-100 border-blue-400 ring-2 ring-blue-300' : 'bg-gray-50'"
+          @dragover.prevent="onDragOverUpload"
+          @dragleave.prevent="onDragLeaveUpload"
+          @drop.prevent="onDropUpload">
           <div v-if="items.length === 0" class="flex items-center justify-center h-full">
             <div
-              class="w-[30%] h-[9%] inline-flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 text-gray-500 text-center text-[24px] border border-gray-200 rounded-2xl shadow-sm backdrop-blur-sm">
-              <p class="font-light">Please upload a video</p>
+              class="w-[30%] h-[9%] inline-flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 text-gray-500 text-center text-[24px] border border-gray-200 rounded-2xl shadow-sm backdrop-blur-sm transition-all duration-300"
+              :class="isDragOverUpload ? 'bg-blue-50 border-blue-300 text-blue-600' : ''">
+              <p v-if="!isDragOverUpload" class="font-light">Please upload a video</p>
+              <p v-else class="font-bold">여기에 파일을 놓으세요</p>
+            </div>
+          </div>
+
+          <!-- 드래그 & 드롭 오버레이 (동영상이 있을 때) -->
+          <div 
+            v-if="isDragOverUpload && items.length > 0"
+            class="absolute inset-0 z-50 flex items-center justify-center bg-blue-500/20 backdrop-blur-sm border-4 border-dashed border-blue-400 rounded-2xl pointer-events-none">
+            <div class="bg-white/90 rounded-2xl px-8 py-6 shadow-xl">
+              <p class="text-2xl font-bold text-blue-600 text-center">여기에 파일을 놓으세요</p>
             </div>
           </div>
 
           <!-- 동영상 출력 그리드(행열 구조) -->
-          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 p-6 overflow-y-auto">
+          <div 
+            class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 p-6 overflow-y-auto transition-opacity duration-300"
+            :class="{ 'opacity-50': isDragOverUpload && items.length > 0 }">
             <div v-for="video in items" :key="video.id"
               class="flex flex-col items-center justify-center rounded-2xl shadow-md hover:shadow-xl cursor-pointer p-3 border border-gray-200 relative transform transition-all duration-300 hover:scale-105 hover:-translate-y-1 group"
               :class="{ 'ring-2 ring-blue-400 bg-blue-100': selectedIds.includes(video.id) }"
@@ -268,6 +286,7 @@
                 @click.stop="contextZoom">확대</button>
               <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextSummary">요약 진행</button>
               <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextSearch" :disabled="selectedIds.length === 0">검색</button>
+              <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextRemoveSummary" :disabled="selectedIds.length === 0">요약 결과 제거</button>
               <div class="h-px bg-gray-100"></div>
               <button class="w-full text-left px-4 py-3 text-red-600 hover:bg-gray-50" @click.stop="contextDelete">{{
                 selectedIds.length > 1 ? `선택된 항목 삭제 (${selectedIds.length})` : '삭제' }}</button>
@@ -325,7 +344,7 @@
                   </div>
                   <div class="flex items-center gap-2">
                     <!-- 신규 채팅창 추가 버튼 -->
-                    <button @click="createNewChat"
+                    <button @click="handleNewChatButtonClick"
                       class="relative p-2 hover:bg-gray-100 rounded-full transition-colors group" title="신규 채팅창 추가">
                       <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -423,11 +442,11 @@
                         class="mt-3 space-y-2">
                         <p class="text-xs text-gray-500 font-medium mb-2">선택된 동영상:</p>
                         <div v-for="video in message.selectedVideos" :key="video.id"
-                          class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                          <video :src="video.displayUrl" class="w-12 h-8 object-cover rounded"></video>
+                          class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                          <video :src="video.displayUrl" class="w-32 h-20 object-cover rounded flex-shrink-0"></video>
                           <div class="flex-1 min-w-0">
-                            <p class="text-xs font-medium text-gray-800 truncate">{{ video.title }}</p>
-                            <p class="text-xs text-gray-500">{{ video.date }}</p>
+                            <p class="text-sm font-medium text-gray-800 truncate">{{ video.title }}</p>
+                            <p class="text-xs text-gray-500 mt-1">{{ video.date }}</p>
                           </div>
                         </div>
                       </div>
@@ -438,19 +457,24 @@
                           검색 결과 ({{ message.clips.length }}개):
                         </p>
                         <div v-for="clip in message.clips" :key="clip.id"
-                          :class="message.role === 'assistant' ? 'flex items-center gap-2 p-2 bg-gray-50 rounded-xl transition-all duration-200 hover:bg-gray-100' : 'flex items-center gap-2 p-2 bg-green-600/80 rounded-xl transition-all duration-200 hover:bg-green-600'">
-                          <video :src="clip.url" class="w-12 h-8 object-cover rounded cursor-pointer" preload="metadata"
+                          :class="message.role === 'assistant' ? 'flex items-center gap-3 p-3 bg-gray-50 rounded-xl transition-all duration-200 hover:bg-gray-100' : 'flex items-center gap-3 p-3 bg-green-600/80 rounded-xl transition-all duration-200 hover:bg-green-600'">
+                          <video :src="clip.url" class="w-32 h-20 object-cover rounded cursor-pointer flex-shrink-0" preload="metadata"
                             @click.stop="zoomClip(clip)"
                             @error="(e) => console.warn('clip thumbnail error', e, clip.url)"
                             crossorigin="anonymous"></video>
                           <div class="flex-1 min-w-0">
                             <p
-                              :class="message.role === 'assistant' ? 'text-xs font-medium text-gray-800 truncate' : 'text-xs font-medium text-white truncate'">
+                              :class="message.role === 'assistant' ? 'text-sm font-medium text-gray-800 truncate' : 'text-sm font-medium text-white truncate'">
                               {{ clip.title }}</p>
                             <p
-                              :class="message.role === 'assistant' ? 'text-xs text-gray-500' : 'text-xs text-green-100'">
-                              {{
-                                clip.sourceVideo || clip.date }}</p>
+                              :class="message.role === 'assistant' ? 'text-xs text-gray-500 mt-1' : 'text-xs text-green-100 mt-1'">
+                              <span v-if="clip.start_time !== undefined && clip.end_time !== undefined">
+                                {{ formatTime(clip.start_time) }} - {{ formatTime(clip.end_time) }}
+                              </span>
+                              <span v-else>
+                                {{ clip.sourceVideo || clip.date }}
+                              </span>
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -572,6 +596,7 @@ const progressBarRefs = ref({}); // 비디오별 진행바 엘리먼트 참조
 const isDragging = ref(false);
 const draggedVideoId = ref(null);
 let draggingBarEl = null; // 현재 드래그 중인 진행바 엘리먼트
+const isDragOverUpload = ref(false); // 드래그 & 드롭 업로드 상태
 const chatSessions = ref([]);
 const currentChatIndex = ref(0);
 const searchInput = ref('');
@@ -670,6 +695,59 @@ function contextDelete() {
   }
   closeContextMenu();
   showDeletePopup.value = true; // reuse existing delete confirmation flow
+}
+
+async function contextRemoveSummary() {
+  if (selectedIds.value.length === 0) return;
+  closeContextMenu();
+  
+  const userId = localStorage.getItem("vss_user_id");
+  if (!userId) {
+    alert('로그인이 필요합니다.');
+    return;
+  }
+  
+  // 선택된 동영상의 dbId 가져오기
+  const videosToRemoveSummary = items.value
+    .filter(video => selectedIds.value.includes(video.id))
+    .map(video => video.dbId || video.id)
+    .filter(id => id != null);
+  
+  if (videosToRemoveSummary.length === 0) {
+    alert('요약 결과를 제거할 동영상을 찾을 수 없습니다.');
+    return;
+  }
+  
+  try {
+    const response = await fetch('http://localhost:8001/summaries', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        video_ids: videosToRemoveSummary,
+        user_id: userId
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: '알 수 없는 오류' }));
+      alert(`요약 결과 제거 실패: ${errorData.detail || '알 수 없는 오류'}`);
+      return;
+    }
+    
+    const data = await response.json();
+    if (data.success) {
+      alert(data.message || `${data.deleted_count || 0}개의 요약 결과가 제거되었습니다.`);
+    } else if (data.deleted_count === 0) {
+      alert('삭제할 요약 결과가 없습니다.');
+    } else {
+      alert('요약 결과 제거에 실패했습니다.');
+    }
+  } catch (error) {
+    console.error('요약 결과 제거 중 오류:', error);
+    alert(`요약 결과 제거 중 오류가 발생했습니다: ${error.message}`);
+  }
 }
 
 function handleGlobalClick(e) {
@@ -784,7 +862,8 @@ async function loadVideosFromStorage() {
         width: v.width || null,
         height: v.height || null,
         date: v.date || new Date().toISOString().slice(0, 10),
-        dbId: v.id // DB ID 저장
+        dbId: v.id, // DB ID 저장
+        videoId: v.video_id || null // VIA 서버의 video_id 저장 (요약된 경우 미디어 삭제용)
       }));
     }
   } catch (error) {
@@ -823,6 +902,38 @@ function persistToStorage() {
   }))));
 }
 
+// 드래그 & 드롭 업로드 핸들러
+function onDragOverUpload(e) {
+  e.preventDefault();
+  isDragOverUpload.value = true;
+}
+
+function onDragLeaveUpload(e) {
+  e.preventDefault();
+  // 자식 요소로 이동할 때는 드래그 상태 유지
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    isDragOverUpload.value = false;
+  }
+}
+
+async function onDropUpload(e) {
+  e.preventDefault();
+  isDragOverUpload.value = false;
+  
+  const files = Array.from(e.dataTransfer.files ?? []).filter((file) => {
+    if (!file.type.startsWith('video/')) {
+      alert('동영상 파일만 업로드할 수 있습니다.');
+      return false;
+    }
+    return true;
+  });
+
+  if (files.length === 0) return;
+  
+  // handleUpload와 동일한 로직 사용
+  await processUploadFiles(files);
+}
+
 async function handleUpload(e) {
   const files = Array.from(e.target.files ?? []).filter((file) => {
     if (!file.type.startsWith('video/')) {
@@ -833,6 +944,14 @@ async function handleUpload(e) {
   });
 
   if (files.length === 0) return;
+  
+  await processUploadFiles(files);
+  
+  if (e.target) e.target.value = '';
+}
+
+// 공통 업로드 처리 함수
+async function processUploadFiles(files) {
 
   // 사용자 ID 확인
   const userId = localStorage.getItem("vss_user_id");
@@ -853,7 +972,6 @@ async function handleUpload(e) {
         if (duplicateFiles.length > 0) {
           const duplicateNames = duplicateFiles.map(f => f.name).join(', ');
           alert(`이미 업로드된 동영상입니다: ${duplicateNames}`);
-          if (e.target) e.target.value = '';
           return;
         }
       }
@@ -917,10 +1035,9 @@ async function handleUpload(e) {
       if (uploadItem) {
         uploadItem.status = `실패: ${error.message}`;
       }
+      alert(`동영상 업로드 실패: ${error.message}`);
     }
   });
-
-  if (e.target) e.target.value = '';
 }
 
 function handleAddButtonClick() {
@@ -1016,7 +1133,16 @@ async function confirmDelete() {
   // 선택된 동영상 삭제
   const videosToDelete = items.value.filter(video => selectedIds.value.includes(video.id));
   
-  console.log('삭제할 동영상:', videosToDelete.map(v => ({ id: v.id, dbId: v.dbId, title: v.title })));
+  console.log('삭제할 동영상:', videosToDelete.map(v => ({ id: v.id, dbId: v.dbId, videoId: v.videoId, title: v.title })));
+  
+  // VIA 서버에서 미디어 삭제 (video_id가 있는 경우)
+  const mediaIdsToDelete = videosToDelete
+    .map(v => v.videoId)
+    .filter(id => id != null); // null이 아닌 것만 필터링
+  
+  if (mediaIdsToDelete.length > 0) {
+    await removeMediaFromServer(mediaIdsToDelete);
+  }
   
   // DB에서 삭제 (dbId가 있는 경우)
   if (userId) {
@@ -1177,6 +1303,27 @@ function createNewChat(videos = selectedVideos.value, signature) {
   });
 }
 
+function handleNewChatButtonClick() {
+  // 사이드바가 닫혀있으면 먼저 열기
+  if (!showSearchSidebar.value) {
+    showSearchSidebar.value = true;
+  }
+  
+  // 선택된 비디오가 있으면 그것으로, 없으면 빈 배열로 새 채팅방 생성
+  const selectionVideos = selectedVideos.value;
+  const selectionSignature = getSelectionSignature(selectionVideos);
+  
+  // 입력창 초기화
+  searchInput.value = '';
+  
+  // 새 채팅방 생성
+  createNewChat(selectionVideos, selectionSignature);
+  
+  nextTick(() => {
+    scrollToBottom();
+  });
+}
+
 function startEditChatName(index) {
   editingChatIndex.value = index;
   editingChatName.value = chatSessions.value[index].name || `채팅 ${index + 1}`;
@@ -1216,8 +1363,48 @@ function switchChat(index) {
   }
 }
 
-function deleteChat(index) {
+async function deleteChat(index) {
   if (chatSessions.value.length <= 1) return; // 마지막 채팅창은 삭제 불가
+
+  const chatToDelete = chatSessions.value[index];
+  
+  // 삭제할 채팅방의 모든 클립 URL 수집
+  const clipUrls = [];
+  if (chatToDelete.messages) {
+    chatToDelete.messages.forEach(message => {
+      if (message.clips && Array.isArray(message.clips)) {
+        message.clips.forEach(clip => {
+          if (clip.url && !clip.via_response) {
+            clipUrls.push(clip.url);
+          }
+        });
+      }
+    });
+  }
+  
+  // 클립이 있으면 삭제 요청
+  if (clipUrls.length > 0) {
+    try {
+      const response = await fetch('http://localhost:8001/delete-clips', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clip_urls: clipUrls
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`채팅방 삭제: ${data.deleted_count}개의 클립이 삭제되었습니다.`);
+      } else {
+        console.warn('클립 삭제 실패:', response.status);
+      }
+    } catch (error) {
+      console.error('클립 삭제 중 오류:', error);
+    }
+  }
 
   chatSessions.value.splice(index, 1);
 
@@ -1332,31 +1519,46 @@ async function handleSearch() {
     }
 
     const data = await response.json();
+    const clips_extracted = data.clips_extracted || false; // 클립 추출 여부
     const groupedClipItems = (data.clips || []).map(group => ({
       video: group.video,
       clips: Array.isArray(group.clips) ? group.clips : []
     }));
 
-    const flattenedClips = groupedClipItems.flatMap(group =>
-      group.clips.map(clip => ({
-        ...clip,
-        sourceVideo: group.video
-      }))
+    // 실제 URL이 있는 클립만 필터링 (via_response만 있는 것은 제외)
+    // 타임스탬프 간격이 0초인 클립도 제외
+    const validClips = groupedClipItems.flatMap(group =>
+      group.clips
+        .filter(clip => {
+          // url이 있고 via_response가 없는 것만
+          if (!clip.url || clip.via_response) return false;
+          // 타임스탬프 간격이 0초 이하인 클립 제외
+          if (clip.start_time !== undefined && clip.end_time !== undefined) {
+            if (clip.end_time - clip.start_time <= 0) return false;
+          }
+          return true;
+        })
+        .map(clip => ({
+          ...clip,
+          sourceVideo: group.video
+        }))
     );
 
-    if (flattenedClips.length === 0) {
+    if (!clips_extracted || validClips.length === 0) {
+      // 클립이 추출되지 않았을 경우
       currentChat.messages.push({
         role: 'assistant',
-        content: '클립이 추출되지 않았습니다.',
+        content: '해당하는 장면이 없습니다.',
         timestamp: getCurrentTime()
       });
       return;
     }
 
+    // 클립이 추출되었을 경우: 클립 동영상과 타임스탬프 표시
     currentChat.messages.push({
       role: 'assistant',
-      content: `${groupedClipItems.length}개의 동영상에서 ${flattenedClips.length}개의 클립을 추출했습니다.`,
-      clips: flattenedClips,
+      content: `${groupedClipItems.length}개의 동영상에서 ${validClips.length}개의 장면을 찾았습니다.`,
+      clips: validClips,
       groupedClips: groupedClipItems,
       timestamp: getCurrentTime()
     });
@@ -1590,6 +1792,35 @@ const allUploadsComplete = computed(() => {
          uploadProgress.value.every(u => u.progress === 100 || u.status === '완료' || u.status === '실패');
 });
 
+// 서버에서 미디어 삭제하는 함수
+async function removeMediaFromServer(mediaIds) {
+  if (!mediaIds || mediaIds.length === 0) return;
+
+  const VSS_API_URL = 'http://localhost:8001/remove-media';
+
+  try {
+    const response = await fetch(VSS_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ media_ids: mediaIds })
+    });
+
+    if (!response.ok) {
+      console.warn('서버 미디어 삭제 실패:', response.status);
+      return false;
+    }
+
+    const data = await response.json();
+    console.log('서버 미디어 삭제 성공:', data);
+    return true;
+  } catch (error) {
+    console.warn('서버 미디어 삭제 중 오류:', error);
+    return false;
+  }
+}
+
 // XMLHttpRequest를 사용한 업로드 함수 (진행률 추적)
 function uploadVideoWithProgress(file, userId, uploadId) {
   return new Promise((resolve, reject) => {
@@ -1597,6 +1828,9 @@ function uploadVideoWithProgress(file, userId, uploadId) {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('user_id', userId);
+
+    // 타임아웃 설정 (10분 = 600000ms, 큰 파일 업로드를 고려)
+    xhr.timeout = 600000; // 10분
 
     // 진행률 업데이트 (99%까지만 표시)
     xhr.upload.addEventListener('progress', (e) => {
@@ -1628,30 +1862,62 @@ function uploadVideoWithProgress(file, userId, uploadId) {
         } catch (e) {
           const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
           if (uploadItem) {
-            uploadItem.status = '실패';
+            uploadItem.status = '실패: 응답 파싱 오류';
+            uploadItem.progress = 0;
           }
           reject(new Error('응답 파싱 실패'));
         }
       } else {
         const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
         if (uploadItem) {
-          uploadItem.status = '실패';
+          uploadItem.status = `실패: HTTP ${xhr.status}`;
+          uploadItem.progress = 0;
         }
         reject(new Error(`업로드 실패: ${xhr.status}`));
       }
+    });
+
+    // 타임아웃 처리
+    xhr.addEventListener('timeout', () => {
+      const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
+      if (uploadItem) {
+        uploadItem.status = '실패: 타임아웃 (서버 응답 없음)';
+        uploadItem.progress = 0;
+      }
+      reject(new Error('업로드 타임아웃: 서버 응답이 없습니다.'));
     });
 
     // 에러 처리
     xhr.addEventListener('error', () => {
       const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
       if (uploadItem) {
-        uploadItem.status = '실패';
+        uploadItem.status = '실패: 네트워크 오류';
+        uploadItem.progress = 0;
       }
       reject(new Error('네트워크 오류'));
     });
 
-    xhr.open('POST', 'http://localhost:8001/upload-video');
-    xhr.send(formData);
+    // 중단(abort) 처리
+    xhr.addEventListener('abort', () => {
+      const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
+      if (uploadItem) {
+        uploadItem.status = '취소됨';
+        uploadItem.progress = 0;
+      }
+      reject(new Error('업로드가 취소되었습니다.'));
+    });
+
+    try {
+      xhr.open('POST', 'http://localhost:8001/upload-video');
+      xhr.send(formData);
+    } catch (error) {
+      const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
+      if (uploadItem) {
+        uploadItem.status = `실패: ${error.message}`;
+        uploadItem.progress = 0;
+      }
+      reject(error);
+    }
   });
 }
 
