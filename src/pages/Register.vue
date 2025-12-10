@@ -148,7 +148,7 @@
                 <span v-if="isSendingCode">전송 중...</span>
                 <span v-else-if="isEmailVerified">인증 완료</span>
                 <span v-else>인증 코드 전송</span>
-              </button>
+      </button>
             </div>
             <p v-if="email && !isValidEmail" class="mt-1 text-xs text-red-600">올바른 이메일 형식이 아닙니다.</p>
             <p v-if="isEmailVerified" class="mt-1 text-xs text-green-600 flex items-center gap-1">
@@ -191,10 +191,10 @@
               >
                 <span v-if="isVerifyingCode">확인 중...</span>
                 <span v-else>인증 확인</span>
-              </button>
+      </button>
             </div>
             <p v-if="verificationCode && verificationCode.length !== 6" class="mt-1 text-xs text-gray-500">6자리 인증 코드를 입력하세요.</p>
-          </div>
+    </div>
 
           <!-- 회원가입 버튼 -->
           <button
@@ -397,10 +397,10 @@ async function register() {
     
     // 성공 메시지 표시 후 폼 초기화 및 로그인 페이지로 이동
     setTimeout(() => {
-      id.value = "";
-      pw.value = "";
+    id.value = "";
+    pw.value = "";
       confirmPw.value = "";
-      email.value = "";
+    email.value = "";
       verificationCode.value = "";
       codeSent.value = false;
       isEmailVerified.value = false;

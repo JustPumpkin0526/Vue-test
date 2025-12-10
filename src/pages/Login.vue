@@ -152,7 +152,7 @@ async function login() {
       
       // 성공 메시지 표시 후 페이지 이동
       setTimeout(() => {
-        router.push("/search");
+      router.push("/search");
       }, 500);
     } else {
       errorMessage.value = res.data?.message || "가입되지 않았거나 비밀번호가 올바르지 않습니다.";
