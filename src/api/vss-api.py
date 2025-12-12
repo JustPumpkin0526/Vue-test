@@ -1360,14 +1360,39 @@ def get_db_connection():
 def ensure_db_connection():
     """전역 DB 연결이 없으면 다시 시도"""
     global conn, cursor
+    # 연결이 없거나 끊어진 경우 재연결 시도
+    need_reconnect = False
     if conn is None or cursor is None:
+        need_reconnect = True
+    else:
+        # 연결이 살아있는지 확인
         try:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        except (mariadb.Error, AttributeError):
+            need_reconnect = True
+            logger.warning("기존 DB 연결이 끊어졌습니다. 재연결을 시도합니다.")
+    
+    if need_reconnect:
+        try:
+            # 기존 연결 정리
+            if conn is not None:
+                try:
+                    db_pool.return_connection(conn)
+                except:
+                    pass
+            conn = None
+            cursor = None
+            
+            # 새 연결 생성
             conn = db_pool.get_connection()
             conn.autocommit = True
             cursor = conn.cursor()
             logger.info("✓ 데이터베이스 연결 성공 (재연결)")
         except Exception as e:
             logger.error(f"❌ 데이터베이스 연결 실패: {e}")
+            conn = None
+            cursor = None
             raise HTTPException(status_code=500, detail=f"데이터베이스 연결에 실패했습니다: {str(e)}")
 
 class DBConnectionContext:
@@ -1543,6 +1568,15 @@ def login(data: LoginRequest = Body(...)):
         username = data.username.strip()
         password = data.password
         
+        # DB 연결 확인 및 재연결 시도
+        try:
+            ensure_db_connection()
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"데이터베이스 연결 실패: {e}")
+            raise HTTPException(status_code=500, detail="데이터베이스 연결에 실패했습니다. 잠시 후 다시 시도해주세요.")
+        
         # DB 연결 확인
         try:
             cursor.execute(
@@ -1550,9 +1584,19 @@ def login(data: LoginRequest = Body(...)):
                 (username,)
             )
             row = cursor.fetchone()
-        except mariadb.Error as e:
+        except (mariadb.Error, AttributeError) as e:
             logger.error(f"데이터베이스 조회 오류: {e}")
-            raise HTTPException(status_code=500, detail="데이터베이스 오류가 발생했습니다.")
+            # 연결이 끊어진 경우 재연결 시도
+            try:
+                ensure_db_connection()
+                cursor.execute(
+                    "SELECT PW FROM vss_user WHERE ID = ?",
+                    (username,)
+                )
+                row = cursor.fetchone()
+            except Exception as retry_e:
+                logger.error(f"데이터베이스 재연결 및 조회 실패: {retry_e}")
+                raise HTTPException(status_code=500, detail="데이터베이스 오류가 발생했습니다.")
         
         if row is None:
             # ID가 없는 경우
