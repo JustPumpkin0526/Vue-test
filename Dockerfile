@@ -42,5 +42,5 @@ EXPOSE 8001
 
 # vss-api.py 모듈 실행
 # Railway의 PORT 환경 변수를 사용하되, 없으면 8001 사용
-# shell 형식 사용 (환경 변수 확장을 위해)
-CMD uvicorn vss-api:app --host 0.0.0.0 --port ${PORT:-8001}
+# 쉘 형식으로 실행하여 환경 변수 확장 가능
+CMD ["sh", "-c", "uvicorn vss-api:app --host 0.0.0.0 --port ${PORT:-8001}"]
