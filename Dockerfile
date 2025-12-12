@@ -52,4 +52,4 @@ EXPOSE 8001
 # vss-api.py 모듈 실행
 # Railway의 PORT 환경 변수를 사용 (Railway가 자동으로 설정)
 # Railway는 $PORT 환경 변수를 반드시 제공하므로 기본값 불필요
-CMD ["sh", "-c", "uvicorn vss-api:app --host 0.0.0.0 --port $PORT"]
+CMD ["uvicorn vss-api:app --host 0.0.0.0 --port $PORT"]
