@@ -36,10 +36,10 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # Railway API URL을 GitHub Secrets에 설정 필요
+          # API URL을 GitHub Secrets에 설정 필요
           # Settings → Secrets and variables → Actions → New repository secret
-          # 이름: RAILWAY_API_URL, 값: https://your-app.railway.app
-          VITE_API_BASE_URL: ${{ secrets.RAILWAY_API_URL || 'https://vssproject-production.up.railway.app/' }}
+          # 이름: VITE_API_BASE_URL, 값: https://your-api-domain.com
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'http://localhost:8001' }}
       
       - name: Setup Pages
         uses: actions/configure-pages@v4

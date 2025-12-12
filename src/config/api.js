@@ -7,7 +7,9 @@
  *   const response = await fetch(`${apiConfig.endpoints.videos}?user_id=...`);
  */
 
-// 환경 변수에서 API 기본 URL 가져오기 (없으면 기본값 사용)
+// 환경 변수에서 API 기본 URL 가져오기
+// Vercel 배포 시: Vercel 환경 변수에서 설정
+// 로컬 개발 시: .env.local 파일 또는 기본값 사용
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
 
 const apiConfig = {
