@@ -82,16 +82,23 @@ if os.getenv("CORS_ALLOWED_ORIGINS"):
 # 중복 제거
 allowed_origins = list(set(allowed_origins))
 
-# Railway 환경에서는 모든 origin 허용 (환경 변수로 제어 가능)
-# CORS_ALLOW_ALL=true 또는 ENVIRONMENT가 production이 아닌 경우 모든 origin 허용
-if os.getenv("CORS_ALLOW_ALL") == "true" or os.getenv("ENVIRONMENT") != "production":
+# Railway 환경에서는 기본적으로 모든 origin 허용 (개발/테스트 편의성)
+# CORS_RESTRICT=true로 명시적으로 설정하지 않는 한 모든 origin 허용
+# 이렇게 하면 Railway 환경에서 기본적으로 CORS 문제가 발생하지 않음
+cors_restrict = os.getenv("CORS_RESTRICT", "").lower() == "true"
+cors_allow_all = os.getenv("CORS_ALLOW_ALL", "").lower()
+
+# CORS_ALLOW_ALL이 명시적으로 false가 아니고, CORS_RESTRICT가 true가 아닌 경우 모든 origin 허용
+if cors_allow_all != "false" and not cors_restrict:
     cors_origins = ["*"]
     # allow_credentials=True일 때는 allow_origins=["*"]를 사용할 수 없으므로 False로 설정
     cors_allow_credentials = False
+    logger.info("CORS: 모든 origin 허용 모드 (Railway 기본 설정)")
 else:
     cors_origins = allowed_origins if allowed_origins else ["*"]
     # 특정 origin을 허용할 때는 credentials 허용 가능
     cors_allow_credentials = True
+    logger.info("CORS: 제한된 origin만 허용 모드")
 
 # CORS 설정 로깅 (디버깅용)
 logger.info(f"CORS 허용 도메인: {cors_origins}")
