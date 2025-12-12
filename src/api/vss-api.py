@@ -78,15 +78,15 @@ logger.info(f"Serving sample videos from: {sample_dir}")
 sample_file = sample_dir / "sample.mp4"
 if sample_file.exists():
     logger.info(f"Sample video file found: {sample_file}")
+    try:
+        app.mount("/sample", StaticFiles(directory=str(sample_dir)), name="sample")
+        logger.info(f"Successfully mounted /sample endpoint to {sample_dir}")
+    except Exception as e:
+        logger.error(f"Failed to mount /sample endpoint: {e}")
 else:
     logger.warning(f"Sample video file NOT found at: {sample_file}")
     logger.warning(f"Please ensure sample.mp4 exists in: {sample_dir}")
-
-try:
-    app.mount("/sample", StaticFiles(directory=str(sample_dir)), name="sample")
-    logger.info(f"Successfully mounted /sample endpoint to {sample_dir}")
-except Exception as e:
-    logger.error(f"Failed to mount /sample endpoint: {e}")
+    logger.warning("Sample video endpoint will not be available.")
 
 # ============================================================================
 # 환경 변수 및 설정

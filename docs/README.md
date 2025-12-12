@@ -6,29 +6,22 @@
 
 ### 배포 가이드
 
-1. **[RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md)**
-   - Railway를 사용한 백엔드 API 서버 배포 가이드
-   - 환경 변수 설정, 배포 단계, 문제 해결 방법 포함
-
-2. **[DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)**
+1. **[DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)**
    - Vue 애플리케이션 배포 가이드
    - Vercel, Netlify, GitHub Pages 등 다양한 배포 옵션
    - Nginx, Apache, Docker 배포 방법 포함
 
 ### 설정 가이드
 
-3. **[INTELLIVIX_SMTP_SETUP.md](./INTELLIVIX_SMTP_SETUP.md)**
+2. **[INTELLIVIX_SMTP_SETUP.md](./INTELLIVIX_SMTP_SETUP.md)**
    - @intellivix.ai 도메인용 SMTP 설정 가이드
    - Google Workspace, Microsoft 365, 자체 메일 서버 설정 방법
 
-4. **[SMTP_SETUP_GUIDE.md](./SMTP_SETUP_GUIDE.md)**
+3. **[SMTP_SETUP_GUIDE.md](./SMTP_SETUP_GUIDE.md)**
    - 일반적인 SMTP 설정 가이드
    - Gmail, Outlook, Naver, Daum 등 다양한 이메일 서비스 설정 방법
 
 ## 🔍 빠른 찾기
-
-### Railway로 API 배포하기
-→ [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md)
 
 ### 프론트엔드 배포하기
 → [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)

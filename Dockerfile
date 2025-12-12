@@ -26,13 +26,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 소스 코드 복사
 COPY src/api/ ./src/api/
 
+# 샘플 비디오 파일 복사 (선택사항)
+COPY src/assets/ ./src/assets/
+
 # .env 파일은 Railway 환경 변수로 관리되므로 복사하지 않음
 # Railway에서 환경 변수를 직접 설정하면 됩니다
 
 # 애플리케이션이 사용할 디렉토리 생성 및 권한 설정
 # USER 전환 전에 root 권한으로 디렉토리 생성
 RUN mkdir -p /app/src/api/clips /app/src/api/videos /app/src/api/tmp && \
-    chown -R appuser:appgroup /app/src/api/clips /app/src/api/videos /app/src/api/tmp
+    chown -R appuser:appgroup /app/src/api/clips /app/src/api/videos /app/src/api/tmp && \
+    chown -R appuser:appgroup /app/src/assets 2>/dev/null || true
 
 USER appuser:appgroup
 ENV PYTHONDONTWRITEBYTECODE=1
