@@ -86,16 +86,21 @@ allowed_origins = list(set(allowed_origins))
 # CORS_ALLOW_ALL=true 또는 ENVIRONMENT가 production이 아닌 경우 모든 origin 허용
 if os.getenv("CORS_ALLOW_ALL") == "true" or os.getenv("ENVIRONMENT") != "production":
     cors_origins = ["*"]
+    # allow_credentials=True일 때는 allow_origins=["*"]를 사용할 수 없으므로 False로 설정
+    cors_allow_credentials = False
 else:
     cors_origins = allowed_origins if allowed_origins else ["*"]
+    # 특정 origin을 허용할 때는 credentials 허용 가능
+    cors_allow_credentials = True
 
 # CORS 설정 로깅 (디버깅용)
 logger.info(f"CORS 허용 도메인: {cors_origins}")
+logger.info(f"CORS allow_credentials: {cors_allow_credentials}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_credentials=cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
