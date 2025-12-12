@@ -701,7 +701,7 @@ async function getCurrentUserVideoIds() {
   if (!userId) return new Set();
 
   try {
-    const response = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+    const response = await fetch(`${apiConfig.endpoints.getVideos}?user_id=${userId}`);
     if (!response.ok) {
       console.warn('동영상 목록 조회 실패');
       return new Set();
@@ -873,14 +873,14 @@ async function loadSummariesFromDB() {
 
       try {
         // 먼저 내부 DB ID로 vss_videos 테이블에서 VIDEO_ID (VIA 서버의 video_id) 조회
-        const videosResponse = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+        const videosResponse = await fetch(`${apiConfig.endpoints.getVideos}?user_id=${userId}`);
         if (videosResponse.ok) {
           const videosData = await videosResponse.json();
           if (videosData.success && videosData.videos) {
             const dbVideo = videosData.videos.find(v => v.id === dbInternalId);
             if (dbVideo && dbVideo.video_id) {
               // VIDEO_ID (VIA 서버의 video_id)로 요약 결과 조회
-              const response = await fetch(`http://localhost:8001/summaries/${dbVideo.video_id}?user_id=${userId}`);
+              const response = await fetch(`${apiConfig.getSummaryUrl(dbVideo.video_id)}?user_id=${userId}`);
               if (response.ok) {
                 const data = await response.json();
                 if (data.success && data.summary) {
@@ -1185,7 +1185,7 @@ async function onDrop(e) {
 
   // DB에서 중복 파일명 체크
   try {
-    const response = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+    const response = await fetch(`${apiConfig.endpoints.getVideos}?user_id=${userId}`);
     if (response.ok) {
       const data = await response.json();
       if (data.success && data.videos) {
@@ -1403,7 +1403,7 @@ async function onUpload(e) {
 
   // DB에서 중복 파일명 체크
   try {
-    const response = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+    const response = await fetch(`${apiConfig.endpoints.getVideos}?user_id=${userId}`);
     if (response.ok) {
       const data = await response.json();
       if (data.success && data.videos) {
@@ -1579,7 +1579,7 @@ async function restoreAndContinueInference(savedTask) {
 
 // 특정 인덱스부터 요약 계속 진행
 async function continueInferenceFromIndex(taskId, targetVideos, startIndex, totalCount, taskPrompt) {
-  const VSS_API_URL = 'http://localhost:8001/vss-summarize';
+  const VSS_API_URL = apiConfig.endpoints.summarize;
   
   // NaN 방지 헬퍼
   const safeNum = (val, fallback) => {
@@ -1629,7 +1629,7 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
     
     if (userId && videoObj.dbId) {
       try {
-        const videosResponse = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+        const videosResponse = await fetch(`${apiConfig.endpoints.getVideos}?user_id=${userId}`);
         if (videosResponse.ok) {
           const videosData = await videosResponse.json();
           if (videosData.success && videosData.videos) {
@@ -1747,7 +1747,7 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
           if (!dbInternalId) {
             // 파일명으로 DB에서 내부 ID 찾기
             try {
-              const videosResponse = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+              const videosResponse = await fetch(`${apiConfig.endpoints.getVideos}?user_id=${userId}`);
               if (videosResponse.ok) {
                 const videosData = await videosResponse.json();
                 if (videosData.success && videosData.videos) {
@@ -1767,7 +1767,7 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
           // 내부 ID로 vss_videos 테이블에서 VIDEO_ID 컬럼 (VIA 서버의 video_id) 가져오기
           if (dbInternalId) {
             try {
-              const videosResponse = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+              const videosResponse = await fetch(`${apiConfig.endpoints.getVideos}?user_id=${userId}`);
               if (videosResponse.ok) {
                 const videosData = await videosResponse.json();
                 if (videosData.success && videosData.videos) {
@@ -1783,7 +1783,7 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
           }
           
           if (dbVideoId) {
-            const saveResponse = await fetch('http://localhost:8001/save-summary', {
+            const saveResponse = await fetch(apiConfig.endpoints.saveSummary, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -1862,7 +1862,7 @@ async function runInference() {
     return;
   }
 
-  const VSS_API_URL = 'http://localhost:8001/vss-summarize';
+  const VSS_API_URL = apiConfig.endpoints.summarize;
 
   // 순차 처리 대상: 선택된 것이 있으면 선택 영상들, 없으면 전체
   const targetVideos = (selectedIndexes.value.length > 0)
@@ -2026,7 +2026,7 @@ async function onAskConfirmed(q) {
     query: q
   });
   
-  const VSS_API_URL = 'http://localhost:8001/vss-query';
+  const VSS_API_URL = apiConfig.endpoints.query;
   const formData = new FormData();
 
   const safeNum = (val, fallback) => {
@@ -2244,7 +2244,7 @@ function uploadVideoWithProgress(file, userId, uploadId) {
       reject(new Error('네트워크 오류'));
     });
 
-    xhr.open('POST', 'http://localhost:8001/upload-video');
+    xhr.open('POST', apiConfig.endpoints.uploadVideo);
     xhr.send(formData);
   });
 }

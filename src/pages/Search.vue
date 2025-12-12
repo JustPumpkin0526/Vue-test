@@ -578,6 +578,7 @@
 import { ref, onMounted, onActivated, computed, nextTick, watch, onBeforeUnmount } from "vue";
 import { useRouter } from 'vue-router';
 import { useSummaryVideoStore } from '@/stores/summaryVideoStore';
+import apiConfig from '@/config/api';
 
 const isZoomed = ref(false);
 const zoomedVideo = ref(null);
@@ -719,7 +720,7 @@ async function contextRemoveSummary() {
   }
   
   try {
-    const response = await fetch('http://localhost:8001/summaries', {
+    const response = await fetch(apiConfig.endpoints.getUserSummaries, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
@@ -844,7 +845,7 @@ async function loadVideosFromStorage() {
 
   // DB에서 동영상 목록 가져오기
   try {
-    const response = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+    const response = await fetch(`${apiConfig.endpoints.getVideos}?user_id=${userId}`);
     if (!response.ok) {
       throw new Error('동영상 목록 조회 실패');
     }
@@ -962,7 +963,7 @@ async function processUploadFiles(files) {
 
   // DB에서 중복 파일명 체크
   try {
-    const response = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+    const response = await fetch(`${apiConfig.endpoints.getVideos}?user_id=${userId}`);
     if (response.ok) {
       const data = await response.json();
       if (data.success && data.videos) {
@@ -1156,7 +1157,7 @@ async function deleteClipsForVideos(videosToDelete) {
   // 클립이 있으면 삭제 요청
   if (clipUrls.length > 0) {
     try {
-      const response = await fetch('http://localhost:8001/delete-clips', {
+      const response = await fetch(apiConfig.endpoints.deleteClips, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1206,7 +1207,7 @@ async function confirmDelete() {
       .map(async (video) => {
         try {
           console.log(`DB 삭제 시도: video_id=${video.dbId}, user_id=${userId}`);
-          const response = await fetch(`http://localhost:8001/videos/${video.dbId}?user_id=${userId}`, {
+          const response = await fetch(`${apiConfig.getVideoUrl(video.dbId)}?user_id=${userId}`, {
             method: 'DELETE'
           });
           
@@ -1440,7 +1441,7 @@ async function deleteChat(index) {
   // 클립이 있으면 삭제 요청
   if (clipUrls.length > 0) {
     try {
-      const response = await fetch('http://localhost:8001/delete-clips', {
+      const response = await fetch(apiConfig.endpoints.deleteClips, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1851,7 +1852,7 @@ const allUploadsComplete = computed(() => {
 async function removeMediaFromServer(mediaIds) {
   if (!mediaIds || mediaIds.length === 0) return;
 
-  const VSS_API_URL = 'http://localhost:8001/remove-media';
+  const VSS_API_URL = apiConfig.endpoints.removeMedia;
 
   try {
     const response = await fetch(VSS_API_URL, {
@@ -1963,7 +1964,7 @@ function uploadVideoWithProgress(file, userId, uploadId) {
     });
 
     try {
-      xhr.open('POST', 'http://localhost:8001/upload-video');
+      xhr.open('POST', apiConfig.endpoints.uploadVideo);
       xhr.send(formData);
     } catch (error) {
       const uploadItem = uploadProgress.value.find(u => u.id === uploadId);

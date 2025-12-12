@@ -228,6 +228,7 @@
 import { ref, computed, onMounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import axios from "axios";
+import apiConfig from '@/config/api';
 
 const router = useRouter();
 const route = useRoute();

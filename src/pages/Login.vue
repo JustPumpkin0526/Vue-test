@@ -116,6 +116,7 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import axios from "axios";
+import apiConfig from '@/config/api';
 
 const router = useRouter();
 const id = ref("");
