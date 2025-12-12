@@ -1,0 +1,15 @@
+# Nixpacks 설정 (Dockerfile 대신 사용하는 경우)
+# Railway가 자동으로 감지하여 사용합니다
+
+[phases.setup]
+nixPkgs = ["python311", "ffmpeg"]
+
+[phases.install]
+cmds = [
+  "pip install --upgrade pip",
+  "pip install -r requirements.txt"
+]
+
+[start]
+cmd = "cd src/api && uvicorn vss-api:app --host 0.0.0.0 --port $PORT"
+
