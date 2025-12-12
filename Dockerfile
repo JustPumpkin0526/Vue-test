@@ -8,12 +8,14 @@ RUN groupadd -g "${GID}" appgroup && \
 
 WORKDIR /app
 
-# 시스템 패키지 설치 (FFmpeg 등 MoviePy 의존성)
+# 시스템 패키지 설치 (FFmpeg, MariaDB Connector/C 등)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ffmpeg \
     libsm6 \
     libxext6 \
+    default-libmysqlclient-dev \
+    build-essential \
     && rm -rf /var/lib/apt/lists/* && \
     pip install --upgrade pip
 
