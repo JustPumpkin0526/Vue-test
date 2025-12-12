@@ -24,7 +24,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 소스 코드 복사
-COPY src/api/ ./src/api/
+COPY src/server/ ./src/server/
 
 # 샘플 비디오 파일 복사 (선택사항)
 COPY src/assets/ ./src/assets/
@@ -34,16 +34,16 @@ COPY src/assets/ ./src/assets/
 
 # 애플리케이션이 사용할 디렉토리 생성 및 권한 설정
 # USER 전환 전에 root 권한으로 디렉토리 생성
-RUN mkdir -p /app/src/api/clips /app/src/api/videos /app/src/api/tmp && \
-    chown -R appuser:appgroup /app/src/api/clips /app/src/api/videos /app/src/api/tmp && \
+RUN mkdir -p /app/src/server/clips /app/src/server/videos /app/src/server/tmp && \
+    chown -R appuser:appgroup /app/src/server/clips /app/src/server/videos /app/src/server/tmp && \
     chown -R appuser:appgroup /app/src/assets 2>/dev/null || true
 
 USER appuser:appgroup
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# 작업 디렉토리를 src/api로 변경
-WORKDIR /app/src/api
+# 작업 디렉토리를 src/server로 변경
+WORKDIR /app/src/server
 
 # vss-api.py 모듈 실행
 # Railway의 PORT 환경 변수를 사용 (Railway가 자동으로 설정)

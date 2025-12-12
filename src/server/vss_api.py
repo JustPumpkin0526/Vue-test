@@ -36,7 +36,7 @@ from moviepy.video.io.VideoFileClip import VideoFileClip
 try:
     from dotenv import load_dotenv
     # 현재 스크립트 위치 기준으로 .env 파일 찾기
-    env_path = Path(__file__).parent.parent.parent / ".env"  # src/api/ -> src/ -> 프로젝트 루트
+    env_path = Path(__file__).parent.parent.parent / ".env"  # src/server/ -> src/ -> 프로젝트 루트
     if env_path.exists():
         load_dotenv(env_path)
         logger.info(f".env 파일을 로드했습니다: {env_path}")
@@ -140,7 +140,7 @@ except Exception as e:
     logger.error(f"❌ 동영상 디렉토리 마운트 실패: {e}")
 
 # 샘플 동영상 파일 서빙
-current_dir = Path(__file__).parent  # src/api/
+current_dir = Path(__file__).parent  # src/server/
 sample_dir = current_dir.parent / "assets" / "sample"
 sample_dir = sample_dir.resolve()  # 절대 경로로 변환
 # 디렉토리는 Dockerfile에서 생성되거나 startup 이벤트에서 생성

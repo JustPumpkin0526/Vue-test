@@ -11,5 +11,5 @@ cmds = [
 ]
 
 [start]
-cmd = "cd src/api && uvicorn vss-api:app --host 0.0.0.0 --port $PORT"
+cmd = "cd src/server && uvicorn vss_api:app --host 0.0.0.0 --port $PORT"
 

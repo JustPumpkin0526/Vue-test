@@ -12,9 +12,9 @@ services:
       - .env
     volumes:
       # 동영상, 클립, 임시 파일을 호스트에 저장
-      - ./src/api/videos:/app/src/api/videos
-      - ./src/api/clips:/app/src/api/clips
-      - ./src/api/tmp:/app/src/api/tmp
+      - ./src/server/videos:/app/src/server/videos
+      - ./src/server/clips:/app/src/server/clips
+      - ./src/server/tmp:/app/src/server/tmp
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
