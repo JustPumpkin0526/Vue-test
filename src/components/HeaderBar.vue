@@ -1,5 +1,5 @@
 <template>
-  <header class="w-full border-b bg-gray-50">
+  <header class="w-full h-[65px] border-b bg-gray-50">
     <div class="px-4 py-3 flex items-center justify-between">
       <div class="flex items-center gap-3 cursor-pointer" @click="goToVideoList">
         <img :src="logoUrl" alt="Intellivix Logo" class="h-8 w-auto object-contain" />

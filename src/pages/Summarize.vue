@@ -477,6 +477,7 @@ import { useSettingStore } from '@/stores/settingStore';
 import { marked } from 'marked';
 import Setting from '@/pages/Setting.vue';
 import settingIcon from '@/assets/icons/setting.png';
+import apiConfig from '@/config/api';
 
 const selectedIndexes = ref([]); // 선택된 동영상 id 배열
 const prompt = ref("");
@@ -757,7 +758,8 @@ onMounted(async () => {
   // 먼저 localStorage에서 상태 복원 시도
   const restored = restoreStateFromLocalStorage();
 
-  const video_api_url = "http://localhost:8001/sample/sample.mp4"
+  // API 설정에서 기본 URL을 가져와서 샘플 동영상 경로 생성 (외부 접속 지원)
+  const video_api_url = `${apiConfig.baseURL}/sample/sample.mp4`;
 
   // 샘플 동영상 경로 초기화
   sampleVideoPath.value = video_api_url;

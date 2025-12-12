@@ -73,8 +73,8 @@ try:
 except Exception as e:
     logger.error(f"Failed to mount /sample endpoint: {e}")
 
-# VIA 서버 주소
-VIA_SERVER_URL = "http://172.16.7.64:8101"  # 환경에 맞게 수정
+# VIA 서버 주소 (환경 변수에서 가져오기)
+VIA_SERVER_URL = os.getenv("VIA_SERVER_URL", "http://172.16.7.64:8101")
 
 # Ollama 설정
 # Ollama 서버 주소 (기본값: http://localhost:11434)
@@ -522,6 +522,20 @@ async def generate_clips(
     if not upload_list:
         raise HTTPException(status_code=400, detail="No file provided")
 
+    # 고정카메라_칼.mp4 파일만 처리하도록 필터링
+    filtered_upload_list = []
+    for upfile in upload_list:
+        filename = upfile.filename or ""
+        if filename == "고정카메라_칼.mp4":
+            filtered_upload_list.append(upfile)
+        else:
+            logger.warning(f"파일명이 '고정카메라_칼.mp4'가 아니어서 건너뜁니다: {filename}")
+    
+    if not filtered_upload_list:
+        raise HTTPException(status_code=400, detail="Only '고정카메라_칼.mp4' file is allowed")
+    
+    upload_list = filtered_upload_list
+
     # Ensure tmp directory exists
     os.makedirs("./tmp", exist_ok=True)
 
@@ -621,15 +635,15 @@ async def generate_clips(
             if not has_stored_summary:
                 result = await vss_client.summarize_video(
                     video_id,
-                    "Analyze the video and detect any threatening behavior, antisocial actions, or criminal activities. Identify events such as violence, aggression, property damage, theft, weapon-related actions, or any safety-risk situations. For each detected event, provide a clear description and output the start and end timestamps in seconds. Use the format: start_time - end_time - event_description.",
+                    "You are a crime CCTV detection system. Please analyze and explain various crimes, including criminal activity, weapon possession, and escape attempts. Please also output timestamps in the form of start and end times.",
                     "You will be given captions from sequential clips of a video. Aggregate captions in the format start_time:end_time:caption based on whether captions are related to one another or create a continuous scene.",
                     "Based on the available information, generate a summary that captures the important events in the video. The summary should be organized chronologically and in logical sections. This should be a concise, yet descriptive summary of all the important events. The format should be intuitive and easy for a user to read and understand what happened. Format the output in Markdown so it can be displayed nicely. Timestamps are in seconds so please format them as SS.SSS",
                     chunk_duration,
                     model,
-                    chunk_duration // 4,
+                    chunk_duration // 3,
                     0,
                     0,
-                    80,
+                    100,
                     1.0,
                     0.4,
                     512,
@@ -682,12 +696,12 @@ async def generate_clips(
                 # query_video 파라미터 설정
                 query_chunk_size = chunk_duration  # 요약에 사용한 chunk_duration과 동일하게
                 query_temperature = 0.3
-                query_seed = 42
-                query_max_tokens = 1024  # VIA 서버는 최대 1024까지만 허용
+                query_seed = 1
+                query_max_tokens = 512  # VIA 서버는 최대 1024까지만 허용
                 query_top_p = 1
-                query_top_k = 80
+                query_top_k = 100
 
-                prompt += " 장면의 시작 타임스탬프와 종료 타임스탬프를 추출하여 출력해주세요. 타임스탬프 형식은 초 단위(예: 10.5, 120.3) 또는 분:초 형식(예: 1:30, 2:45)일 수 있습니다. 타임스탬프만 출력하고 다른 설명은 포함하지 마세요."
+                prompt += "이에 해당하는 장면의 시작 시간과 끝 시간의 타임스탬프를 출력해주세요. 타임스탬프만 출력하고 다른 설명은 포함하지 말아야 합니다."
                 
                 # VIA 서버로 질문 전달
                 query_result = await vss_client.query_video(
@@ -1028,6 +1042,8 @@ async def vss_query(
         video_id = await vss_client.upload_video(file_path)
     elif not video_id:
         raise HTTPException(status_code=400, detail="video_id 또는 file 중 하나는 필요합니다.")
+
+    query += " 이에 해당하는 장면의 시작 시간과 끝 시간의 타임스탬프를 출력해주세요. "
         
     result = await vss_client.query_video(video_id, model, chunk_size, temperature, seed, max_new_tokens, top_p, top_k, query)
 
@@ -1108,14 +1124,14 @@ class ConnectionPool:
             with self.lock:
                 self.created_connections -= 1
 
-# DB 커넥션 풀 초기화
+# DB 커넥션 풀 초기화 (환경 변수에서 가져오기)
 db_pool = ConnectionPool(
     max_connections=20,  # 최대 20개 동시 연결
-    user="root",
-    password="pass0001!",
-    host="172.16.15.69",  # 원격 MariaDB 서버 IP
-    port=3306,
-    database="vss"
+    user=os.getenv("DB_USER", "root"),
+    password=os.getenv("DB_PASSWORD", "pass0001!"),
+    host=os.getenv("DB_HOST", "172.16.15.69"),
+    port=int(os.getenv("DB_PORT", "3306")),
+    database=os.getenv("DB_NAME", "vss")
 )
 
 # 하위 호환성을 위한 전역 연결 (점진적 마이그레이션용)

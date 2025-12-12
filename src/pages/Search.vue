@@ -1126,6 +1126,58 @@ function unzoomVideo() {
   });
 }
 
+// 동영상 삭제 시 관련 클립 찾기 및 삭제
+async function deleteClipsForVideos(videosToDelete) {
+  const clipUrls = [];
+  const videoTitles = new Set(videosToDelete.map(v => v.title));
+  const videoIds = new Set(videosToDelete.map(v => v.id));
+  
+  // 모든 채팅방의 메시지에서 삭제될 동영상과 관련된 클립 찾기
+  chatSessions.value.forEach(chat => {
+    if (chat.messages) {
+      chat.messages.forEach(message => {
+        if (message.clips && Array.isArray(message.clips)) {
+          message.clips.forEach(clip => {
+            // sourceVideo나 title로 매칭
+            const isRelated = 
+              (clip.sourceVideo && videoTitles.has(clip.sourceVideo)) ||
+              (clip.video && videoTitles.has(clip.video)) ||
+              (message.selectedVideos && message.selectedVideos.some(v => videoIds.has(v.id)));
+            
+            if (isRelated && clip.url && !clip.via_response) {
+              clipUrls.push(clip.url);
+            }
+          });
+        }
+      });
+    }
+  });
+  
+  // 클립이 있으면 삭제 요청
+  if (clipUrls.length > 0) {
+    try {
+      const response = await fetch('http://localhost:8001/delete-clips', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clip_urls: clipUrls
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`동영상 삭제: ${data.deleted_count}개의 관련 클립이 삭제되었습니다.`);
+      } else {
+        console.warn('클립 삭제 실패:', response.status);
+      }
+    } catch (error) {
+      console.error('클립 삭제 중 오류:', error);
+    }
+  }
+}
+
 async function confirmDelete() {
   // 사용자 ID 확인
   const userId = localStorage.getItem("vss_user_id");
@@ -1134,6 +1186,9 @@ async function confirmDelete() {
   const videosToDelete = items.value.filter(video => selectedIds.value.includes(video.id));
   
   console.log('삭제할 동영상:', videosToDelete.map(v => ({ id: v.id, dbId: v.dbId, videoId: v.videoId, title: v.title })));
+  
+  // 동영상 삭제 전에 관련 클립 삭제
+  await deleteClipsForVideos(videosToDelete);
   
   // VIA 서버에서 미디어 삭제 (video_id가 있는 경우)
   const mediaIdsToDelete = videosToDelete
@@ -1318,7 +1373,7 @@ function handleNewChatButtonClick() {
   
   // 새 채팅방 생성
   createNewChat(selectionVideos, selectionSignature);
-  
+
   nextTick(() => {
     scrollToBottom();
   });

@@ -238,7 +238,7 @@
             <div class="ml-auto">
               <input v-model.number="settingStore.SMAX_TOKENS" type="number" min="1" max="10240" step="1"
                 @input="clampValue('SMAX_TOKENS', 10240, 1)"
-                class="border-2 border-gray-300 w-28 text-center" />
+              class="border-2 border-gray-300 w-28 text-center" />
               <button class="border-2 border-gray-300 w-7" @click="resetSMAX_TOKENS">↺</button>
             </div>
           </div>
@@ -314,7 +314,7 @@
             <div class="ml-auto">
               <input v-model.number="settingStore.C_MAX_TOKENS" type="number" min="1" max="10240" step="1"
                 @input="clampValue('C_MAX_TOKENS', 10240, 1)"
-                class="border-2 border-gray-300 w-28 text-center" />
+              class="border-2 border-gray-300 w-28 text-center" />
               <button class="border-2 border-gray-300 w-7" @click="resetC_MAX_TOKENS">↺</button>
             </div>
           </div>
@@ -390,7 +390,7 @@
             <div class="ml-auto">
               <input v-model.number="settingStore.A_MAX_TOKENS" type="number" min="1" max="10240" step="1"
                 @input="clampValue('A_MAX_TOKENS', 10240, 1)"
-                class="border-2 border-gray-300 w-28 text-center" />
+              class="border-2 border-gray-300 w-28 text-center" />
               <button class="border-2 border-gray-300 w-7" @click="resetA_MAX_TOKENS">↺</button>
             </div>
           </div>

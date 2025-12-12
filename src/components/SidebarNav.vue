@@ -1,5 +1,5 @@
 <template>
-  <aside :class="[collapsed ? 'w-[105px]' : 'w-64', ' h-[95.65vh] shrink-0 border-r bg-gray-100 p-6 flex flex-col justify-between relative transition-all duration-200']">
+  <aside :class="[collapsed ? 'w-[105px]' : 'w-64', ' h-[95vh] shrink-0 border-r bg-gray-100 p-6 flex flex-col justify-between relative transition-all duration-200']">
     <nav class="flex flex-col flex-1">
       <RouterLink
         to="/search"
