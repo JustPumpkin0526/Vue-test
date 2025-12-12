@@ -45,11 +45,7 @@ ENV PYTHONUNBUFFERED=1
 # 작업 디렉토리를 src/api로 변경
 WORKDIR /app/src/api
 
-# Railway는 PORT 환경 변수를 제공하므로 이를 사용
-# EXPOSE는 동적 포트를 지원하지 않으므로 범위로 지정
-EXPOSE 8001
-
 # vss-api.py 모듈 실행
 # Railway의 PORT 환경 변수를 사용 (Railway가 자동으로 설정)
 # Railway는 $PORT 환경 변수를 반드시 제공하므로 기본값 불필요
-CMD ["uvicorn vss-api:app --host 0.0.0.0 --port $PORT"]
+CMD ["sh", "-c", "uvicorn vss_api:app --host 0.0.0.0 --port $PORT"]
