@@ -42,6 +42,7 @@ const apiConfig = {
     // 기타
     getRecommendedChunkSize: `${API_BASE_URL}/get-recommended-chunk-size`,
     removeMedia: `${API_BASE_URL}/remove-media`,
+    deleteClips: `${API_BASE_URL}/delete-clips`,
   },
   
   // 헬퍼 함수

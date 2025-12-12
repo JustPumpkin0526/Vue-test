@@ -309,7 +309,7 @@ async function sendVerificationCode() {
   successMessage.value = "";
 
   try {
-    const res = await axios.post("http://localhost:8001/send-reset-password-code", {
+    const res = await axios.post(apiConfig.endpoints.sendResetPasswordCode, {
       username: id.value.trim(),
       email: email.value.trim()
     });
@@ -351,7 +351,7 @@ async function verifyEmailCode() {
   successMessage.value = "";
 
   try {
-    const res = await axios.post("http://localhost:8001/verify-reset-password-code", {
+    const res = await axios.post(apiConfig.endpoints.verifyResetPasswordCode, {
       username: id.value.trim(),
       email: email.value.trim(),
       code: verificationCode.value.trim()
@@ -398,7 +398,7 @@ async function resetPassword() {
   successMessage.value = "";
 
   try {
-    const res = await axios.post("http://localhost:8001/reset-password", {
+    const res = await axios.post(apiConfig.endpoints.resetPassword, {
       username: id.value.trim(),
       email: email.value.trim(),
       verification_code: verificationCode.value.trim(),

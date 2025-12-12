@@ -561,7 +561,7 @@ async function RecommendChunkSize(videoElement) {
 async function fetchRecommendedChunkSize(videoLength) {
   if (!videoLength || !isFinite(videoLength)) return null;
 
-  const VSS_API_URL = "http://localhost:8001/get-recommended-chunk-size"
+  const VSS_API_URL = apiConfig.endpoints.getRecommendedChunkSize
 
   try {
     const response = await fetch(VSS_API_URL, {

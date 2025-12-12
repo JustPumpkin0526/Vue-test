@@ -1564,7 +1564,7 @@ async function handleSearch() {
       formData.append('video_ids', JSON.stringify(videoIdMap));
     }
 
-    const response = await fetch('http://localhost:8001/generate-clips', {
+    const response = await fetch(apiConfig.endpoints.generateClips, {
       method: 'POST',
       body: formData
     });

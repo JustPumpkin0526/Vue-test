@@ -140,7 +140,7 @@ async function login() {
   successMessage.value = "";
 
   try {
-    const res = await axios.post("http://localhost:8001/login", {
+    const res = await axios.post(apiConfig.endpoints.login, {
       username: id.value.trim(),
       password: pw.value
     });
