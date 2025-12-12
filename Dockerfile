@@ -24,8 +24,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 소스 코드 복사
 COPY src/api/ ./src/api/
 
-# .env 파일 복사 (선택사항, 없어도 됨)
-COPY .env .env 2>/dev/null || true
+# .env 파일은 Railway 환경 변수로 관리되므로 복사하지 않음
+# Railway에서 환경 변수를 직접 설정하면 됩니다
 
 USER appuser:appgroup
 ENV PYTHONDONTWRITEBYTECODE=1

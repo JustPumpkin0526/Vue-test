@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  vss-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vss-api
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    volumes:
+      # 동영상, 클립, 임시 파일을 호스트에 저장
+      - ./src/api/videos:/app/src/api/videos
+      - ./src/api/clips:/app/src/api/clips
+      - ./src/api/tmp:/app/src/api/tmp
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - vss-network
+    # 리소스 제한 (선택사항)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '2'
+    #       memory: 2G
+    #     reservations:
+    #       cpus: '1'
+    #       memory: 1G
+
+networks:
+  vss-network:
+    driver: bridge
+
