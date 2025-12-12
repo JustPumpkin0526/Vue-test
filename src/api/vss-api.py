@@ -57,14 +57,23 @@ app = FastAPI()
 # 정적 파일 디렉토리 설정
 # ============================================================================
 # 클립 파일 서빙
-# 디렉토리는 Dockerfile에서 생성되거나 startup 이벤트에서 생성
-# 모듈 레벨에서는 생성하지 않고, startup 이벤트에서 생성
+# 모듈 레벨에서 디렉토리를 먼저 생성하여 마운트 실패 방지
 clips_dir = Path("./clips")
-app.mount("/clips", StaticFiles(directory=str(clips_dir.resolve())), name="clips")
+try:
+    clips_dir.mkdir(exist_ok=True)
+    app.mount("/clips", StaticFiles(directory=str(clips_dir.resolve())), name="clips")
+    logger.info(f"✓ 클립 디렉토리 마운트 완료: {clips_dir.resolve()}")
+except Exception as e:
+    logger.error(f"❌ 클립 디렉토리 마운트 실패: {e}")
 
 # 업로드된 동영상 파일 서빙 (API 엔드포인트와 충돌 방지)
 videos_dir = Path("./videos")
-app.mount("/video-files", StaticFiles(directory=str(videos_dir.resolve())), name="video-files")
+try:
+    videos_dir.mkdir(exist_ok=True)
+    app.mount("/video-files", StaticFiles(directory=str(videos_dir.resolve())), name="video-files")
+    logger.info(f"✓ 동영상 디렉토리 마운트 완료: {videos_dir.resolve()}")
+except Exception as e:
+    logger.error(f"❌ 동영상 디렉토리 마운트 실패: {e}")
 
 # 샘플 동영상 파일 서빙
 current_dir = Path(__file__).parent  # src/api/
@@ -1256,11 +1265,20 @@ class ConnectionPool:
         self.lock = threading.Lock()
         self.created_connections = 0
         
-        # 초기 연결 생성
-        for _ in range(min(3, max_connections)):  # 최소 3개 연결 미리 생성
-            conn = self._create_connection()
-            self.pool.put(conn)
-            self.created_connections += 1
+        # 초기 연결 생성 (실패해도 애플리케이션 시작은 계속)
+        # Railway 등에서 DB 연결 정보가 없을 수 있으므로 예외 처리
+        try:
+            for _ in range(min(3, max_connections)):  # 최소 3개 연결 미리 생성
+                try:
+                    conn = self._create_connection()
+                    self.pool.put(conn)
+                    self.created_connections += 1
+                except Exception as e:
+                    logger.warning(f"초기 DB 연결 생성 실패 (무시됨): {e}")
+                    break  # 하나라도 실패하면 중단
+        except Exception as e:
+            logger.warning(f"ConnectionPool 초기화 중 오류 (무시됨): {e}")
+            logger.warning("첫 요청 시 연결을 다시 시도합니다.")
     
     def _create_connection(self):
         """새 DB 연결 생성"""
