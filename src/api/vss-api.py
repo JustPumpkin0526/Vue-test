@@ -462,6 +462,32 @@ async def get_recommended_chunk_size(video_length):
 class RecommendedChunkSizeRequest(BaseModel):
     video_length: float
 
+# ============================================================================
+# 헬스체크 엔드포인트 (Railway 헬스체크용)
+# ============================================================================
+@app.get("/")
+async def root():
+    """루트 엔드포인트 - Railway 헬스체크용"""
+    return {"status": "ok", "message": "VSS API is running"}
+
+@app.get("/health")
+async def health_check():
+    """헬스체크 엔드포인트"""
+    try:
+        # 데이터베이스 연결 확인
+        test_conn = db_pool.get_connection(timeout=2)
+        test_conn.ping()
+        db_pool.return_connection(test_conn)
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"disconnected: {str(e)}"
+    
+    return {
+        "status": "ok",
+        "database": db_status,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/get-recommended-chunk-size")
 async def get_recommended_chunk_size_endpoint(request: RecommendedChunkSizeRequest):
     """
