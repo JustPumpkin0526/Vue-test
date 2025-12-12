@@ -1291,14 +1291,38 @@ db_pool = ConnectionPool(
 # ============================================================================
 # 전역 데이터베이스 연결 (하위 호환성을 위한 점진적 마이그레이션용)
 # ============================================================================
-# autocommit 활성화로 커밋 오버헤드 감소
-conn = db_pool.get_connection()
-conn.autocommit = True
-cursor = conn.cursor()
+# 모듈 레벨에서 연결을 시도하되, 실패해도 애플리케이션 시작은 계속 진행
+# 실제 사용 시점에 연결을 다시 시도하도록 함
+conn = None
+cursor = None
+
+try:
+    conn = db_pool.get_connection()
+    conn.autocommit = True
+    cursor = conn.cursor()
+    logger.info("✓ 데이터베이스 연결 성공 (전역 연결)")
+except Exception as e:
+    logger.warning(f"⚠️ 전역 데이터베이스 연결 실패 (시작 시점): {e}")
+    logger.warning("⚠️ 첫 요청 시 연결을 다시 시도합니다.")
+    conn = None
+    cursor = None
 
 def get_db_connection():
     """DB 연결 가져오기 (컨텍스트 매니저)"""
     return DBConnectionContext()
+
+def ensure_db_connection():
+    """전역 DB 연결이 없으면 다시 시도"""
+    global conn, cursor
+    if conn is None or cursor is None:
+        try:
+            conn = db_pool.get_connection()
+            conn.autocommit = True
+            cursor = conn.cursor()
+            logger.info("✓ 데이터베이스 연결 성공 (재연결)")
+        except Exception as e:
+            logger.error(f"❌ 데이터베이스 연결 실패: {e}")
+            raise HTTPException(status_code=500, detail=f"데이터베이스 연결에 실패했습니다: {str(e)}")
 
 class DBConnectionContext:
     """DB 연결 컨텍스트 매니저"""
@@ -2847,8 +2871,21 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """애플리케이션 시작 시 aiohttp 세션 생성"""
+    """애플리케이션 시작 시 aiohttp 세션 생성 및 DB 연결 확인"""
     await get_session()
+    
+    # 데이터베이스 연결 확인 (실패해도 애플리케이션은 계속 시작)
+    global conn, cursor
+    if conn is None or cursor is None:
+        try:
+            conn = db_pool.get_connection()
+            conn.autocommit = True
+            cursor = conn.cursor()
+            logger.info("✓ 데이터베이스 연결 성공 (startup)")
+        except Exception as e:
+            logger.warning(f"⚠️ 데이터베이스 연결 실패 (startup): {e}")
+            logger.warning("⚠️ 첫 요청 시 연결을 다시 시도합니다.")
+    
     logger.info("✓ 애플리케이션이 시작되었습니다. VIA 서버의 query_video를 사용합니다.")
 
 @app.on_event("shutdown")
