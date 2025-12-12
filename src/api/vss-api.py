@@ -54,6 +54,54 @@ except ImportError:
 app = FastAPI()
 
 # ============================================================================
+# CORS 설정 (다른 미들웨어보다 먼저 추가해야 함)
+# ============================================================================
+# Vercel 배포 시: Vercel 도메인을 allow_origins에 추가 권장
+# 환경 변수 VERCEL_URL이 있으면 자동으로 추가
+vercel_domains = []
+if os.getenv("VERCEL_URL"):
+    vercel_domains.append(f"https://{os.getenv('VERCEL_URL')}")
+if os.getenv("VERCEL_DEPLOYMENT_URL"):
+    vercel_domains.append(f"https://{os.getenv('VERCEL_DEPLOYMENT_URL')}")
+
+# 기본 허용 도메인 (로컬 개발 + Vercel 프로덕션 도메인)
+allowed_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+    "https://vss-project.vercel.app",  # Vercel 프로덕션 도메인 명시적 추가
+] + vercel_domains
+
+# CORS_ALLOWED_ORIGINS 환경 변수가 있으면 추가
+if os.getenv("CORS_ALLOWED_ORIGINS"):
+    # 공백 제거 및 중복 제거
+    additional_origins = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS").split(",") if origin.strip()]
+    allowed_origins.extend(additional_origins)
+
+# 중복 제거
+allowed_origins = list(set(allowed_origins))
+
+# Railway 환경에서는 모든 origin 허용 (환경 변수로 제어 가능)
+# CORS_ALLOW_ALL=true 또는 ENVIRONMENT가 production이 아닌 경우 모든 origin 허용
+if os.getenv("CORS_ALLOW_ALL") == "true" or os.getenv("ENVIRONMENT") != "production":
+    cors_origins = ["*"]
+else:
+    cors_origins = allowed_origins if allowed_origins else ["*"]
+
+# CORS 설정 로깅 (디버깅용)
+logger.info(f"CORS 허용 도메인: {cors_origins}")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
+
+# ============================================================================
 # 정적 파일 디렉토리 설정
 # ============================================================================
 # 클립 파일 서빙
@@ -2935,55 +2983,7 @@ async def delete_summaries(request: DeleteSummaryRequest):
 # ============================================================================
 # 미들웨어 및 이벤트 핸들러
 # ============================================================================
-# ============================================================================
-# 미들웨어 및 이벤트 핸들러
-# ============================================================================
-# CORS 설정 (Vue와 통신 가능하게)
-# Vercel 배포 시: Vercel 도메인을 allow_origins에 추가 권장
-# 환경 변수 VERCEL_URL이 있으면 자동으로 추가
-vercel_domains = []
-if os.getenv("VERCEL_URL"):
-    vercel_domains.append(f"https://{os.getenv('VERCEL_URL')}")
-if os.getenv("VERCEL_DEPLOYMENT_URL"):
-    vercel_domains.append(f"https://{os.getenv('VERCEL_DEPLOYMENT_URL')}")
-
-# 기본 허용 도메인 (로컬 개발 + Vercel 프로덕션 도메인)
-allowed_origins = [
-    "http://localhost:5173",
-    "http://localhost:3000",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:3000",
-    "https://vss-project.vercel.app",  # Vercel 프로덕션 도메인 명시적 추가
-] + vercel_domains
-
-# CORS_ALLOWED_ORIGINS 환경 변수가 있으면 추가
-if os.getenv("CORS_ALLOWED_ORIGINS"):
-    # 공백 제거 및 중복 제거
-    additional_origins = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS").split(",") if origin.strip()]
-    allowed_origins.extend(additional_origins)
-
-# 중복 제거
-allowed_origins = list(set(allowed_origins))
-
-# CORS 설정 로깅 (디버깅용)
-logger.info(f"CORS 허용 도메인: {allowed_origins}")
-
-# 운영 환경에서는 특정 도메인만 허용, 개발 환경에서는 모든 도메인 허용
-# Railway 환경에서는 환경 변수로 제어
-if os.getenv("ENVIRONMENT") == "production" and os.getenv("CORS_ALLOW_ALL") != "true":
-    cors_origins = allowed_origins
-else:
-    # 개발 환경 또는 CORS_ALLOW_ALL=true인 경우 모든 도메인 허용
-    cors_origins = ["*"] if not allowed_origins else allowed_origins
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
+# CORS는 이미 app 생성 직후에 설정됨
 
 @app.on_event("startup")
 async def startup_event():
