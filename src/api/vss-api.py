@@ -1648,12 +1648,23 @@ def send_verification_code(request: SendVerificationCodeRequest):
         logger.info(f"인증 코드 생성 완료: {email} (코드: {code})")
         
         # 이메일 전송
-        if send_verification_email(email, code):
+        email_sent = send_verification_email(email, code)
+        if email_sent:
             logger.info(f"인증 코드 이메일 전송 성공: {email}")
             return {"success": True, "message": "인증 코드가 이메일로 전송되었습니다."}
         else:
             logger.error(f"이메일 전송 실패: {email}")
-            raise HTTPException(status_code=500, detail="이메일 전송에 실패했습니다. SMTP 설정을 확인하거나 다시 시도해주세요.")
+            # SMTP 설정이 없는 경우 더 명확한 에러 메시지
+            if not SMTP_USER or not SMTP_PASSWORD:
+                raise HTTPException(
+                    status_code=500, 
+                    detail="이메일 전송에 실패했습니다. SMTP 설정이 필요합니다. Railway 환경 변수에 SMTP 설정을 추가해주세요."
+                )
+            else:
+                raise HTTPException(
+                    status_code=500, 
+                    detail="이메일 전송에 실패했습니다. SMTP 서버 연결을 확인하거나 다시 시도해주세요."
+                )
     except HTTPException:
         # HTTPException은 그대로 전달
         raise
