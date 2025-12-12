@@ -1327,9 +1327,9 @@ class ConnectionPool:
 # ============================================================================
 db_pool = ConnectionPool(
     max_connections=20,
-    user=os.getenv("DB_USER", "root"),
-    password=os.getenv("DB_PASSWORD", "pass0001!"),
-    host=os.getenv("DB_HOST", "172.16.15.69"),
+    user=os.getenv("DB_USER", "vss_user"),
+    password=os.getenv("DB_PASSWORD", "pass0001"),
+    host=os.getenv("DB_HOST", "192.168.219.107"),
     port=int(os.getenv("DB_PORT", "3306")),
     database=os.getenv("DB_NAME", "vss")
 )
