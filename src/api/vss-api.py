@@ -57,19 +57,21 @@ app = FastAPI()
 # 정적 파일 디렉토리 설정
 # ============================================================================
 # 클립 파일 서빙
-os.makedirs("./clips", exist_ok=True)
-app.mount("/clips", StaticFiles(directory="clips"), name="clips")
+# 디렉토리는 Dockerfile에서 생성되거나 startup 이벤트에서 생성
+# 모듈 레벨에서는 생성하지 않고, startup 이벤트에서 생성
+clips_dir = Path("./clips")
+app.mount("/clips", StaticFiles(directory=str(clips_dir.resolve())), name="clips")
 
 # 업로드된 동영상 파일 서빙 (API 엔드포인트와 충돌 방지)
 videos_dir = Path("./videos")
-videos_dir.mkdir(exist_ok=True)
 app.mount("/video-files", StaticFiles(directory=str(videos_dir.resolve())), name="video-files")
 
 # 샘플 동영상 파일 서빙
 current_dir = Path(__file__).parent  # src/api/
 sample_dir = current_dir.parent / "assets" / "sample"
 sample_dir = sample_dir.resolve()  # 절대 경로로 변환
-os.makedirs(sample_dir, exist_ok=True)
+# 디렉토리는 Dockerfile에서 생성되거나 startup 이벤트에서 생성
+# 모듈 레벨에서는 생성하지 않음
 logger.info(f"Serving sample videos from: {sample_dir}")
 
 # sample.mp4 파일 존재 여부 확인
@@ -2884,6 +2886,28 @@ app.add_middleware(
 async def startup_event():
     """애플리케이션 시작 시 aiohttp 세션 생성 및 DB 연결 확인"""
     await get_session()
+    
+    # 필요한 디렉토리 생성 (권한 오류 시 재시도)
+    try:
+        clips_dir = Path("./clips")
+        clips_dir.mkdir(exist_ok=True)
+        logger.info(f"✓ 클립 디렉토리 확인/생성: {clips_dir.resolve()}")
+    except Exception as e:
+        logger.error(f"❌ 클립 디렉토리 생성 실패: {e}")
+    
+    try:
+        videos_dir = Path("./videos")
+        videos_dir.mkdir(exist_ok=True)
+        logger.info(f"✓ 동영상 디렉토리 확인/생성: {videos_dir.resolve()}")
+    except Exception as e:
+        logger.error(f"❌ 동영상 디렉토리 생성 실패: {e}")
+    
+    try:
+        tmp_dir = Path("./tmp")
+        tmp_dir.mkdir(exist_ok=True)
+        logger.info(f"✓ 임시 디렉토리 확인/생성: {tmp_dir.resolve()}")
+    except Exception as e:
+        logger.error(f"❌ 임시 디렉토리 생성 실패: {e}")
     
     # 데이터베이스 연결 확인 (실패해도 애플리케이션은 계속 시작)
     global conn, cursor
