@@ -104,13 +104,17 @@ else:
 logger.info(f"CORS 허용 도메인: {cors_origins}")
 logger.info(f"CORS allow_credentials: {cors_allow_credentials}")
 
+origins = [
+    "https://vss-project.vercel.app",
+    "http://localhost:3000",  # 개발용
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=cors_allow_credentials,
+    allow_origins=origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
 
 # ============================================================================
