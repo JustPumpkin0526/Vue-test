@@ -2,6 +2,9 @@
 """
 SMTP 설정 도우미 스크립트
 이 스크립트를 실행하여 .env 파일을 쉽게 생성할 수 있습니다.
+
+구글 앱 메일
+dani ppxq qxno itsr
 """
 
 import os
