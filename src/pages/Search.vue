@@ -95,8 +95,11 @@
                 @mouseenter="hoveredVideoId = video.id" @mouseleave="hoveredVideoId = null">
                 <video :ref="el => (videoRefs[video.id] = el)" v-if="video.displayUrl" :src="video.displayUrl"
                   class="object-cover rounded-xl transition-transform duration-300 group-hover:scale-105"
-                  preload="metadata" @timeupdate="updateProgress(video.id, $event)"
-                  @loadedmetadata="onVideoMetadataLoaded(video.id, $event)"></video>
+                  preload="metadata" 
+                  :crossorigin="video.displayUrl && !video.displayUrl.startsWith('blob:') ? 'anonymous' : null"
+                  @timeupdate="updateProgress(video.id, $event)"
+                  @loadedmetadata="onVideoMetadataLoaded(video.id, $event)"
+                  @error="(e) => handleVideoError(video.id, e, false)"></video>
                 <span v-else class="text-gray-400 text-sm">No Thumbnail</span>
                 <!-- 그리드: 재생 중이 아닐 때 어두워지는 오버레이 -->
                 <div v-if="video.displayUrl" class="absolute inset-0 pointer-events-none transition-colors duration-300"
@@ -218,10 +221,10 @@
                   <div
                     class="relative w-full aspect-video flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl overflow-hidden group zoom-group"
                     @mouseenter="hoveredVideoId = zoomedVideo?.id" @mouseleave="hoveredVideoId = null">
-                    <video v-if="zoomedVideo" ref="zoomVideoRef" :src="zoomedVideo.displayUrl"
-                      class="object-cover w-full h-full" preload="metadata" crossorigin="anonymous"
-                      @timeupdate="onZoomTimeUpdate($event)"
-                      @error="(e) => console.warn('zoom video error', e, zoomedVideo && zoomedVideo.displayUrl)"></video>
+                <video v-if="zoomedVideo" ref="zoomVideoRef" :src="zoomedVideo.displayUrl"
+                  class="object-cover w-full h-full" preload="metadata" crossorigin="anonymous"
+                  @timeupdate="onZoomTimeUpdate($event)"
+                  @error="(e) => handleZoomVideoError(zoomedVideo.id, e)"></video>
                     <div v-if="zoomedVideo" class="absolute inset-0 pointer-events-none transition-colors duration-300"
                       :class="zoomPlaying ? 'bg-transparent' : 'bg-black/30'"></div>
                     <button v-if="zoomedVideo" @click.stop="togglePlay(zoomedVideo.id)" :class="[
@@ -579,6 +582,13 @@ import { ref, onMounted, onActivated, computed, nextTick, watch, onBeforeUnmount
 import { useRouter } from 'vue-router';
 import { useSummaryVideoStore } from '@/stores/summaryVideoStore';
 
+// ==================== 상수 정의 ====================
+const API_BASE_URL = 'http://localhost:8001';
+const UNSUPPORTED_VIDEO_FORMATS = ['avi', 'mkv', 'flv', 'wmv']; // 브라우저가 직접 재생하지 못하는 형식
+const MAX_ERROR_RETRIES = 2; // 비디오 로드 에러 최대 재시도 횟수
+const UPLOAD_TIMEOUT = 600000; // 업로드 타임아웃 (10분)
+const CONTEXT_MENU_SIZE = { width: 200, height: 200, margin: 10 };
+
 const isZoomed = ref(false);
 const zoomedVideo = ref(null);
 const zoomVideoRef = ref(null);
@@ -608,6 +618,7 @@ const chatNameInput = ref(null);
 // 업로드 진행률 모달 상태
 const showUploadModal = ref(false);
 const uploadProgress = ref([]); // { id, fileName, progress, status, uploaded, total }
+const activeUploads = ref({}); // { uploadId: XMLHttpRequest } - 진행 중인 업로드 추적
 
 // 시간 표시용 맵 (Summary.vue 스타일 이식)
 const currentTimeMap = ref({});
@@ -619,46 +630,104 @@ const zoomDuration = ref(0);
 // Context menu state for right-click on video cards
 const contextMenu = ref({ visible: false, x: 0, y: 0, video: null });
 
-function onVideoContextMenu(video, e) {
-  // If the user already has multiple items selected, do not change selection
-  if (selectedIds.value.length < 2) {
-    if (!selectedIds.value.includes(video.id)) {
-      selectedIds.value = [video.id];
+// ==================== 유틸리티 함수 ====================
+function formatTime(sec) {
+  if (!sec || isNaN(sec)) return '00:00';
+  const m = Math.floor(sec / 60).toString().padStart(2, '0');
+  const s = Math.floor(sec % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+function formatFileSize(bytes) {
+  if (!bytes || bytes === 0 || isNaN(bytes)) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const sizeIndex = Math.min(i, sizes.length - 1);
+  return Math.round((bytes / Math.pow(k, sizeIndex)) * 100) / 100 + ' ' + sizes[sizeIndex];
+}
+
+function getCurrentTime() {
+  const now = new Date();
+  return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+}
+
+function filterVideoFiles(files) {
+  return Array.from(files).filter((file) => {
+    if (!file.type.startsWith('video/')) {
+      alert('동영상 파일만 업로드할 수 있습니다.');
+      return false;
     }
-  }
+    return true;
+  });
+}
 
-  // 기본 좌표는 마우스 위치
-  let x = e.clientX;
-  let y = e.clientY;
+function createVideoObject(videoData, options = {}) {
+  const {
+    id,
+    title,
+    originUrl,
+    displayUrl,
+    date,
+    fileSize = null,
+    width = null,
+    height = null,
+    dbId = null,
+    videoId = null,
+    file = null,
+    objectUrl = null
+  } = videoData;
 
-  // 메뉴 크기 (너비 200px, 높이는 대략 200px 정도)
-  const menuWidth = 200;
-  const menuHeight = 200;
+  return {
+    id,
+    title,
+    originUrl: originUrl || displayUrl || '',
+    displayUrl: displayUrl || originUrl || '',
+    objectUrl: objectUrl || (displayUrl?.startsWith('blob:') ? displayUrl : null),
+    date: date || new Date().toISOString().slice(0, 10),
+    file,
+    url: originUrl || displayUrl || '',
+    fileSize,
+    width,
+    height,
+    progress: 0,
+    dbId,
+    videoId,
+    _errorRetryCount: 0,
+    _triedUrls: new Set(),
+    ...options
+  };
+}
 
-  // 화면 경계 확인 및 조정
+function getVideoFileExtension(filename) {
+  return filename.toLowerCase().split('.').pop();
+}
+
+function isUnsupportedFormat(filename) {
+  return UNSUPPORTED_VIDEO_FORMATS.includes(getVideoFileExtension(filename));
+}
+
+function constrainContextMenuPosition(x, y) {
+  const { width, height, margin } = CONTEXT_MENU_SIZE;
   const windowWidth = window.innerWidth;
   const windowHeight = window.innerHeight;
 
-  // 오른쪽 경계를 넘어가면 왼쪽으로 조정
-  if (x + menuWidth > windowWidth) {
-    x = windowWidth - menuWidth - 10; // 10px 여백
+  // 경계 확인 및 조정
+  if (x + width > windowWidth) x = windowWidth - width - margin;
+  if (y + height > windowHeight) y = windowHeight - height - margin;
+  if (x < margin) x = margin;
+  if (y < margin) y = margin;
+
+  return { x, y };
+}
+
+// ==================== 컨텍스트 메뉴 ====================
+function onVideoContextMenu(video, e) {
+  if (selectedIds.value.length < 2 && !selectedIds.value.includes(video.id)) {
+    selectedIds.value = [video.id];
   }
 
-  // 아래쪽 경계를 넘어가면 위로 조정
-  if (y + menuHeight > windowHeight) {
-    y = windowHeight - menuHeight - 10; // 10px 여백
-  }
-
-  // 왼쪽 경계 확인
-  if (x < 10) {
-    x = 10;
-  }
-
-  // 위쪽 경계 확인
-  if (y < 10) {
-    y = 10;
-  }
-
+  const { x, y } = constrainContextMenuPosition(e.clientX, e.clientY);
   contextMenu.value = { visible: true, x, y, video };
 }
 
@@ -719,7 +788,7 @@ async function contextRemoveSummary() {
   }
   
   try {
-    const response = await fetch('http://localhost:8001/summaries', {
+    const response = await fetch(`${API_BASE_URL}/summaries`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
@@ -759,48 +828,39 @@ function handleGlobalClick(e) {
 onMounted(() => window.addEventListener('click', handleGlobalClick));
 onBeforeUnmount(() => window.removeEventListener('click', handleGlobalClick));
 
-function allselect() {
-  if (selectedIds.value.length === items.value.length) {
-    selectedIds.value = [];
-  } else {
-    selectedIds.value = items.value.map(v => v.id);
-  }
-}
 
+// ==================== 비디오 선택 ====================
 function onCardClick(id, event) {
-  // Only toggle on left mouse button
-  if (event && typeof event.button !== 'undefined') {
-    if (event.button !== 0) return;
-  }
+  if (event && typeof event.button !== 'undefined' && event.button !== 0) return;
   toggleSelect(id);
 }
 
-function formatTime(sec) {
-  if (!sec || isNaN(sec)) return '00:00';
-  const m = Math.floor(sec / 60).toString().padStart(2, '0');
-  const s = Math.floor(sec % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
+function toggleSelect(id) {
+  const idx = selectedIds.value.indexOf(id);
+  idx === -1 ? selectedIds.value.push(id) : selectedIds.value.splice(idx, 1);
 }
 
-function formatFileSize(bytes) {
-  if (!bytes || bytes === 0 || isNaN(bytes)) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  const sizeIndex = Math.min(i, sizes.length - 1); // 배열 범위 체크
-  return Math.round((bytes / Math.pow(k, sizeIndex)) * 100) / 100 + ' ' + sizes[sizeIndex];
+function allselect() {
+  selectedIds.value = selectedIds.value.length === items.value.length 
+    ? [] 
+    : items.value.map(v => v.id);
 }
 
+// ==================== Vue 인스턴스 및 스토어 ====================
 const router = useRouter();
 const summaryVideoStore = useSummaryVideoStore();
 
-const selectedVideos = computed(() => {
-  return items.value.filter(v => selectedIds.value.includes(v.id));
-});
+// ==================== Computed ====================
+const selectedVideos = computed(() => items.value.filter(v => selectedIds.value.includes(v.id)));
 
 const currentChatMessages = computed(() => {
   if (chatSessions.value.length === 0) return [];
   return chatSessions.value[currentChatIndex.value]?.messages || [];
+});
+
+const allUploadsComplete = computed(() => {
+  return uploadProgress.value.length > 0 && 
+         uploadProgress.value.every(u => u.progress === 100 || u.status === '완료' || u.status === '실패');
 });
 
 onMounted(() => {
@@ -819,73 +879,57 @@ onBeforeUnmount(() => {
   window.removeEventListener('search-videos-updated', loadVideosFromStorage);
 });
 
+// ==================== 비디오 목록 관리 ====================
 async function loadVideosFromStorage() {
-  // 사용자 ID 확인
   const userId = localStorage.getItem("vss_user_id");
+  
   if (!userId) {
-    // 로그인하지 않은 경우 localStorage에서 로드 (기존 방식)
-    const stored = localStorage.getItem("videoItems");
-    if (!stored) return;
-    items.value = JSON.parse(stored).map(v => {
-      const displayUrl = v.displayUrl || v.url || v.originUrl || '';
-      return {
-        ...v,
-        originUrl: v.originUrl || v.url || displayUrl,
-        displayUrl: displayUrl,
-        objectUrl: displayUrl.startsWith('blob:') ? displayUrl : null,
-        progress: 0,
-        fileSize: v.fileSize || null,
-        width: v.width || null,
-        height: v.height || null
-      };
-    });
+    loadFromLocalStorage();
     return;
   }
 
-  // DB에서 동영상 목록 가져오기
   try {
-    const response = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
-    if (!response.ok) {
-      throw new Error('동영상 목록 조회 실패');
-    }
-    const data = await response.json();
+    const response = await fetch(`${API_BASE_URL}/videos?user_id=${userId}`);
+    if (!response.ok) throw new Error('동영상 목록 조회 실패');
     
+    const data = await response.json();
     if (data.success && data.videos) {
-      items.value = data.videos.map(v => ({
+      items.value = data.videos.map(v => createVideoObject({
         id: v.id,
         title: v.title,
         originUrl: v.file_url,
         displayUrl: v.file_url,
-        objectUrl: null,
-        progress: 0,
-        fileSize: v.fileSize || null,
-        width: v.width || null,
-        height: v.height || null,
-        date: v.date || new Date().toISOString().slice(0, 10),
-        dbId: v.id, // DB ID 저장
-        videoId: v.video_id || null // VIA 서버의 video_id 저장 (요약된 경우 미디어 삭제용)
+        date: v.date,
+        fileSize: v.fileSize,
+        width: v.width,
+        height: v.height,
+        dbId: v.id,
+        videoId: v.video_id
       }));
     }
   } catch (error) {
     console.error('동영상 목록 로드 실패:', error);
-    // 실패 시 localStorage에서 로드 (기존 방식)
-    const stored = localStorage.getItem("videoItems");
-    if (stored) {
-      items.value = JSON.parse(stored).map(v => {
-        const displayUrl = v.displayUrl || v.url || v.originUrl || '';
-        return {
-          ...v,
-          originUrl: v.originUrl || v.url || displayUrl,
-          displayUrl: displayUrl,
-          objectUrl: displayUrl.startsWith('blob:') ? displayUrl : null,
-          progress: 0,
-          fileSize: v.fileSize || null,
-          width: v.width || null,
-          height: v.height || null
-        };
-      });
-    }
+    loadFromLocalStorage();
   }
+}
+
+function loadFromLocalStorage() {
+  const stored = localStorage.getItem("videoItems");
+  if (!stored) return;
+  
+  items.value = JSON.parse(stored).map(v => {
+    const displayUrl = v.displayUrl || v.url || v.originUrl || '';
+    return createVideoObject({
+      id: v.id,
+      title: v.title,
+      originUrl: v.originUrl || v.url || displayUrl,
+      displayUrl,
+      date: v.date,
+      fileSize: v.fileSize,
+      width: v.width,
+      height: v.height
+    });
+  });
 }
 
 function persistToStorage() {
@@ -902,7 +946,8 @@ function persistToStorage() {
   }))));
 }
 
-// 드래그 & 드롭 업로드 핸들러
+
+// ==================== 파일 업로드 ====================
 function onDragOverUpload(e) {
   e.preventDefault();
   isDragOverUpload.value = true;
@@ -910,7 +955,6 @@ function onDragOverUpload(e) {
 
 function onDragLeaveUpload(e) {
   e.preventDefault();
-  // 자식 요소로 이동할 때는 드래그 상태 유지
   if (!e.currentTarget.contains(e.relatedTarget)) {
     isDragOverUpload.value = false;
   }
@@ -919,35 +963,18 @@ function onDragLeaveUpload(e) {
 async function onDropUpload(e) {
   e.preventDefault();
   isDragOverUpload.value = false;
-  
-  const files = Array.from(e.dataTransfer.files ?? []).filter((file) => {
-    if (!file.type.startsWith('video/')) {
-      alert('동영상 파일만 업로드할 수 있습니다.');
-      return false;
-    }
-    return true;
-  });
-
-  if (files.length === 0) return;
-  
-  // handleUpload와 동일한 로직 사용
-  await processUploadFiles(files);
+  const files = filterVideoFiles(e.dataTransfer.files ?? []);
+  if (files.length > 0) await processUploadFiles(files);
 }
 
 async function handleUpload(e) {
-  const files = Array.from(e.target.files ?? []).filter((file) => {
-    if (!file.type.startsWith('video/')) {
-      alert('동영상 파일만 업로드할 수 있습니다.');
-      return false;
-    }
-    return true;
-  });
-
-  if (files.length === 0) return;
-  
-  await processUploadFiles(files);
-  
+  const files = filterVideoFiles(e.target.files ?? []);
+  if (files.length > 0) await processUploadFiles(files);
   if (e.target) e.target.value = '';
+}
+
+function handleAddButtonClick() {
+  document.querySelector('input[type="file"]')?.click();
 }
 
 // 공통 업로드 처리 함수
@@ -960,9 +987,9 @@ async function processUploadFiles(files) {
     return;
   }
 
-  // DB에서 중복 파일명 체크
+  // 중복 파일명 체크
   try {
-    const response = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+    const response = await fetch(`${API_BASE_URL}/videos?user_id=${userId}`);
     if (response.ok) {
       const data = await response.json();
       if (data.success && data.videos) {
@@ -970,8 +997,7 @@ async function processUploadFiles(files) {
         const duplicateFiles = files.filter(file => existingFileNames.has(file.name));
         
         if (duplicateFiles.length > 0) {
-          const duplicateNames = duplicateFiles.map(f => f.name).join(', ');
-          alert(`이미 업로드된 동영상입니다: ${duplicateNames}`);
+          alert(`이미 업로드된 동영상입니다: ${duplicateFiles.map(f => f.name).join(', ')}`);
           return;
         }
       }
@@ -999,23 +1025,18 @@ async function processUploadFiles(files) {
     try {
       const data = await uploadVideoWithProgress(file, userId, uploadId);
       
-      // 즉시 로컬 ObjectURL 생성하여 미리보기 가능하게 함
-      const objUrl = URL.createObjectURL(file);
+      const useServerUrl = isUnsupportedFormat(file.name);
+      const serverUrl = data.file_url;
+      const objUrl = useServerUrl ? null : URL.createObjectURL(file);
       
-      const newVideo = {
+      const newVideo = createVideoObject({
         id: data.video_id,
         title: file.name,
-        originUrl: data.file_url,
-        displayUrl: objUrl, // 즉시 로컬 미리보기용 ObjectURL 사용
-        objectUrl: objUrl,
-        date: new Date().toISOString().slice(0, 10),
-        file,
-        url: data.file_url,
+        originUrl: serverUrl,
+        displayUrl: useServerUrl ? serverUrl : objUrl,
         fileSize: file.size,
-        width: null,
-        height: null,
         dbId: data.video_id
-      };
+      }, { file, objectUrl: objUrl });
 
       // 업로드 완료된 동영상을 즉시 목록에 추가
       items.value.unshift(newVideo);
@@ -1030,6 +1051,11 @@ async function processUploadFiles(files) {
       // DB에 저장되므로 localStorage 저장 불필요
       // persistToStorage();
     } catch (error) {
+      // 업로드 취소는 정상적인 동작이므로 에러로 처리하지 않음
+      if (error.message === '업로드 취소됨') {
+        console.log('업로드 취소됨:', file.name);
+        return; // 조용히 종료
+      }
       console.error('동영상 업로드 실패:', error);
       const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
       if (uploadItem) {
@@ -1040,18 +1066,6 @@ async function processUploadFiles(files) {
   });
 }
 
-function handleAddButtonClick() {
-  // 파일 입력 요소 클릭 트리거
-  const fileInput = document.querySelector('input[type="file"]');
-  if (fileInput) {
-    fileInput.click();
-  }
-}
-
-function toggleSelect(id) {
-  const idx = selectedIds.value.indexOf(id);
-  idx === -1 ? selectedIds.value.push(id) : selectedIds.value.splice(idx, 1);
-}
 
 function zoomVideo(video) {
   // 그리드 비디오 상태 캡처 후 그리드 재생 중이면 일시정지
@@ -1151,7 +1165,7 @@ async function confirmDelete() {
       .map(async (video) => {
         try {
           console.log(`DB 삭제 시도: video_id=${video.dbId}, user_id=${userId}`);
-          const response = await fetch(`http://localhost:8001/videos/${video.dbId}?user_id=${userId}`, {
+          const response = await fetch(`${API_BASE_URL}/videos/${video.dbId}?user_id=${userId}`, {
             method: 'DELETE'
           });
           
@@ -1240,12 +1254,6 @@ function closeSearchSidebar() {
   searchInput.value = '';
 }
 
-function getCurrentTime() {
-  const now = new Date();
-  const hours = now.getHours().toString().padStart(2, '0');
-  const minutes = now.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
-}
 
 function scrollToBottom() {
   nextTick(() => {
@@ -1385,7 +1393,7 @@ async function deleteChat(index) {
   // 클립이 있으면 삭제 요청
   if (clipUrls.length > 0) {
     try {
-      const response = await fetch('http://localhost:8001/delete-clips', {
+      const response = await fetch(`${API_BASE_URL}/delete-clips`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1509,7 +1517,7 @@ async function handleSearch() {
       formData.append('video_ids', JSON.stringify(videoIdMap));
     }
 
-    const response = await fetch('http://localhost:8001/generate-clips', {
+    const response = await fetch(`${API_BASE_URL}/generate-clips`, {
       method: 'POST',
       body: formData
     });
@@ -1610,49 +1618,44 @@ watch(showSearchSidebar, (newVal) => {
   }
 });
 
+function safePlayVideo(videoElement, onSuccess) {
+  if (!isFinite(videoElement.duration)) {
+    videoElement.addEventListener('loadedmetadata', () => {
+      videoElement.play().then(onSuccess).catch(e => console.warn('video play failed:', e));
+    }, { once: true });
+  } else {
+    videoElement.play().then(onSuccess).catch(e => console.warn('video play failed:', e));
+  }
+}
+
 function togglePlay(videoId) {
-  // 확대 모달 재생은 별도 상태 사용
-  if (zoomedVideo.value && zoomedVideo.value.id === videoId && zoomVideoRef.value) {
-    const el = zoomVideoRef.value;
-    if (!el || !el.src) {
-      console.warn('togglePlay: zoom video has no src');
-      return;
-    }
+  const isZoom = zoomedVideo.value && zoomedVideo.value.id === videoId;
+  const videoElement = isZoom ? zoomVideoRef.value : videoRefs.value[videoId];
+  
+  if (!videoElement || !videoElement.src) {
+    console.warn('togglePlay: video has no src');
+    return;
+  }
+  
+  if (isZoom) {
     if (!zoomPlaying.value) {
-      // 안전하게 재생: 메타데이터가 로드될 때까지 대기
-      if (!isFinite(el.duration)) {
-        el.addEventListener('loadedmetadata', () => {
-          el.play().then(() => { zoomPlaying.value = true; }).catch(e => {
-            console.warn('zoom play failed:', e);
-          });
-        }, { once: true });
-      } else {
-        el.play().then(() => { zoomPlaying.value = true; }).catch(e => console.warn('zoom play failed:', e));
-      }
+      safePlayVideo(videoElement, () => { zoomPlaying.value = true; });
     } else {
-      try { el.pause(); } catch (e) { /* ignore */ }
-      zoomPlaying.value = false;
+      try {
+        videoElement.pause();
+        zoomPlaying.value = false;
+      } catch (e) {
+        /* ignore */
+      }
     }
     return;
   }
-
-  // 그리드 비디오 토글 (기존 로직)
-  const videoElement = videoRefs.value[videoId];
-  if (!videoElement) return;
+  
+  // 그리드 비디오 토글
   const index = playingVideoIds.value.indexOf(videoId);
   if (index === -1) {
-    if (!videoElement.src) {
-      console.warn('togglePlay: video element has no src');
-      return;
-    }
     playingVideoIds.value.push(videoId);
-    if (!isFinite(videoElement.duration)) {
-      videoElement.addEventListener('loadedmetadata', () => {
-        videoElement.play().catch(e => console.warn('grid video play failed:', e));
-      }, { once: true });
-    } else {
-      videoElement.play().catch(e => console.warn('grid video play failed:', e));
-    }
+    safePlayVideo(videoElement, () => {});
   } else {
     playingVideoIds.value.splice(index, 1);
     videoElement.pause();
@@ -1671,6 +1674,96 @@ function onVideoMetadataLoaded(videoId, event) {
       durationMap.value[videoId] = duration;
     }
   }
+}
+
+// ==================== 비디오 에러 처리 ====================
+function initializeVideoErrorTracking(video) {
+  if (video._errorRetryCount === undefined) video._errorRetryCount = 0;
+  if (!video._triedUrls) video._triedUrls = new Set();
+}
+
+function switchToServerUrl(video, videoElement) {
+  if (video.objectUrl) {
+    try {
+      URL.revokeObjectURL(video.objectUrl);
+    } catch (e) {
+      console.warn('ObjectURL 해제 실패:', e);
+    }
+  }
+  video.displayUrl = video.originUrl;
+  video.objectUrl = null;
+  if (videoElement) {
+    videoElement.crossOrigin = 'anonymous';
+    videoElement.src = video.originUrl;
+    videoElement.load();
+  }
+}
+
+function switchToObjectUrl(video, videoElement, currentUrl) {
+  if (video.objectUrl && video.objectUrl !== currentUrl) {
+    try {
+      URL.revokeObjectURL(video.objectUrl);
+    } catch (e) {
+      console.warn('ObjectURL 해제 실패:', e);
+    }
+  }
+  const objUrl = URL.createObjectURL(video.file);
+  video.displayUrl = objUrl;
+  video.objectUrl = objUrl;
+  if (videoElement) {
+    videoElement.crossOrigin = null;
+    videoElement.src = objUrl;
+    videoElement.load();
+  }
+}
+
+function handleVideoError(videoId, event, isZoom = false) {
+  const video = items.value.find(v => v.id === videoId);
+  if (!video) return;
+  
+  initializeVideoErrorTracking(video);
+  
+  if (video._errorRetryCount >= MAX_ERROR_RETRIES) {
+    console.error(`비디오 로드 최종 실패 (최대 재시도 횟수 초과): ${video.title}`);
+    return;
+  }
+  
+  const currentUrl = isZoom && zoomedVideo.value 
+    ? zoomedVideo.value.displayUrl 
+    : video.displayUrl;
+  video._triedUrls.add(currentUrl);
+  video._errorRetryCount++;
+  
+  const videoElement = isZoom ? zoomVideoRef.value : videoRefs.value[videoId];
+  const isBlobUrl = currentUrl?.startsWith('blob:');
+  
+  if (isBlobUrl && video.originUrl && !video.originUrl.startsWith('blob:')) {
+    if (video._triedUrls.has(video.originUrl)) {
+      console.error(`비디오 로드 실패 (이미 모든 URL 시도함): ${video.title}`);
+      return;
+    }
+    console.warn(`비디오 로드 실패 (ObjectURL), 서버 URL로 전환: ${video.title}`);
+    switchToServerUrl(video, videoElement);
+    if (isZoom && zoomedVideo.value) {
+      zoomedVideo.value.displayUrl = video.originUrl;
+    }
+  } else if (!isBlobUrl && video.file) {
+    if (video.objectUrl && video._triedUrls.has(video.objectUrl)) {
+      console.error(`비디오 로드 실패 (이미 모든 URL 시도함): ${video.title}`);
+      return;
+    }
+    console.warn(`비디오 로드 실패 (서버 URL), ObjectURL로 재시도: ${video.title}`);
+    switchToObjectUrl(video, videoElement, currentUrl);
+    if (isZoom && zoomedVideo.value) {
+      zoomedVideo.value.displayUrl = video.displayUrl;
+    }
+  } else {
+    console.error(`비디오 로드 최종 실패: ${video.title}`, event);
+  }
+}
+
+function handleZoomVideoError(videoId, event) {
+  handleVideoError(videoId, event, true);
 }
 
 function updateProgress(videoId, event) {
@@ -1692,35 +1785,28 @@ function onZoomTimeUpdate(event) {
   zoomDuration.value = duration || 0;
 }
 
+// ==================== 비디오 재생 제어 ====================
 function seekVideo(videoId, event) {
-  if (zoomedVideo.value && zoomedVideo.value.id === videoId && zoomVideoRef.value) {
-    const videoElement = zoomVideoRef.value;
-    if (!videoElement || !videoElement.src) return;
-    const { left, width } = event.currentTarget.getBoundingClientRect();
-    const pct = Math.max(0, Math.min((event.clientX - left) / width, 1));
-    const targetTime = pct * (isFinite(videoElement.duration) ? videoElement.duration : 0);
-    if (!isFinite(targetTime)) return;
-    try {
-      videoElement.currentTime = targetTime;
-    } catch (e) {
-      console.warn('seekVideo(zoom) failed:', e);
-    }
-    zoomProgress.value = pct * 100;
-    zoomCurrentTime.value = videoElement.currentTime;
-    zoomDuration.value = videoElement.duration || 0;
-    return;
-  }
-  const videoElement = videoRefs.value[videoId];
-  if (!videoElement) return;
-  if (!videoElement.src) return;
+  const isZoom = zoomedVideo.value && zoomedVideo.value.id === videoId;
+  const videoElement = isZoom ? zoomVideoRef.value : videoRefs.value[videoId];
+  
+  if (!videoElement || !videoElement.src) return;
+  
   const { left, width } = event.currentTarget.getBoundingClientRect();
   const pct = Math.max(0, Math.min((event.clientX - left) / width, 1));
   const targetTime = pct * (isFinite(videoElement.duration) ? videoElement.duration : 0);
+  
   if (!isFinite(targetTime)) return;
+  
   try {
     videoElement.currentTime = targetTime;
+    if (isZoom) {
+      zoomProgress.value = pct * 100;
+      zoomCurrentTime.value = videoElement.currentTime;
+      zoomDuration.value = videoElement.duration || 0;
+    }
   } catch (e) {
-    console.warn('seekVideo(grid) failed:', e);
+    console.warn('seekVideo failed:', e);
   }
 }
 
@@ -1742,32 +1828,26 @@ function startDragging(videoId, evt) {
 function handleDragging(event) {
   if (!isDragging.value || !draggedVideoId.value) return;
 
-  // 확대 모달 드래그 처리 (독립 진행률)
-  if (zoomedVideo.value && zoomedVideo.value.id === draggedVideoId.value && zoomVideoRef.value) {
-    const videoElement = zoomVideoRef.value;
-    if (!videoElement.duration) return;
-    const progressBarEl = zoomProgressBarRef.value;
-    if (!progressBarEl) return;
-    const { left, width } = progressBarEl.getBoundingClientRect();
-    const clickX = event.clientX - left;
-    const percentage = Math.max(0, Math.min(clickX / width, 1));
-    videoElement.currentTime = percentage * videoElement.duration;
+  const isZoom = zoomedVideo.value && zoomedVideo.value.id === draggedVideoId.value;
+  const videoElement = isZoom ? zoomVideoRef.value : videoRefs.value[draggedVideoId.value];
+  const progressBarEl = isZoom ? zoomProgressBarRef.value : draggingBarEl;
+  
+  if (!videoElement || !videoElement.duration || !progressBarEl) return;
+  
+  const { left, width } = progressBarEl.getBoundingClientRect();
+  const clickX = event.clientX - left;
+  const percentage = Math.max(0, Math.min(clickX / width, 1));
+  
+  videoElement.currentTime = percentage * videoElement.duration;
+  
+  if (isZoom) {
     zoomProgress.value = percentage * 100;
     zoomCurrentTime.value = videoElement.currentTime;
     zoomDuration.value = videoElement.duration || 0;
-    return;
+  } else {
+    const video = items.value.find(v => v.id === draggedVideoId.value);
+    if (video) video.progress = percentage * 100;
   }
-
-  // 그리드 드래그 처리
-  const videoElement = videoRefs.value[draggedVideoId.value];
-  if (!videoElement || !videoElement.duration) return;
-  if (!draggingBarEl) return;
-  const { left, width } = draggingBarEl.getBoundingClientRect();
-  const clickX = event.clientX - left;
-  const percentage = Math.max(0, Math.min(clickX / width, 1));
-  videoElement.currentTime = percentage * videoElement.duration;
-  const video = items.value.find(v => v.id === draggedVideoId.value);
-  if (video) video.progress = percentage * 100;
 }
 
 function stopDragging() {
@@ -1778,28 +1858,36 @@ function stopDragging() {
   document.removeEventListener('mouseup', stopDragging);
 }
 
-// 업로드 모달 닫기
+// 업로드 모달 닫기 (X 버튼 클릭 시 업로드 중단)
 function closeUploadModal() {
-  if (allUploadsComplete.value) {
-    showUploadModal.value = false;
-    uploadProgress.value = [];
-  }
+  // 진행 중인 모든 업로드 취소
+  Object.keys(activeUploads.value).forEach(uploadId => {
+    const xhr = activeUploads.value[uploadId];
+    if (xhr && xhr.readyState !== XMLHttpRequest.DONE) {
+      xhr.abort(); // 업로드 중단
+      const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
+      if (uploadItem && uploadItem.progress < 100) {
+        uploadItem.status = '취소됨';
+        uploadItem.progress = 0;
+      }
+    }
+  });
+  
+  // 활성 업로드 목록 초기화
+  activeUploads.value = {};
+  
+  // 모달 닫기 및 진행률 초기화
+  showUploadModal.value = false;
+  uploadProgress.value = [];
 }
 
-// 모든 업로드 완료 여부
-const allUploadsComplete = computed(() => {
-  return uploadProgress.value.length > 0 && 
-         uploadProgress.value.every(u => u.progress === 100 || u.status === '완료' || u.status === '실패');
-});
 
 // 서버에서 미디어 삭제하는 함수
 async function removeMediaFromServer(mediaIds) {
   if (!mediaIds || mediaIds.length === 0) return;
 
-  const VSS_API_URL = 'http://localhost:8001/remove-media';
-
   try {
-    const response = await fetch(VSS_API_URL, {
+    const response = await fetch(`${API_BASE_URL}/remove-media`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1829,8 +1917,10 @@ function uploadVideoWithProgress(file, userId, uploadId) {
     formData.append('file', file);
     formData.append('user_id', userId);
 
-    // 타임아웃 설정 (10분 = 600000ms, 큰 파일 업로드를 고려)
-    xhr.timeout = 600000; // 10분
+    // 활성 업로드 목록에 추가 (취소 가능하도록)
+    activeUploads.value[uploadId] = xhr;
+
+    xhr.timeout = UPLOAD_TIMEOUT;
 
     // 진행률 업데이트 (99%까지만 표시)
     xhr.upload.addEventListener('progress', (e) => {
@@ -1850,6 +1940,9 @@ function uploadVideoWithProgress(file, userId, uploadId) {
 
     // 완료 처리 (99%에서 멈춤, 리스트 추가 후 100%로 변경)
     xhr.addEventListener('load', () => {
+      // 활성 업로드 목록에서 제거
+      delete activeUploads.value[uploadId];
+      
       if (xhr.status === 200) {
         try {
           const data = JSON.parse(xhr.responseText);
@@ -1879,6 +1972,9 @@ function uploadVideoWithProgress(file, userId, uploadId) {
 
     // 타임아웃 처리
     xhr.addEventListener('timeout', () => {
+      // 활성 업로드 목록에서 제거
+      delete activeUploads.value[uploadId];
+      
       const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
       if (uploadItem) {
         uploadItem.status = '실패: 타임아웃 (서버 응답 없음)';
@@ -1889,6 +1985,9 @@ function uploadVideoWithProgress(file, userId, uploadId) {
 
     // 에러 처리
     xhr.addEventListener('error', () => {
+      // 활성 업로드 목록에서 제거
+      delete activeUploads.value[uploadId];
+      
       const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
       if (uploadItem) {
         uploadItem.status = '실패: 네트워크 오류';
@@ -1899,18 +1998,24 @@ function uploadVideoWithProgress(file, userId, uploadId) {
 
     // 중단(abort) 처리
     xhr.addEventListener('abort', () => {
+      // 활성 업로드 목록에서 제거
+      delete activeUploads.value[uploadId];
+      
       const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
       if (uploadItem) {
         uploadItem.status = '취소됨';
         uploadItem.progress = 0;
       }
-      reject(new Error('업로드가 취소되었습니다.'));
+      reject(new Error('업로드 취소됨'));
     });
 
     try {
-      xhr.open('POST', 'http://localhost:8001/upload-video');
+      xhr.open('POST', `${API_BASE_URL}/upload-video`);
       xhr.send(formData);
     } catch (error) {
+      // 활성 업로드 목록에서 제거
+      delete activeUploads.value[uploadId];
+      
       const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
       if (uploadItem) {
         uploadItem.status = `실패: ${error.message}`;

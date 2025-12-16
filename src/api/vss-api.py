@@ -62,38 +62,104 @@ logger.info(f"Serving sample videos from: {sample_dir}")
 # sample.mp4 파일 존재 여부 확인
 sample_file = sample_dir / "sample.mp4"
 if sample_file.exists():
-    logger.info(f"Sample video file found: {sample_file}")
+    logger.info(f"샘플 동영상을 찾았습니다. : {sample_file}")
 else:
-    logger.warning(f"Sample video file NOT found at: {sample_file}")
-    logger.warning(f"Please ensure sample.mp4 exists in: {sample_dir}")
+    logger.warning(f"샘플 동영상은 해당 경로에 없습니다. : {sample_file}")
 
-try:
-    app.mount("/sample", StaticFiles(directory=str(sample_dir)), name="sample")
-    logger.info(f"Successfully mounted /sample endpoint to {sample_dir}")
-except Exception as e:
-    logger.error(f"Failed to mount /sample endpoint: {e}")
+    try:
+        app.mount("/sample", StaticFiles(directory=str(sample_dir)), name="sample")
+        logger.info(f"/sample 엔드포인트를 {sample_dir}에 성공적으로 마운트했습니다.")
+    except Exception as e:
+        logger.error(f"/sample 엔드포인트를 마운트하는데 실패했습니다. : {e}")
 
-# VIA 서버 주소
-VIA_SERVER_URL = "http://172.16.7.64:8101"  # 환경에 맞게 수정
+# ==================== 상수 정의 ====================
+# API 설정
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8001")
+
+# VIA 서버 설정
+VIA_SERVER_URL = "http://172.16.7.64:8101"
+VIA_MODEL_TIMEOUT = 10  # VIA 모델 조회 타임아웃 (초)
+VIA_UPLOAD_TIMEOUT_MIN = 60  # 최소 업로드 타임아웃 (초)
+VIA_UPLOAD_TIMEOUT_MAX = 600  # 최대 업로드 타임아웃 (초)
+VIA_UPLOAD_TIMEOUT_PER_MB = 10  # 1MB당 타임아웃 (초)
 
 # Ollama 설정
-# Ollama 서버 주소 (기본값: http://localhost:11434)
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-# 사용할 Ollama 모델 (예: llama3, mistral, qwen2.5 등)
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+OLLAMA_TIMEOUT = 60  # Ollama API 타임아웃 (초)
 
-# 질문-답변 방식: VIA 서버의 query_video만 사용
-# 동영상 컨텍스트를 직접 활용하여 질문에 답변
+# 파일 설정
+ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv'}
+FILE_BUFFER_SIZE = 8 * 1024 * 1024  # 8MB
+CLIP_CLEANUP_AGE = 86400  # 클립 파일 정리 기준 시간 (24시간, 초)
 
-# 전역 aiohttp 세션
+# 타임아웃 설정
+DEFAULT_VIA_TARGET_RESPONSE_TIME = 2 * 60  # 초
+DEFAULT_VIA_TARGET_USECASE_EVENT_DURATION = 10  # 초
+
+# 정규식 패턴
+EMAIL_REGEX = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
+IP_PATTERN = r'^(\d{1,3}\.){3}\d{1,3}$'
+
+# 이메일 설정
+EMAIL_CODE_EXPIRY_MINUTES = 10
+
+# 전역 변수
 http_session: Optional[aiohttp.ClientSession] = None
+vss_client = None
 
+# ==================== 유틸리티 함수 ====================
 async def get_session():
     """전역 aiohttp 세션 가져오기 또는 생성"""
     global http_session
     if http_session is None or http_session.closed:
         http_session = aiohttp.ClientSession()
     return http_session
+
+async def ensure_vss_client():
+    """VSS 클라이언트 초기화 (중복 초기화 방지)"""
+    global vss_client
+    if vss_client is None:
+        vss_client = VSS(VIA_SERVER_URL)
+        vss_client.model = await vss_client.get_model()
+    return vss_client
+
+async def get_via_model():
+    """VIA 서버에서 모델 정보 가져오기"""
+    session = await get_session()
+    try:
+        async with session.get(
+            f"{VIA_SERVER_URL}/models",
+            timeout=aiohttp.ClientTimeout(total=VIA_MODEL_TIMEOUT)
+        ) as resp:
+            if resp.status >= 400:
+                raise HTTPException(status_code=502, detail=f"VIA /models returned status {resp.status}")
+            try:
+                resp_json = await resp.json()
+            except Exception:
+                raise HTTPException(status_code=502, detail="VIA /models returned invalid JSON")
+            return resp_json["data"][0]["id"]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to contact VIA server: {e}")
+
+def validate_email(email: str) -> str:
+    """이메일 형식 검증 및 정규화"""
+    if not email or not email.strip():
+        raise HTTPException(status_code=400, detail="이메일 주소를 입력해주세요.")
+    email = email.strip().lower()
+    if not re.match(EMAIL_REGEX, email):
+        raise HTTPException(status_code=400, detail="올바른 이메일 형식이 아닙니다.")
+    return email
+
+def build_file_url(file_url: str) -> str:
+    """파일 URL 생성 (API 베이스 URL 포함)"""
+    if file_url.startswith('http'):
+        return file_url
+    return f"{API_BASE_URL}{file_url}"
+
+# verify_user_exists와 validate_video_ownership은 db_pool 정의 후에 정의됨 (아래 참조)
 
 class VSS:
     """Wrapper to call VSS REST APIs"""
@@ -123,25 +189,24 @@ class VSS:
     async def get_model(self):
         session = await get_session()
         try:
-            async with session.get(self.models_endpoint, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            async with session.get(
+                self.models_endpoint,
+                timeout=aiohttp.ClientTimeout(total=VIA_MODEL_TIMEOUT)
+            ) as resp:
                 json_data = await self.check_response(resp)
                 try:
-                    return json_data["data"][0]["id"]  # get configured model name
+                    return json_data["data"][0]["id"]
                 except Exception as e:
                     raise HTTPException(status_code=502, detail=f"Invalid response from VIA /models: {e}")
         except Exception as e:
-            # Raise HTTPException so FastAPI returns a proper error response (and CORS headers)
             raise HTTPException(status_code=502, detail=f"Failed to reach VIA server for models: {e}")
 
     async def upload_video(self, video_path):
         session = await get_session()
         data = aiohttp.FormData()
         
-        # 파일을 스트리밍 방식으로 전송 (메모리에 전체 로드하지 않음)
-        # 파일 핸들을 직접 전달하여 메모리 효율성 향상
         file_handle = open(video_path, "rb")
         try:
-            # 파일 크기 확인 (로깅용)
             file_size = os.path.getsize(video_path)
             logger.info(f"Uploading video file: {video_path} (size: {file_size / (1024*1024):.2f} MB)")
             
@@ -149,9 +214,11 @@ class VSS:
             data.add_field("purpose", "vision")
             data.add_field("media_type", "video")
             
-            # 타임아웃 설정: 큰 파일 업로드를 위해 충분한 시간 할당
-            # 파일 크기에 따라 동적으로 타임아웃 계산 (최소 60초, 최대 600초)
-            timeout_seconds = max(60, min(600, int(file_size / (1024 * 1024) * 10)))  # 1MB당 10초, 최소 60초, 최대 600초
+            # 파일 크기에 따라 동적 타임아웃 계산
+            timeout_seconds = max(
+                VIA_UPLOAD_TIMEOUT_MIN,
+                min(VIA_UPLOAD_TIMEOUT_MAX, int(file_size / (1024 * 1024) * VIA_UPLOAD_TIMEOUT_PER_MB))
+            )
             
             async with session.post(
                 self.files_endpoint, 
@@ -259,12 +326,6 @@ class VSS:
                 return message_content
             else:
                 raise HTTPException(status_code=502, detail=f"VIA 서버 응답 형식 오류: {json_data}")
-
-# 전역 VSS 클라이언트 (지연 초기화)
-vss_client = None
-
-DEFAULT_VIA_TARGET_RESPONSE_TIME = 2 * 60  # in seconds
-DEFAULT_VIA_TARGET_USECASE_EVENT_DURATION = 10  # in seconds
 
 # CHUNK_SIZES 정의 (튜플 리스트 형식: (label, value))
 CHUNK_SIZES = [
@@ -401,24 +462,19 @@ def parse_timestamps(timestamp_text, video_duration):
 
 
 async def get_recommended_chunk_size(video_length):
-    """
-    aiohttp를 사용하여 비동기 방식으로 API 호출
-    """
-    # In seconds:
-    target_response_time = DEFAULT_VIA_TARGET_RESPONSE_TIME
-    usecase_event_duration = DEFAULT_VIA_TARGET_USECASE_EVENT_DURATION
+    """동영상 길이에 따른 추천 chunk_size 계산"""
     recommended_chunk_size = 0
 
     try:
         session = await get_session()
         async with session.post(
-            VIA_SERVER_URL + "/recommended_config",
+            f"{VIA_SERVER_URL}/recommended_config",
             json={
                 "video_length": int(video_length),
-                "target_response_time": int(target_response_time),
-                "usecase_event_duration": int(usecase_event_duration),
+                "target_response_time": int(DEFAULT_VIA_TARGET_RESPONSE_TIME),
+                "usecase_event_duration": int(DEFAULT_VIA_TARGET_USECASE_EVENT_DURATION),
             },
-            timeout=aiohttp.ClientTimeout(total=10)
+            timeout=aiohttp.ClientTimeout(total=VIA_MODEL_TIMEOUT)
         ) as response:
             if response.status < 400:
                 # Success response from API:
@@ -490,19 +546,17 @@ async def generate_clips(
     user_id: Optional[str] = Form(None),
     video_ids: Optional[str] = Form(None)  # JSON 문자열로 전달: {"filename1": video_id1, "filename2": video_id2}
 ):
-    os.makedirs("./clips", exist_ok=True)  # 클립 저장 디렉토리 생성
-    # /clips 폴더 초기화는 제거 - 타임스탬프 기반 고유 파일명으로 중복 방지
-    # 오래된 클립 파일 정리 (24시간 이상 된 파일만 삭제)
+    os.makedirs("./clips", exist_ok=True)
+    
+    # 오래된 클립 파일 정리
     try:
         current_time = time.time()
         for existing_file in os.listdir("./clips"):
             file_path = os.path.join("./clips", existing_file)
             try:
                 if os.path.isfile(file_path):
-                    # 파일 수정 시간 확인
                     file_mtime = os.path.getmtime(file_path)
-                    # 24시간(86400초) 이상 된 파일만 삭제
-                    if current_time - file_mtime > 86400:
+                    if current_time - file_mtime > CLIP_CLEANUP_AGE:
                         os.remove(file_path)
                         logger.info(f"Deleted old clip: {file_path}")
             except Exception as e:
@@ -511,7 +565,6 @@ async def generate_clips(
         logger.warning(f"Error cleaning old clips: {e}")
 
     grouped_clips = []
-
     global vss_client
 
     # Normalize inputs: support single file param or multiple files
@@ -524,7 +577,7 @@ async def generate_clips(
 
     # Ensure tmp directory exists
     os.makedirs("./tmp", exist_ok=True)
-
+    
     try:
         # video_ids 파싱 (JSON 문자열)
         video_id_map = {}
@@ -538,28 +591,11 @@ async def generate_clips(
             file_path = os.path.basename(upfile.filename)
             tmp_path = f"./tmp/{file_path}"
 
-            if vss_client is None:
-                vss_client = VSS(VIA_SERVER_URL)
-                vss_client.model = await vss_client.get_model()
-
-            # GET models from VIA server (async aiohttp)
-            session = await get_session()
-            try:
-                async with session.get(VIA_SERVER_URL + "/models", timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    if resp.status >= 400:
-                        raise HTTPException(status_code=502, detail=f"VIA /models returned status {resp.status}")
-                    try:
-                        resp_json = await resp.json()
-                    except Exception:
-                        raise HTTPException(status_code=502, detail=f"VIA /models returned invalid JSON")
-                    model = resp_json["data"][0]["id"]
-            except HTTPException:
-                raise
-            except Exception as e:
-                raise HTTPException(status_code=502, detail=f"Failed to contact VIA server: {e}")
+            await ensure_vss_client()
+            model = await get_via_model()
 
             os.makedirs("./tmp", exist_ok=True)
-            # 업로드용 임시 파일 실제 저장 (기존 누락으로 인해 FileNotFoundError / 빈 처리 발생 가능)
+            # 업로드용 임시 파일 실제 저장
             with open(tmp_path, "wb") as buffer:
                 shutil.copyfileobj(upfile.file, buffer)
 
@@ -598,7 +634,7 @@ async def generate_clips(
             duration = video.duration or 0
             logger.info(f"Video duration: {duration} seconds for {tmp_path}")
             
-            # chunk_duration 계산: 동영상 길이의 1/10을 가장 가까운 값으로 반올림
+            # chunk_duration 계산
             chunk_duration = await get_recommended_chunk_size(duration)
 
             # DB에서 요약 결과 확인 (user_id와 video_id가 있는 경우)
@@ -618,6 +654,8 @@ async def generate_clips(
                     print(f"요약 결과 확인 중 오류: {e}")
 
             # 저장된 요약이 있으면 summarize_video 건너뛰기
+
+            summary_prompt = f"""Analyze the video and detect any threatening behavior, antisocial actions, or criminal activities. Identify events such as violence, aggression, property damage, theft, weapon-related actions, or any safety-risk situations. For each detected event, provide a clear description and output the start and end timestamps in seconds. Use the format: start_time - end_time - event_description."""
             if not has_stored_summary:
                 result = await vss_client.summarize_video(
                     video_id,
@@ -659,17 +697,8 @@ async def generate_clips(
                         elif not isinstance(result, str):
                             summary_text = str(result)
                         
-                        # vss_summaries 테이블에 저장 또는 업데이트
-                        cursor.execute(
-                            """INSERT INTO vss_summaries (VIDEO_ID, USER_ID, SUMMARY_TEXT) 
-                               VALUES (?, ?, ?)
-                               ON DUPLICATE KEY UPDATE 
-                               SUMMARY_TEXT = VALUES(SUMMARY_TEXT),
-                               UPDATED_AT = CURRENT_TIMESTAMP""",
-                            (video_id, user_id, summary_text)
-                        )
-                        conn.commit()
-                        logger.info(f"요약 결과 DB 저장 완료: VIDEO_ID={video_id}, USER_ID={user_id}")
+                        # 공통 저장 함수 사용
+                        _save_summary_to_db(video_id, user_id, summary_text, summary_prompt)
                     except Exception as e:
                         logger.error(f"요약 결과 DB 저장 실패: {e}")
                         # DB 저장 실패해도 요약은 계속 진행
@@ -737,7 +766,7 @@ async def generate_clips(
                     async with session.post(
                         ollama_url,
                         json=payload,
-                        timeout=aiohttp.ClientTimeout(total=60)
+                        timeout=aiohttp.ClientTimeout(total=OLLAMA_TIMEOUT)
                     ) as ollama_response:
                         if ollama_response.status == 200:
                             ollama_data = await ollama_response.json()
@@ -823,8 +852,9 @@ async def generate_clips(
                     status_code=500,
                     detail=f"검색 실패: VIA 서버에서 장면 검색 중 오류가 발생했습니다. ({str(via_error)})"
                 )
-            video.close()
-            del video
+            finally:
+                video.close()
+                del video
 
             grouped_clips.append({
                 "video": file_path,
@@ -835,11 +865,10 @@ async def generate_clips(
         logger.error(f"Error processing uploaded video(s): {e}")
         raise HTTPException(status_code=500, detail=f"Error processing uploaded video(s): {e}")
 
-    # 클립 추출 여부 확인 (실제 URL이 있는 클립이 있는지 확인)
+    # 클립 추출 여부 확인
     clips_extracted = False
     for group in grouped_clips:
         for clip in group.get("clips", []):
-            # url이 있고 via_response가 없는 경우에만 추출된 것으로 간주
             if clip.get("url") and not clip.get("via_response"):
                 clips_extracted = True
                 break
@@ -881,26 +910,8 @@ async def vss_summarize(
     enable_audio: bool = Form(...),
     video_id: Optional[str] = Form(None),  # VIA 서버의 video_id (이미 업로드된 경우)
 ):
-    global vss_client
-    if vss_client is None:
-        vss_client = VSS(VIA_SERVER_URL)
-        vss_client.model = await vss_client.get_model()
-
-    # GET models from VIA server (async aiohttp)
-    session = await get_session()
-    try:
-        async with session.get(VIA_SERVER_URL + "/models", timeout=aiohttp.ClientTimeout(total=10)) as resp:
-            if resp.status >= 400:
-                raise HTTPException(status_code=502, detail=f"VIA /models returned status {resp.status}")
-            try:
-                resp_json = await resp.json()
-            except Exception:
-                raise HTTPException(status_code=502, detail=f"VIA /models returned invalid JSON")
-            model = resp_json["data"][0]["id"]
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to contact VIA server: {e}")
+    await ensure_vss_client()
+    model = await get_via_model()
 
     # video_id가 제공되지 않은 경우에만 업로드 (하지만 사용자 요청에 따라 업로드하지 않음)
     if not video_id:
@@ -1005,33 +1016,22 @@ async def vss_query(
     top_k: int = Form(...),
     query: str = Form(...)
     ):
-    
-    # 전역 vss_client 사용 선언 (누락 시 UnboundLocalError 발생)
-    global vss_client
-    
-    if vss_client is None:
-        vss_client = VSS(VIA_SERVER_URL)
-        vss_client.model = await vss_client.get_model()
-    
-    session = await get_session()
-    async with session.get(VIA_SERVER_URL + "/models", timeout=aiohttp.ClientTimeout(total=10)) as resp:
-        if resp.status >= 400:
-            raise HTTPException(status_code=502, detail=f"VIA /models returned status {resp.status}")
-        resp_json = await resp.json()
-        model = resp_json["data"][0]["id"]
-    
-    if file and not video_id:
-        os.makedirs("./tmp", exist_ok=True)
-        file_path = f"./tmp/{file.filename}"
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        video_id = await vss_client.upload_video(file_path)
-    elif not video_id:
-        raise HTTPException(status_code=400, detail="video_id 또는 file 중 하나는 필요합니다.")
         
-    result = await vss_client.query_video(video_id, model, chunk_size, temperature, seed, max_new_tokens, top_p, top_k, query)
+        await ensure_vss_client()
+        model = await get_via_model()
+    
+        if file and not video_id:
+            os.makedirs("./tmp", exist_ok=True)
+            file_path = f"./tmp/{file.filename}"
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            video_id = await vss_client.upload_video(file_path)
+        elif not video_id:
+            raise HTTPException(status_code=400, detail="video_id 또는 file 중 하나는 필요합니다.")
+        
+        result = await vss_client.query_video(video_id, model, chunk_size, temperature, seed, max_new_tokens, top_p, top_k, query)
 
-    return {"summary": result, "video_id": video_id}
+        return {"summary": result, "video_id": video_id}
 
 
 
@@ -1060,19 +1060,51 @@ class ConnectionPool:
         self.lock = threading.Lock()
         self.created_connections = 0
         
-        # 초기 연결 생성
-        for _ in range(min(3, max_connections)):  # 최소 3개 연결 미리 생성
-            conn = self._create_connection()
-            self.pool.put(conn)
-            self.created_connections += 1
+        # 초기 연결 생성 (실패해도 애플리케이션 시작은 계속)
+        # Railway 등에서 DB 연결 정보가 없을 수 있으므로 예외 처리
+        try:
+            for _ in range(min(3, max_connections)):
+                try:
+                    conn = self._create_connection()
+                    self.pool.put(conn)
+                    self.created_connections += 1
+                except Exception as e:
+                    logger.warning(f"초기 DB 연결 생성 실패 (무시됨): {e}")
+                    break
+        except Exception as e:
+            logger.warning(f"ConnectionPool 초기화 중 오류 (무시됨): {e}")
+            logger.warning("첫 요청 시 연결을 다시 시도합니다.")
     
     def _create_connection(self):
         """새 DB 연결 생성"""
-        conn = mariadb.connect(
-            autocommit=True,  # 자동 커밋으로 성능 향상
+        # 호스트명이 명시적으로 전달되도록 보장
+        connection_params = {
+            'autocommit': True,  # 자동 커밋으로 성능 향상
             **self.connection_kwargs
-        )
-        return conn
+        }
+        
+        # host.docker.internal 변환 방지: host를 강제로 IP 주소로 설정
+        if 'host' in connection_params:
+            original_host = connection_params['host']
+            # IP 주소 형식인지 확인 (IPv4)
+            if re.match(IP_PATTERN, str(original_host)):
+                # IP 주소인 경우 그대로 사용 (변환 방지)
+                # 문자열로 명시적 변환하여 호스트명 해석 방지
+                connection_params['host'] = str(original_host).strip()
+                logger.info(f"DB 연결 시도: host={connection_params['host']} (IP 주소 직접 사용), user={connection_params.get('user', 'N/A')}, database={connection_params.get('database', 'N/A')}")
+            else:
+                # 호스트명인 경우 그대로 사용
+                connection_params['host'] = str(original_host).strip()
+                logger.info(f"DB 연결 시도: host={connection_params['host']} (호스트명), user={connection_params.get('user', 'N/A')}, database={connection_params.get('database', 'N/A')}")
+        
+        # MariaDB 연결 시도
+        try:
+            conn = mariadb.connect(**connection_params)
+            logger.info(f"✓ DB 연결 성공: {connection_params.get('host', 'N/A')}")
+            return conn
+        except Exception as e:
+            logger.error(f"❌ DB 연결 실패: host={connection_params.get('host', 'N/A')}, error={e}")
+            raise
     
     def get_connection(self, timeout=5):
         """풀에서 연결 가져오기"""
@@ -1108,21 +1140,130 @@ class ConnectionPool:
             with self.lock:
                 self.created_connections -= 1
 
-# DB 커넥션 풀 초기화
+# ============================================================================
+# 데이터베이스 연결 풀 초기화
+# ============================================================================
+# 데이터베이스 연결 정보 (고정값 사용 - 환경 변수 없이)
+db_host = "172.16.15.69"
+db_user = "root"
+db_password = "pass0001!"  # 고정 비밀번호
+db_port = 3306
+db_name = "vss"
+
+# ConnectionPool에 명시적으로 host를 IP 주소로 전달
+# host.docker.internal 변환을 방지하기 위해 IP 주소를 문자열로 명시
+# IP 주소 형식 검증
+if not re.match(IP_PATTERN, str(db_host)):
+    logger.warning(f"⚠️ DB_HOST가 IP 주소 형식이 아닙니다: {db_host}")
+    logger.warning("⚠️ IP 주소 형식(예: 172.16.15.69)을 사용하는 것을 권장합니다.")
+
+# IP 주소를 명시적으로 문자열로 변환 (호스트명 변환 방지)
+db_host_str = str(db_host).strip()
+logger.info(f"DB 연결 풀 초기화: host={db_host_str} (타입: {type(db_host_str).__name__})")
+
 db_pool = ConnectionPool(
-    max_connections=20,  # 최대 20개 동시 연결
-    user="root",
-    password="pass0001!",
-    host="172.16.15.69",  # 원격 MariaDB 서버 IP
-    port=3306,
-    database="vss"
+    max_connections=20,
+    user=db_user,
+    password=db_password,
+    host=db_host_str,  # IP 주소를 문자열로 명시적으로 전달
+    port=int(db_port),
+    database=db_name
 )
 
 # 하위 호환성을 위한 전역 연결 (점진적 마이그레이션용)
-# autocommit 활성화로 커밋 오버헤드 감소
-conn = db_pool.get_connection()
-conn.autocommit = True  # 자동 커밋 활성화
-cursor = conn.cursor()
+# 모듈 레벨에서 연결을 시도하되, 실패해도 애플리케이션 시작은 계속 진행
+# 실제 사용 시점에 연결을 다시 시도하도록 함
+conn = None
+cursor = None
+
+try:
+    conn = db_pool.get_connection()
+    conn.autocommit = True  # 자동 커밋 활성화
+    cursor = conn.cursor()
+    logger.info("✓ 데이터베이스 연결 성공 (전역 연결)")
+except Exception as e:
+    logger.warning(f"⚠️ 전역 데이터베이스 연결 실패 (시작 시점): {e}")
+    logger.warning("⚠️ 첫 요청 시 연결을 다시 시도합니다.")
+    conn = None
+    cursor = None
+
+def ensure_db_connection():
+    """전역 DB 연결이 없으면 다시 시도"""
+    global conn, cursor
+    if conn is None or cursor is None:
+        try:
+            conn = db_pool.get_connection()
+            conn.autocommit = True
+            cursor = conn.cursor()
+            logger.info("✓ 데이터베이스 연결 성공 (재연결)")
+        except Exception as e:
+            logger.error(f"❌ 데이터베이스 연결 실패: {e}")
+            raise HTTPException(status_code=500, detail=f"데이터베이스 연결에 실패했습니다: {str(e)}")
+
+def verify_user_exists(user_id: str):
+    """사용자 존재 확인"""
+    ensure_db_connection()
+    cursor.execute("SELECT ID FROM vss_user WHERE ID = ?", (user_id,))
+    if not cursor.fetchone():
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+def validate_video_ownership(video_id: str, user_id: str, via_video_id: bool = False):
+    """동영상 소유권 확인"""
+    ensure_db_connection()
+    if via_video_id:
+        cursor.execute(
+            "SELECT ID FROM vss_videos WHERE VIDEO_ID = ? AND USER_ID = ?",
+            (video_id, user_id)
+        )
+    else:
+        cursor.execute(
+            "SELECT ID FROM vss_videos WHERE ID = ? AND USER_ID = ?",
+            (video_id, user_id)
+        )
+    if not cursor.fetchone():
+        raise HTTPException(status_code=404, detail="동영상을 찾을 수 없거나 권한이 없습니다.")
+
+def _save_summary_to_db(video_id: str, user_id: str, summary_text: str, prompt: str):
+    """
+    요약 결과를 DB에 저장하는 공통 함수
+    
+    Args:
+        video_id: VIA 서버의 video_id (vss_videos.VIDEO_ID 컬럼 값)
+        user_id: 사용자 ID
+        summary_text: 요약 텍스트
+        prompt: 사용된 프롬프트
+    
+    Returns:
+        summary_id: 저장된 요약의 ID (INSERT인 경우), None (UPDATE인 경우)
+    """
+    try:
+        # vss_summaries 테이블에 저장 또는 업데이트
+        cursor.execute(
+            """INSERT INTO vss_summaries (VIDEO_ID, USER_ID, SUMMARY_TEXT, PROMPT) 
+               VALUES (?, ?, ?, ?)
+               ON DUPLICATE KEY UPDATE 
+               SUMMARY_TEXT = VALUES(SUMMARY_TEXT),
+               PROMPT = VALUES(PROMPT),
+               UPDATED_AT = CURRENT_TIMESTAMP""",
+            (video_id, user_id, summary_text, prompt)
+        )
+        conn.commit()
+        
+        summary_id = cursor.lastrowid if cursor.rowcount == 1 else None
+        if summary_id is None:
+            # UPDATE인 경우 ID 조회
+            cursor.execute(
+                "SELECT ID FROM vss_summaries WHERE VIDEO_ID = ? AND USER_ID = ?",
+                (video_id, user_id)
+            )
+            row = cursor.fetchone()
+            summary_id = row[0] if row else None
+        
+        logger.info(f"요약 결과 DB 저장 완료: VIDEO_ID={video_id}, USER_ID={user_id}, summary_id={summary_id}")
+        return summary_id
+    except Exception as e:
+        logger.error(f"요약 결과 DB 저장 실패: {e}")
+        raise
 
 def get_db_connection():
     """DB 연결 가져오기 (컨텍스트 매니저)"""
@@ -1284,18 +1425,17 @@ def cleanup_expired_codes():
 # 로그인 엔드포인트
 @app.post("/login")
 def login(data: LoginRequest = Body(...)):
+    ensure_db_connection()
     cursor.execute(
         "SELECT PW FROM vss_user WHERE ID = ?",
         (data.username,)
     )
     row = cursor.fetchone()
     if row is None:
-        # ID가 없는 경우
         return {"success": False, "message": "계정이 없습니다."}
     db_pw = row[0]
     
     # 해시화된 비밀번호와 입력된 비밀번호 비교
-    # 기존 데이터베이스에 평문 비밀번호가 있을 수 있으므로 둘 다 확인
     password_correct = False
     try:
         # bcrypt 해시로 저장된 경우
@@ -1303,7 +1443,6 @@ def login(data: LoginRequest = Body(...)):
             password_correct = True
     except (ValueError, AttributeError):
         # bcrypt 해시가 아닌 경우 (기존 평문 비밀번호 호환성 유지)
-        # 새로운 회원가입은 모두 해시화되므로 이 부분은 점진적으로 제거 가능
         if db_pw == data.password:
             password_correct = True
             # 기존 평문 비밀번호를 해시화하여 업데이트 (마이그레이션)
@@ -1321,7 +1460,6 @@ def login(data: LoginRequest = Body(...)):
     if password_correct:
         return {"success": True}
     else:
-        # ID는 있지만 비밀번호가 틀린 경우
         return {"success": False, "message": "비밀번호가 틀렸습니다."}
 
 # 이메일 인증 코드 전송 요청 모델
@@ -1343,10 +1481,10 @@ class User(BaseModel):
 @app.get("/debug/email-check/{email}")
 def debug_email_check(email: str):
     """이메일 검증 디버깅용 엔드포인트"""
-    email_lower = email.strip().lower()
-    email_regex = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
-    is_valid_format = bool(re.match(email_regex, email_lower))
+    email_lower = validate_email(email)
+    is_valid_format = True  # validate_email에서 이미 검증됨
     
+    ensure_db_connection()
     cursor.execute("SELECT ID FROM vss_user WHERE EMAIL = ?", (email_lower,))
     existing_user = cursor.fetchone()
     is_existing = existing_user is not None
@@ -1365,26 +1503,19 @@ def send_verification_code(request: SendVerificationCodeRequest):
         # 요청 데이터 로깅
         logger.info(f"인증 코드 전송 요청 수신: {request.email}")
         
-        if not request.email or not request.email.strip():
-            logger.warning("이메일이 비어있습니다.")
-            raise HTTPException(status_code=400, detail="이메일 주소를 입력해주세요.")
-        
-        email = request.email.strip().lower()
+        email = validate_email(request.email)
         logger.info(f"처리할 이메일: {email}")
-        
-        # 이메일 형식 검증
-        email_regex = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
-        if not re.match(email_regex, email):
-            logger.warning(f"이메일 형식 검증 실패: {email}")
-            raise HTTPException(status_code=400, detail="올바른 이메일 형식이 아닙니다.")
         
         # 기존 사용자 이메일 중복 확인
         try:
+            ensure_db_connection()
             cursor.execute("SELECT ID FROM vss_user WHERE EMAIL = ?", (email,))
             existing_user = cursor.fetchone()
             if existing_user:
                 logger.warning(f"이미 사용 중인 이메일: {email}")
                 raise HTTPException(status_code=400, detail="이미 사용 중인 이메일입니다.")
+        except HTTPException:
+            raise
         except Exception as db_error:
             logger.error(f"데이터베이스 조회 오류: {db_error}")
             raise HTTPException(status_code=500, detail="데이터베이스 오류가 발생했습니다.")
@@ -1394,7 +1525,7 @@ def send_verification_code(request: SendVerificationCodeRequest):
         
         # 인증 코드 생성 및 저장
         code = generate_verification_code()
-        expires_at = datetime.now() + timedelta(minutes=10)  # 10분 유효
+        expires_at = datetime.now() + timedelta(minutes=EMAIL_CODE_EXPIRY_MINUTES)
         
         email_verification_codes[email] = {
             "code": code,
@@ -1420,7 +1551,7 @@ def send_verification_code(request: SendVerificationCodeRequest):
 @app.post("/verify-email-code")
 def verify_email_code(request: VerifyEmailRequest):
     """이메일 인증 코드 검증"""
-    email = request.email.strip().lower()
+    email = validate_email(request.email)
     code = request.code.strip()
     
     # 만료된 코드 정리
@@ -1449,7 +1580,7 @@ def verify_email_code(request: VerifyEmailRequest):
 @app.post("/register")
 def register(user: User):
     """회원가입 (이메일 인증 필수)"""
-    email = user.email.strip().lower()
+    email = validate_email(user.email)
     
     # 이메일 인증 확인
     cleanup_expired_codes()
@@ -1476,6 +1607,7 @@ def register(user: User):
         hashed_password = bcrypt.hashpw(user.password.encode('utf-8'), bcrypt.gensalt())
         hashed_password_str = hashed_password.decode('utf-8')
         
+        ensure_db_connection()
         cursor.execute(
             "INSERT INTO vss_user (ID, PW, EMAIL) VALUES (?, ?, ?)",
             (user.username, hashed_password_str, email)
@@ -1488,13 +1620,13 @@ def register(user: User):
         logger.info(f"회원가입 성공: {user.username} ({email})")
         return {"message": "회원가입 성공"}
     except mariadb.IntegrityError as e:
-        error_msg = str(e)
-        if "ID" in error_msg or "PRIMARY" in error_msg:
-            raise HTTPException(status_code=400, detail="이미 존재하는 사용자 ID입니다.")
-        elif "EMAIL" in error_msg:
-            raise HTTPException(status_code=400, detail="이미 사용 중인 이메일입니다.")
-        else:
-            raise HTTPException(status_code=400, detail="이미 존재하는 사용자입니다.")
+            error_msg = str(e)
+            if "ID" in error_msg or "PRIMARY" in error_msg:
+                raise HTTPException(status_code=400, detail="이미 존재하는 사용자 ID입니다.")
+            elif "EMAIL" in error_msg:
+                raise HTTPException(status_code=400, detail="이미 사용 중인 이메일입니다.")
+            else:
+                raise HTTPException(status_code=400, detail="이미 존재하는 사용자입니다.")
 
 # 비밀번호 재설정용 인증 코드 전송 요청 모델
 class SendResetPasswordCodeRequest(BaseModel):
@@ -1531,15 +1663,12 @@ def send_reset_password_code(request: SendResetPasswordCodeRequest):
         username = request.username.strip()
         email = request.email.strip().lower()
         
-        if not username or not email:
-            raise HTTPException(status_code=400, detail="ID와 이메일을 모두 입력해주세요.")
-        
-        # 이메일 형식 검증
-        email_regex = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
-        if not re.match(email_regex, email):
-            raise HTTPException(status_code=400, detail="올바른 이메일 형식이 아닙니다.")
+        if not username:
+            raise HTTPException(status_code=400, detail="ID를 입력해주세요.")
+        email = validate_email(request.email)
         
         # 사용자 ID와 이메일 일치 확인
+        ensure_db_connection()
         cursor.execute("SELECT ID, EMAIL FROM vss_user WHERE ID = ?", (username,))
         user = cursor.fetchone()
         if not user:
@@ -1554,7 +1683,7 @@ def send_reset_password_code(request: SendResetPasswordCodeRequest):
         
         # 인증 코드 생성 및 저장
         code = generate_verification_code()
-        expires_at = datetime.now() + timedelta(minutes=10)  # 10분 유효
+        expires_at = datetime.now() + timedelta(minutes=EMAIL_CODE_EXPIRY_MINUTES)
         
         reset_password_codes[email] = {
             "code": code,
@@ -1581,7 +1710,7 @@ def send_reset_password_code(request: SendResetPasswordCodeRequest):
 def verify_reset_password_code(request: VerifyResetPasswordCodeRequest):
     """비밀번호 재설정용 이메일 인증 코드 검증"""
     username = request.username.strip()
-    email = request.email.strip().lower()
+    email = validate_email(request.email)
     code = request.code.strip()
     
     # 만료된 코드 정리
@@ -1615,7 +1744,7 @@ def verify_reset_password_code(request: VerifyResetPasswordCodeRequest):
 def reset_password(request: ResetPasswordRequest):
     """비밀번호 재설정"""
     username = request.username.strip()
-    email = request.email.strip().lower()
+    email = validate_email(request.email)
     code = request.verification_code.strip()
     new_password = request.new_password
     
@@ -1649,6 +1778,7 @@ def reset_password(request: ResetPasswordRequest):
     
     try:
         # 기존 비밀번호 조회
+        ensure_db_connection()
         cursor.execute("SELECT PW FROM vss_user WHERE ID = ? AND EMAIL = ?", (username, email))
         user_row = cursor.fetchone()
         if not user_row:
@@ -1707,6 +1837,7 @@ def extract_video_metadata(file_path: str, video_id: int, filename: str):
         video.close()
         
         # 메타데이터 업데이트
+        ensure_db_connection()
         cursor.execute(
             """UPDATE vss_videos 
                SET WIDTH = ?, HEIGHT = ?, DURATION = ? 
@@ -1726,17 +1857,19 @@ async def upload_video_to_db(
     user_id: str = Form(...)
 ):
     """동영상 파일을 서버에 업로드하고 DB에 저장 (최적화됨)"""
+    global vss_client
+    
     try:
         # 1. 파일 검증 (빠른 실패 - DB 쿼리 전에 검증)
         if not file.filename:
             raise HTTPException(status_code=400, detail="파일명이 없습니다.")
         
         file_ext = Path(file.filename).suffix.lower()
-        allowed_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv'}
-        if file_ext not in allowed_extensions:
+        if file_ext not in ALLOWED_VIDEO_EXTENSIONS:
             raise HTTPException(status_code=400, detail=f"지원하지 않는 파일 형식입니다: {file_ext}")
         
         # 2. DB 쿼리 최적화: 사용자 검증과 중복 체크를 하나의 쿼리로 통합
+        ensure_db_connection()
         cursor.execute(
             """SELECT 
                    (SELECT COUNT(*) FROM vss_user WHERE ID = ?) as user_exists,
@@ -1759,19 +1892,14 @@ async def upload_video_to_db(
         file_path = videos_dir / unique_filename
         file_url = f"/video-files/{unique_filename}"
         
-        # 4. 파일 저장 (최적화된 버퍼 크기 사용)
-        # 버퍼 크기를 8MB로 설정하여 대용량 파일 처리 성능 향상
-        BUFFER_SIZE = 8 * 1024 * 1024  # 8MB
+        # 4. 파일 저장
         file_size = 0
-        with open(file_path, "wb", buffering=BUFFER_SIZE) as buffer:
-            shutil.copyfileobj(file.file, buffer, length=BUFFER_SIZE)
+        with open(file_path, "wb", buffering=FILE_BUFFER_SIZE) as buffer:
+            shutil.copyfileobj(file.file, buffer, length=FILE_BUFFER_SIZE)
             file_size = buffer.tell()
         
         # 5. VIA 서버에 업로드하여 video_id 얻기
-        global vss_client
-        if vss_client is None:
-            vss_client = VSS(VIA_SERVER_URL)
-            vss_client.model = await vss_client.get_model()
+        await ensure_vss_client()
         
         via_video_id = None
         try:
@@ -1798,7 +1926,7 @@ async def upload_video_to_db(
         return {
             "success": True,
             "video_id": video_id,
-            "file_url": f"http://localhost:8001{file_url}",
+            "file_url": build_file_url(file_url),
             "message": "동영상 업로드가 완료되었습니다."
         }
     except HTTPException:
@@ -1817,6 +1945,7 @@ async def upload_video_to_db(
 async def get_videos(user_id: str):
     """사용자의 동영상 목록 조회"""
     try:
+        ensure_db_connection()
         cursor.execute(
             """SELECT ID, FILE_NAME, FILE_URL, FILE_SIZE, WIDTH, HEIGHT, DURATION, CREATED_AT, VIDEO_ID 
                FROM vss_videos 
@@ -1831,13 +1960,13 @@ async def get_videos(user_id: str):
             videos.append({
                 "id": row[0],
                 "title": row[1],
-                "file_url": f"http://localhost:8001{row[2]}",  # DB에 저장된 URL 그대로 사용
+                "file_url": build_file_url(row[2]),
                 "fileSize": row[3],
                 "width": row[4],
                 "height": row[5],
                 "duration": row[6],
                 "date": row[7].strftime("%Y-%m-%d") if row[7] else None,
-                "video_id": row[8]  # VIA 서버의 video_id
+                "video_id": row[8]
             })
         
         return {"success": True, "videos": videos}
@@ -1852,6 +1981,7 @@ async def delete_video(video_id: int, user_id: str = Query(...)):
         logger.info(f"동영상 삭제 요청: video_id={video_id}, user_id={user_id}")
         
         # 동영상 소유권 확인 및 파일 경로, VIDEO_ID 조회
+        ensure_db_connection()
         cursor.execute(
             "SELECT FILE_PATH, FILE_URL, VIDEO_ID FROM vss_videos WHERE ID = ? AND USER_ID = ?",
             (video_id, user_id)
@@ -1981,7 +2111,6 @@ async def delete_clips(request: DeleteClipsRequest):
         for clip_url in request.clip_urls:
             try:
                 # URL에서 파일명 추출
-                # 예: http://localhost:8001/clips/clip_filename.mp4 -> clip_filename.mp4
                 if "/clips/" in clip_url:
                     filename = clip_url.split("/clips/")[-1].split("?")[0]  # 쿼리 파라미터 제거
                 else:
@@ -1996,9 +2125,9 @@ async def delete_clips(request: DeleteClipsRequest):
                 clip_file_path = clips_dir / filename
                 
                 if clip_file_path.exists() and clip_file_path.is_file():
-                    clip_file_path.unlink()
-                    deleted_count += 1
-                    logger.info(f"클립 파일 삭제 성공: {filename}")
+                        clip_file_path.unlink()
+                        deleted_count += 1
+                        logger.info(f"클립 파일 삭제 성공: {filename}")
                 else:
                     logger.warning(f"클립 파일을 찾을 수 없습니다: {filename}")
                     failed_count += 1
@@ -2020,6 +2149,7 @@ async def delete_clips(request: DeleteClipsRequest):
 class SaveSummaryRequest(BaseModel):
     video_id: str  # VIA 서버의 video_id (vss_videos.VIDEO_ID 컬럼 값)
     user_id: str
+    prompt: str
     summary_text: str
     via_video_id: Optional[str] = None  # VIA 서버의 video_id (하위 호환성을 위해 유지)
 
@@ -2029,49 +2159,22 @@ async def save_summary(request: SaveSummaryRequest):
     try:
         video_id = request.video_id
         user_id = request.user_id
+        prompt = request.prompt
         summary_text = request.summary_text
         
-        # 사용자 ID 검증
-        cursor.execute("SELECT ID FROM vss_user WHERE ID = ?", (user_id,))
-        if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        verify_user_exists(user_id)
         
-        # 동영상 소유권 확인 (VIDEO_ID는 VIA 서버의 video_id이므로 vss_videos.VIDEO_ID로 조회)
-        cursor.execute(
-            "SELECT ID FROM vss_videos WHERE VIDEO_ID = ? AND USER_ID = ?",
-            (video_id, user_id)
-        )
-        if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="동영상을 찾을 수 없거나 권한이 없습니다.")
+        validate_video_ownership(video_id, user_id, via_video_id=True)
         
-        # 요약 결과 저장 또는 업데이트 (UNIQUE KEY로 중복 방지)
+        # 공통 저장 함수 사용
         # vss_summaries 테이블 구조:
         # - VIDEO_ID (VARCHAR): VIA 서버의 video_id (vss_videos.VIDEO_ID 컬럼 값)
         # - USER_ID (VARCHAR): 사용자 ID
         # - SUMMARY_TEXT (LONGTEXT): 요약 텍스트
+        # - PROMPT (TEXT): 사용된 프롬프트
         # - CREATED_AT (TIMESTAMP): 자동 설정
         # - UPDATED_AT (TIMESTAMP): 자동 설정
-        cursor.execute(
-            """INSERT INTO vss_summaries (VIDEO_ID, USER_ID, SUMMARY_TEXT) 
-               VALUES (?, ?, ?)
-               ON DUPLICATE KEY UPDATE 
-               SUMMARY_TEXT = VALUES(SUMMARY_TEXT),
-               UPDATED_AT = CURRENT_TIMESTAMP""",
-            (video_id, user_id, summary_text)
-        )
-        conn.commit()
-        
-        summary_id = cursor.lastrowid if cursor.rowcount == 1 else None
-        if summary_id is None:
-            # UPDATE인 경우 ID 조회
-            cursor.execute(
-                "SELECT ID FROM vss_summaries WHERE VIDEO_ID = ? AND USER_ID = ?",
-                (video_id, user_id)
-            )
-            row = cursor.fetchone()
-            summary_id = row[0] if row else None
-        
-        logger.info(f"요약 결과 저장 성공: 동영상 ID {video_id} (사용자: {user_id})")
+        summary_id = _save_summary_to_db(video_id, user_id, summary_text, prompt)
         return {
             "success": True,
             "summary_id": summary_id,
@@ -2087,13 +2190,10 @@ async def save_summary(request: SaveSummaryRequest):
 async def get_summary(video_id: str, user_id: str = Query(...)):
     """특정 동영상의 요약 결과 조회"""
     try:
-        # 사용자 ID 검증
-        cursor.execute("SELECT ID FROM vss_user WHERE ID = ?", (user_id,))
-        if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        verify_user_exists(user_id)
         
         # 요약 결과 조회 (소유권 확인 포함)
-        # VIDEO_ID는 VIA 서버의 video_id이므로 vss_videos.VIDEO_ID와 조인
+        ensure_db_connection()
         cursor.execute(
             """SELECT s.ID, s.SUMMARY_TEXT, s.CREATED_AT, s.UPDATED_AT
                FROM vss_summaries s
@@ -2109,15 +2209,15 @@ async def get_summary(video_id: str, user_id: str = Query(...)):
                 "message": "요약 결과를 찾을 수 없습니다."
             }
         
-        return {
-            "success": True,
-            "summary": {
-                "id": row[0],
-                "summary_text": row[1],
-                "created_at": row[2].isoformat() if row[2] else None,
-                "updated_at": row[3].isoformat() if row[3] else None
+            return {
+                "success": True,
+                "summary": {
+                    "id": row[0],
+                    "summary_text": row[1],
+                    "created_at": row[2].isoformat() if row[2] else None,
+                    "updated_at": row[3].isoformat() if row[3] else None
+                }
             }
-        }
     except HTTPException:
         raise
     except Exception as e:
@@ -2128,13 +2228,10 @@ async def get_summary(video_id: str, user_id: str = Query(...)):
 async def get_user_summaries(user_id: str = Query(...)):
     """사용자의 모든 요약 결과 조회"""
     try:
-        # 사용자 ID 검증
-        cursor.execute("SELECT ID FROM vss_user WHERE ID = ?", (user_id,))
-        if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        verify_user_exists(user_id)
         
         # 사용자의 모든 요약 결과 조회
-        # VIDEO_ID는 VIA 서버의 video_id이므로 vss_videos.VIDEO_ID와 조인
+        ensure_db_connection()
         cursor.execute(
             """SELECT s.ID, s.VIDEO_ID, s.SUMMARY_TEXT, s.CREATED_AT, s.UPDATED_AT, v.FILE_NAME
                FROM vss_summaries s
@@ -2182,12 +2279,10 @@ async def delete_summaries(request: DeleteSummaryRequest):
         if not video_ids or len(video_ids) == 0:
             raise HTTPException(status_code=400, detail="동영상 ID 목록이 필요합니다.")
         
-        # 사용자 ID 검증
-        cursor.execute("SELECT ID FROM vss_user WHERE ID = ?", (user_id,))
-        if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        verify_user_exists(user_id)
         
         # 선택된 동영상들의 VIDEO_ID (VIA 서버의 video_id) 조회
+        ensure_db_connection()
         placeholders = ','.join(['?'] * len(video_ids))
         cursor.execute(
             f"SELECT VIDEO_ID FROM vss_videos WHERE ID IN ({placeholders}) AND USER_ID = ?",
@@ -2243,8 +2338,21 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """애플리케이션 시작 시 aiohttp 세션 생성"""
+    """애플리케이션 시작 시 aiohttp 세션 생성 및 DB 연결 확인"""
     await get_session()
+    
+    # 데이터베이스 연결 확인 (실패해도 애플리케이션은 계속 시작)
+    global conn, cursor
+    if conn is None or cursor is None:
+        try:
+            conn = db_pool.get_connection()
+            conn.autocommit = True
+            cursor = conn.cursor()
+            logger.info("✓ 데이터베이스 연결 성공 (startup)")
+        except Exception as e:
+            logger.warning(f"⚠️ 데이터베이스 연결 실패 (startup): {e}")
+            logger.warning("⚠️ 첫 요청 시 연결을 다시 시도합니다.")
+    
     logger.info("✓ 애플리케이션이 시작되었습니다. VIA 서버의 query_video를 사용합니다.")
 
 @app.on_event("shutdown")

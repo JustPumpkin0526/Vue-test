@@ -478,6 +478,13 @@ import { marked } from 'marked';
 import Setting from '@/pages/Setting.vue';
 import settingIcon from '@/assets/icons/setting.png';
 
+// ==================== 상수 정의 ====================
+const API_BASE_URL = 'http://localhost:8001';
+const METADATA_TIMEOUT = 5000; // 동영상 메타데이터 로드 타임아웃 (ms)
+const CHUNK_SIZE_UPDATE_DELAY = 1000; // chunk_size 업데이트 지연 시간 (ms)
+const UPLOAD_PROCESSING_DELAY = 500; // 업로드 후 처리 지연 시간 (ms)
+const AUTO_SAVE_DELAY = 1000; // 자동 저장 지연 시간 (ms)
+
 const selectedIndexes = ref([]); // 선택된 동영상 id 배열
 const prompt = ref("");
 const response = ref("");
@@ -523,13 +530,17 @@ const streaming = ref(false);
 // 업로드 진행률 모달 상태
 const showUploadModal = ref(false);
 const uploadProgress = ref([]); // { id, fileName, progress, status, uploaded, total }
+const activeUploads = ref({}); // { uploadId: XMLHttpRequest } - 진행 중인 업로드 추적
 // 실행 중인 작업 추적
 const activeTasks = ref([]); // 실행 중인 작업 목록: { taskId, type, startTime, currentIndex, totalCount, videoIds, loadingIds, prompt }
 const activeIntervals = ref({}); // 실행 중인 타이머: { taskId: intervalId }
 
 function closeSettingModal() { showSettingModal.value = false; }
 
-// 동영상 길이를 가져와서 추천 chunk_size를 계산하는 함수
+// ==================== 유틸리티 함수 ====================
+/**
+ * 동영상 길이를 가져와서 추천 chunk_size를 계산하는 함수
+ */
 async function RecommendChunkSize(videoElement) {
   if (!videoElement) return null;
 
@@ -548,22 +559,22 @@ async function RecommendChunkSize(videoElement) {
 
     videoElement.addEventListener('loadedmetadata', onLoadedMetadata);
 
-    // 타임아웃 설정 (5초)
+    // 타임아웃 설정
     setTimeout(() => {
       videoElement.removeEventListener('loadedmetadata', onLoadedMetadata);
       resolve(null);
-    }, 5000);
+    }, METADATA_TIMEOUT);
   });
 }
 
-// 추천 chunk_size를 API에서 가져오는 함수
+/**
+ * 추천 chunk_size를 API에서 가져오는 함수
+ */
 async function fetchRecommendedChunkSize(videoLength) {
   if (!videoLength || !isFinite(videoLength)) return null;
 
-  const VSS_API_URL = "http://localhost:8001/get-recommended-chunk-size"
-
   try {
-    const response = await fetch(VSS_API_URL, {
+    const response = await fetch(`${API_BASE_URL}/get-recommended-chunk-size`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -584,7 +595,9 @@ async function fetchRecommendedChunkSize(videoLength) {
   }
 }
 
-// 동영상에 대해 추천 chunk_size를 가져와서 설정 스토어에 저장
+/**
+ * 동영상에 대해 추천 chunk_size를 가져와서 설정 스토어에 저장
+ */
 async function updateRecommendedChunkSize(videoId) {
   const videoElement = videoRefs.value[videoId];
   if (!videoElement) return;
@@ -601,6 +614,66 @@ async function updateRecommendedChunkSize(videoId) {
     settingStore.chunk = recommendedChunkSize;
     console.log(`동영상 길이: ${duration.toFixed(2)}초, 추천 chunk_size: ${recommendedChunkSize}초`);
   }
+}
+
+/**
+ * 비디오 객체 생성 헬퍼 함수
+ */
+function createVideoObject(videoData, file = null) {
+  const hasFile = file instanceof File;
+  const summaryObjectUrl = hasFile ? URL.createObjectURL(file) : null;
+  const displayUrl = summaryObjectUrl || videoData.displayUrl || videoData.originUrl || videoData.url || '';
+  const originUrl = videoData.originUrl || videoData.url || displayUrl;
+
+  return {
+    id: videoData.id || videoData.video_id,
+    name: videoData.name || videoData.title,
+    originUrl,
+    displayUrl,
+    summaryObjectUrl,
+    date: videoData.date || new Date().toISOString().slice(0, 10),
+    summary: videoData.summary || '',
+    file: hasFile ? file : null,
+    dbId: videoData.dbId || videoData.id || videoData.video_id
+  };
+}
+
+/**
+ * 파일 필터링 헬퍼 함수
+ */
+function filterVideoFiles(files) {
+  return Array.from(files).filter((file) => {
+    if (!file.type.startsWith('video/')) {
+      alert('동영상 파일만 업로드할 수 있습니다.');
+      return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * 중복 파일명 체크 헬퍼 함수
+ */
+async function checkDuplicateFiles(files, userId) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/videos?user_id=${userId}`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.videos) {
+        const existingFileNames = new Set(data.videos.map(v => v.title));
+        const duplicateFiles = files.filter(file => existingFileNames.has(file.name));
+        
+        if (duplicateFiles.length > 0) {
+          const duplicateNames = duplicateFiles.map(f => f.name).join(', ');
+          alert(`이미 업로드된 동영상입니다: ${duplicateNames}`);
+          return true; // 중복 파일 있음
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('중복 체크 실패, 업로드 계속 진행:', error);
+  }
+  return false; // 중복 파일 없음
 }
 
 function scrollChatToBottom() {
@@ -694,13 +767,15 @@ async function restoreAllMissingFiles() {
   }
 }
 
-// 현재 사용자의 동영상 ID 목록을 DB에서 가져오는 함수
+/**
+ * 현재 사용자의 동영상 ID 목록을 DB에서 가져오는 함수
+ */
 async function getCurrentUserVideoIds() {
   const userId = localStorage.getItem("vss_user_id");
   if (!userId) return new Set();
 
   try {
-    const response = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+    const response = await fetch(`${API_BASE_URL}/videos?user_id=${userId}`);
     if (!response.ok) {
       console.warn('동영상 목록 조회 실패');
       return new Set();
@@ -757,10 +832,8 @@ onMounted(async () => {
   // 먼저 localStorage에서 상태 복원 시도
   const restored = restoreStateFromLocalStorage();
 
-  const video_api_url = "http://localhost:8001/sample/sample.mp4"
-
   // 샘플 동영상 경로 초기화
-  sampleVideoPath.value = video_api_url;
+  sampleVideoPath.value = `${API_BASE_URL}/sample/sample.mp4`;
 
   // 상태가 복원되지 않았거나 동영상이 없는 경우에만 기본 초기화
   if (!restored || videoFiles.value.length === 0) {
@@ -818,7 +891,7 @@ onMounted(async () => {
             videoFiles.value.forEach(video => {
               updateRecommendedChunkSize(video.id);
             });
-          }, 1000); // video element가 렌더링될 시간을 줌
+          }, CHUNK_SIZE_UPDATE_DELAY);
         });
         
         // DB에서 저장된 요약 결과 로드
@@ -871,14 +944,14 @@ async function loadSummariesFromDB() {
 
       try {
         // 먼저 내부 DB ID로 vss_videos 테이블에서 VIDEO_ID (VIA 서버의 video_id) 조회
-        const videosResponse = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+        const videosResponse = await fetch(`${API_BASE_URL}/videos?user_id=${userId}`);
         if (videosResponse.ok) {
           const videosData = await videosResponse.json();
           if (videosData.success && videosData.videos) {
             const dbVideo = videosData.videos.find(v => v.id === dbInternalId);
             if (dbVideo && dbVideo.video_id) {
               // VIDEO_ID (VIA 서버의 video_id)로 요약 결과 조회
-              const response = await fetch(`http://localhost:8001/summaries/${dbVideo.video_id}?user_id=${userId}`);
+              const response = await fetch(`${API_BASE_URL}/summaries/${dbVideo.video_id}?user_id=${userId}`);
               if (response.ok) {
                 const data = await response.json();
                 if (data.success && data.summary) {
@@ -1126,13 +1199,15 @@ function restoreStateFromLocalStorage() {
   }
 }
 
-// 상태 변경 감지하여 자동 저장 (debounce 적용)
+/**
+ * 상태 변경 감지하여 자동 저장 (debounce 적용)
+ */
 let saveTimeout = null;
 function autoSaveState() {
   if (saveTimeout) clearTimeout(saveTimeout);
   saveTimeout = setTimeout(() => {
     saveStateToLocalStorage();
-  }, 1000); // 1초 후 저장 (빈번한 저장 방지)
+  }, AUTO_SAVE_DELAY);
 }
 
 // 주요 상태 변경 감지
@@ -1171,7 +1246,7 @@ function onDragLeave(e) {
 }
 async function onDrop(e) {
   isDragging.value = false;
-  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('video/'));
+  const files = filterVideoFiles(e.dataTransfer.files);
   if (files.length === 0) return;
 
   // 사용자 ID 확인
@@ -1182,23 +1257,8 @@ async function onDrop(e) {
   }
 
   // DB에서 중복 파일명 체크
-  try {
-    const response = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
-    if (response.ok) {
-      const data = await response.json();
-      if (data.success && data.videos) {
-        const existingFileNames = new Set(data.videos.map(v => v.title));
-        const duplicateFiles = files.filter(file => existingFileNames.has(file.name));
-        
-        if (duplicateFiles.length > 0) {
-          const duplicateNames = duplicateFiles.map(f => f.name).join(', ');
-          alert(`이미 업로드된 동영상입니다: ${duplicateNames}`);
-          return;
-        }
-      }
-    }
-  } catch (error) {
-    console.warn('중복 체크 실패, 업로드 계속 진행:', error);
+  if (await checkDuplicateFiles(files, userId)) {
+    return;
   }
 
   // 업로드 진행률 초기화
@@ -1219,19 +1279,14 @@ async function onDrop(e) {
     const uploadId = uploadProgress.value[index].id;
     try {
       const data = await uploadVideoWithProgress(file, userId, uploadId);
-      const summaryObjectUrl = URL.createObjectURL(file);
       
-      const newVideo = {
+      const newVideo = createVideoObject({
         id: data.video_id,
-        name: file.name,
+        video_id: data.video_id,
         originUrl: data.file_url,
-        displayUrl: summaryObjectUrl, // 로컬 미리보기용
-        summaryObjectUrl,
-        date: new Date().toISOString().slice(0, 10),
-        summary: '',
-        file,
-        dbId: data.video_id
-      };
+        url: data.file_url
+      }, file);
+      newVideo.name = file.name;
 
       // 업로드 완료된 동영상을 즉시 목록에 추가
       videoFiles.value.push(newVideo);
@@ -1269,9 +1324,14 @@ async function onDrop(e) {
       nextTick(() => {
         setTimeout(() => {
           updateRecommendedChunkSize(newVideo.id);
-        }, 500);
+        }, UPLOAD_PROCESSING_DELAY);
       });
     } catch (error) {
+      // 업로드 취소는 정상적인 동작이므로 에러로 처리하지 않음
+      if (error.message === '업로드 취소됨') {
+        console.log('업로드 취소됨:', file.name);
+        return; // 조용히 종료
+      }
       console.error('동영상 업로드 실패:', error);
       const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
       if (uploadItem) {
@@ -1378,7 +1438,7 @@ function unzoomVideo() {
 }
 
 async function onUpload(e) {
-  const files = Array.from(e.target.files ?? []);
+  const files = filterVideoFiles(e.target.files ?? []);
   if (!files.length) return;
 
   // 사용자 ID 확인
@@ -1388,36 +1448,10 @@ async function onUpload(e) {
     return;
   }
 
-  // 중복 체크 및 필터링
-  const validFiles = files.filter(file => {
-    if (!file.type.startsWith('video/')) {
-      alert('동영상 파일만 업로드할 수 있습니다.');
-      return false;
-    }
-    return true;
-  });
-
-  if (validFiles.length === 0) return;
-
   // DB에서 중복 파일명 체크
-  try {
-    const response = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
-    if (response.ok) {
-      const data = await response.json();
-      if (data.success && data.videos) {
-        const existingFileNames = new Set(data.videos.map(v => v.title));
-        const duplicateFiles = validFiles.filter(file => existingFileNames.has(file.name));
-        
-        if (duplicateFiles.length > 0) {
-          const duplicateNames = duplicateFiles.map(f => f.name).join(', ');
-          alert(`이미 업로드된 동영상입니다: ${duplicateNames}`);
-          if (fileInputRef.value) fileInputRef.value.value = '';
-          return;
-        }
-      }
-    }
-  } catch (error) {
-    console.warn('중복 체크 실패, 업로드 계속 진행:', error);
+  if (await checkDuplicateFiles(files, userId)) {
+    if (fileInputRef.value) fileInputRef.value.value = '';
+    return;
   }
 
   // 업로드 진행률 초기화
@@ -1439,20 +1473,13 @@ async function onUpload(e) {
     try {
       const data = await uploadVideoWithProgress(file, userId, uploadId);
       
-      // 즉시 로컬 ObjectURL 생성하여 미리보기 가능하게 함
-      const summaryObjectUrl = URL.createObjectURL(file);
-      
-      const newVideo = {
+      const newVideo = createVideoObject({
         id: data.video_id,
-        name: file.name,
+        video_id: data.video_id,
         originUrl: data.file_url,
-        displayUrl: summaryObjectUrl, // 즉시 로컬 미리보기용 ObjectURL 사용
-        summaryObjectUrl,
-        date: new Date().toISOString().slice(0, 10),
-        summary: "",
-        file,
-        dbId: data.video_id
-      };
+        url: data.file_url
+      }, file);
+      newVideo.name = file.name;
 
       // 업로드 완료된 동영상을 즉시 목록에 추가
       videoFiles.value.unshift(newVideo);
@@ -1490,9 +1517,14 @@ async function onUpload(e) {
       nextTick(() => {
         setTimeout(() => {
           updateRecommendedChunkSize(newVideo.id);
-        }, 500);
+        }, UPLOAD_PROCESSING_DELAY);
       });
     } catch (error) {
+      // 업로드 취소는 정상적인 동작이므로 에러로 처리하지 않음
+      if (error.message === '업로드 취소됨') {
+        console.log('업로드 취소됨:', file.name);
+        return; // 조용히 종료
+      }
       console.error('동영상 업로드 실패:', error);
       const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
       if (uploadItem) {
@@ -1575,9 +1607,11 @@ async function restoreAndContinueInference(savedTask) {
   await continueInferenceFromIndex(taskId, targetVideos, currentIndex, totalCount, savedTask.prompt);
 }
 
-// 특정 인덱스부터 요약 계속 진행
+/**
+ * 특정 인덱스부터 요약 계속 진행
+ */
 async function continueInferenceFromIndex(taskId, targetVideos, startIndex, totalCount, taskPrompt) {
-  const VSS_API_URL = 'http://localhost:8001/vss-summarize';
+  const VSS_API_URL = `${API_BASE_URL}/vss-summarize`;
   
   // NaN 방지 헬퍼
   const safeNum = (val, fallback) => {
@@ -1627,7 +1661,7 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
     
     if (userId && videoObj.dbId) {
       try {
-        const videosResponse = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+        const videosResponse = await fetch(`${API_BASE_URL}/videos?user_id=${userId}`);
         if (videosResponse.ok) {
           const videosData = await videosResponse.json();
           if (videosData.success && videosData.videos) {
@@ -1745,7 +1779,7 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
           if (!dbInternalId) {
             // 파일명으로 DB에서 내부 ID 찾기
             try {
-              const videosResponse = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+              const videosResponse = await fetch(`${API_BASE_URL}/videos?user_id=${userId}`);
               if (videosResponse.ok) {
                 const videosData = await videosResponse.json();
                 if (videosData.success && videosData.videos) {
@@ -1765,7 +1799,7 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
           // 내부 ID로 vss_videos 테이블에서 VIDEO_ID 컬럼 (VIA 서버의 video_id) 가져오기
           if (dbInternalId) {
             try {
-              const videosResponse = await fetch(`http://localhost:8001/videos?user_id=${userId}`);
+              const videosResponse = await fetch(`${API_BASE_URL}/videos?user_id=${userId}`);
               if (videosResponse.ok) {
                 const videosData = await videosResponse.json();
                 if (videosData.success && videosData.videos) {
@@ -1781,7 +1815,7 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
           }
           
           if (dbVideoId) {
-            const saveResponse = await fetch('http://localhost:8001/save-summary', {
+            const saveResponse = await fetch(`${API_BASE_URL}/save-summary`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -1789,6 +1823,7 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
               body: JSON.stringify({
                 video_id: dbVideoId,
                 user_id: userId,
+                prompt: taskPrompt ?? prompt.value ?? '',
                 summary_text: summaryText,
                 via_video_id: serverVideoId  // VIA 서버의 video_id 저장
               })
@@ -1859,8 +1894,6 @@ async function runInference() {
     showWarningModal.value = true;
     return;
   }
-
-  const VSS_API_URL = 'http://localhost:8001/vss-summarize';
 
   // 순차 처리 대상: 선택된 것이 있으면 선택 영상들, 없으면 전체
   const targetVideos = (selectedIndexes.value.length > 0)
@@ -2024,7 +2057,7 @@ async function onAskConfirmed(q) {
     query: q
   });
   
-  const VSS_API_URL = 'http://localhost:8001/vss-query';
+  const VSS_API_URL = `${API_BASE_URL}/vss-query`;
   const formData = new FormData();
 
   const safeNum = (val, fallback) => {
@@ -2168,12 +2201,27 @@ function formatFileSize(bytes) {
   return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
 }
 
-// 업로드 모달 닫기
+// 업로드 모달 닫기 (X 버튼 클릭 시 업로드 중단)
 function closeUploadModal() {
-  if (allUploadsComplete.value) {
-    showUploadModal.value = false;
-    uploadProgress.value = [];
-  }
+  // 진행 중인 모든 업로드 취소
+  Object.keys(activeUploads.value).forEach(uploadId => {
+    const xhr = activeUploads.value[uploadId];
+    if (xhr && xhr.readyState !== XMLHttpRequest.DONE) {
+      xhr.abort(); // 업로드 중단
+      const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
+      if (uploadItem && uploadItem.progress < 100) {
+        uploadItem.status = '취소됨';
+        uploadItem.progress = 0;
+      }
+    }
+  });
+  
+  // 활성 업로드 목록 초기화
+  activeUploads.value = {};
+  
+  // 모달 닫기 및 진행률 초기화
+  showUploadModal.value = false;
+  uploadProgress.value = [];
 }
 
 // 모든 업로드 완료 여부
@@ -2189,6 +2237,9 @@ function uploadVideoWithProgress(file, userId, uploadId) {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('user_id', userId);
+
+    // 활성 업로드 목록에 추가 (취소 가능하도록)
+    activeUploads.value[uploadId] = xhr;
 
     // 진행률 업데이트 (99%까지만 표시)
     xhr.upload.addEventListener('progress', (e) => {
@@ -2208,6 +2259,9 @@ function uploadVideoWithProgress(file, userId, uploadId) {
 
     // 완료 처리 (99%에서 멈춤, 리스트 추가 후 100%로 변경)
     xhr.addEventListener('load', () => {
+      // 활성 업로드 목록에서 제거
+      delete activeUploads.value[uploadId];
+      
       if (xhr.status === 200) {
         try {
           const data = JSON.parse(xhr.responseText);
@@ -2235,6 +2289,9 @@ function uploadVideoWithProgress(file, userId, uploadId) {
 
     // 에러 처리
     xhr.addEventListener('error', () => {
+      // 활성 업로드 목록에서 제거
+      delete activeUploads.value[uploadId];
+      
       const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
       if (uploadItem) {
         uploadItem.status = '실패';
@@ -2242,7 +2299,19 @@ function uploadVideoWithProgress(file, userId, uploadId) {
       reject(new Error('네트워크 오류'));
     });
 
-    xhr.open('POST', 'http://localhost:8001/upload-video');
+    // 중단(abort) 처리
+    xhr.addEventListener('abort', () => {
+      // 활성 업로드 목록에서 제거
+      delete activeUploads.value[uploadId];
+      
+      const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
+      if (uploadItem) {
+        uploadItem.status = '취소됨';
+      }
+      reject(new Error('업로드 취소됨'));
+    });
+
+    xhr.open('POST', `${API_BASE_URL}/upload-video`);
     xhr.send(formData);
   });
 }
