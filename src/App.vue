@@ -1,8 +1,5 @@
 <template>
-  <div class="min-h-screen flex flex-col bg-white">
-    <!-- Header - 로그인/회원가입 페이지에서는 숨김 -->
-    <HeaderBar v-if="!isAuthPage" />
-
+  <div class="min-h-screen flex flex-col bg-white dark:bg-gray-900">
     <div class="flex flex-1 overflow-hidden">
       <!-- Sidebar - 로그인/회원가입 페이지에서는 숨김 -->
       <SidebarNav v-if="!isAuthPage" class="hidden md:flex"/>
@@ -18,7 +15,6 @@
 <script setup>
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
-import HeaderBar from "@/components/HeaderBar.vue";
 import SidebarNav from "@/components/SidebarNav.vue";
 import './assets/tailwind.css';
 

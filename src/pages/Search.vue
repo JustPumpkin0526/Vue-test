@@ -1,21 +1,21 @@
 <template>
   <!-- 메뉴 틀 -->
-  <div id="video_list" class="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300 via-gray-100 p-10">
-    <div class="w-full h-full bg-gray-50 rounded-2xl shadow-inner p-10">
+  <div id="video_list" class="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300 via-gray-100 dark:from-gray-950 dark:to-gray-900 dark:via-gray-925 p-10">
+    <div class="w-full h-full bg-gray-50 dark:bg-gray-800 rounded-2xl shadow-inner p-10">
       <!-- 헤더 -->
-      <header id="header" class="flex items-center justify-between px-1 pb-3 border-b border-gray-800/70">
+      <header id="header" class="flex items-center justify-between px-1 pb-3 border-b border-gray-800/70 dark:border-gray-200/30">
         <!-- 좌측: 타이틀 / 설명 -->
         <div class="flex flex-col gap-1">
           <div
-            class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 w-fit">
+            class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-400/40 dark:border-emerald-400/60 w-fit">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span class="text-[11px] font-semibold tracking-wide text-emerald-600 uppercase">
-              Video Search Workspace
+            <span class="text-[11px] font-semibold tracking-wide text-emerald-600 dark:text-emerald-400 uppercase">
+              {{ t.workspace }}
             </span>
           </div>
-          <p class="text-xs md:text-sm text-black mt-1">
-            업로드한 여러 동영상에서 원하는 장면을 검색하고,
-            <span class="hidden md:inline">오른쪽 패널에서 검색 결과 클립을 한눈에 확인할 수 있습니다.</span>
+          <p class="text-xs md:text-sm text-black dark:text-gray-200 mt-1">
+            {{ t.description }}
+            <span class="hidden md:inline">{{ t.descriptionDetail }}</span>
           </p>
         </div>
 
@@ -23,22 +23,22 @@
         <div class="flex items-center gap-3">
           <!-- Select All (데스크톱용 텍스트 버튼) -->
           <button
-            class="hidden md:inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-500/60 text-[13px] text-slate-100 bg-slate-900/70 hover:bg-slate-800/80 hover:border-emerald-400/70 hover:text-emerald-50 shadow-sm transition-all duration-200 disabled:opacity-40 disabled:cursor-default"
+            class="hidden md:inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-500/60 dark:border-gray-600 text-[13px] text-slate-100 dark:text-gray-200 bg-slate-900/70 dark:bg-gray-800 hover:bg-slate-800/80 dark:hover:bg-gray-700 hover:border-emerald-400/70 dark:hover:border-emerald-500 hover:text-emerald-50 dark:hover:text-emerald-300 shadow-sm transition-all duration-200 disabled:opacity-40 disabled:cursor-default"
             :disabled="items.length === 0" @click="allselect()">
             <span
               class="inline-flex items-center justify-center w-5 h-5 rounded-md bg-slate-950/80 text-[11px] font-semibold text-slate-50">
               {{ selectedIds.length === items.length && items.length > 0 ? '✓' : ' ' }}
             </span>
             <span class="font-medium">
-              {{ selectedIds.length === items.length && items.length > 0 ? 'Clear Selection' : 'Select All' }}
+              {{ selectedIds.length === items.length && items.length > 0 ? t.clearSelection : t.selectAll }}
             </span>
           </button>
 
           <!-- Select All (모바일 아이콘 버튼) -->
           <button
-            class="md:hidden flex items-center justify-center w-9 h-9 rounded-2xl border border-slate-500/60 bg-slate-900/70 text-slate-100 hover:bg-slate-800/90 hover:border-emerald-400/70 transition-all duration-200 disabled:opacity-40 disabled:cursor-default"
-            :disabled="items.length === 0" @click="allselect()" title="Select All">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            class="md:hidden flex items-center justify-center w-9 h-9 rounded-2xl border border-slate-500/60 dark:border-gray-600 bg-slate-900/70 dark:bg-gray-800 text-slate-100 dark:text-gray-200 hover:bg-slate-800/90 dark:hover:bg-gray-700 hover:border-emerald-400/70 dark:hover:border-emerald-500 transition-all duration-200 disabled:opacity-40 disabled:cursor-default"
+            :disabled="items.length === 0" @click="allselect()" :title="t.selectAll">
+            <svg class="w-4 h-4 text-slate-100 dark:text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
             </svg>
           </button>
@@ -46,12 +46,12 @@
           <!-- 업로드 버튼 -->
           <div class="flex items-center h-12">
             <label
-              class="inline-flex items-center gap-2 rounded-2xl bg-emerald-500/90 hover:bg-emerald-400 text-white px-5 py-2.5 shadow-lg shadow-emerald-500/30 cursor-pointer transform transition-all duration-200 hover:scale-[1.03] active:scale-[0.97]">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              class="inline-flex items-center gap-2 rounded-2xl bg-emerald-500/90 dark:bg-emerald-600 hover:bg-emerald-400 dark:hover:bg-emerald-500 text-white px-5 py-2.5 shadow-lg shadow-emerald-500/30 dark:shadow-emerald-600/30 cursor-pointer transform transition-all duration-200 hover:scale-[1.03] active:scale-[0.97]">
+              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M12 12v7m0-7l-3 3m3-3l3 3"></path>
               </svg>
-              <span class="font-medium text-sm">Upload Video</span>
+              <span class="font-medium text-sm">{{ t.uploadVideo }}</span>
               <input type="file" accept="video/*" multiple class="hidden" @change="handleUpload" />
             </label>
           </div>
@@ -59,17 +59,17 @@
       </header>
         <!-- 동영상 출력 영역 -->
         <div 
-          class="relative w-full h-[90%] border border-slate-200/80 rounded-2xl overflow-y-auto shadow-inner mt-4 transition-all duration-300"
-          :class="isDragOverUpload ? 'bg-blue-100 border-blue-400 ring-2 ring-blue-300' : 'bg-gray-50'"
+          class="relative w-full h-[90%] border border-slate-200/80 dark:border-gray-700 rounded-2xl overflow-y-auto shadow-inner mt-4 transition-all duration-300"
+          :class="isDragOverUpload ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-400 dark:border-blue-500 ring-2 ring-blue-300 dark:ring-blue-600' : 'bg-gray-50 dark:bg-gray-700'"
           @dragover.prevent="onDragOverUpload"
           @dragleave.prevent="onDragLeaveUpload"
           @drop.prevent="onDropUpload">
           <div v-if="items.length === 0" class="flex items-center justify-center h-full">
             <div
-              class="w-[30%] h-[9%] inline-flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 text-gray-500 text-center text-[24px] border border-gray-200 rounded-2xl shadow-sm backdrop-blur-sm transition-all duration-300"
-              :class="isDragOverUpload ? 'bg-blue-50 border-blue-300 text-blue-600' : ''">
-              <p v-if="!isDragOverUpload" class="font-light">Please upload a video</p>
-              <p v-else class="font-bold">여기에 파일을 놓으세요</p>
+              class="w-[30%] h-[9%] inline-flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 text-gray-500 dark:text-gray-400 text-center text-[24px] border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm backdrop-blur-sm transition-all duration-300"
+              :class="isDragOverUpload ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-500 text-blue-600 dark:text-blue-400' : ''">
+              <p v-if="!isDragOverUpload" class="font-light">{{ t.pleaseUpload }}</p>
+              <p v-else class="font-bold">{{ t.dropHere }}</p>
             </div>
           </div>
 
@@ -77,8 +77,8 @@
           <div 
             v-if="isDragOverUpload && items.length > 0"
             class="absolute inset-0 z-50 flex items-center justify-center bg-blue-500/20 backdrop-blur-sm border-4 border-dashed border-blue-400 rounded-2xl pointer-events-none">
-            <div class="bg-white/90 rounded-2xl px-8 py-6 shadow-xl">
-              <p class="text-2xl font-bold text-blue-600 text-center">여기에 파일을 놓으세요</p>
+            <div class="bg-white/90 dark:bg-gray-800/90 rounded-2xl px-8 py-6 shadow-xl">
+              <p class="text-2xl font-bold text-blue-600 dark:text-blue-400 text-center">{{ t.dropHere }}</p>
             </div>
           </div>
 
@@ -87,11 +87,11 @@
             class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 p-6 overflow-y-auto transition-opacity duration-300"
             :class="{ 'opacity-50': isDragOverUpload && items.length > 0 }">
             <div v-for="video in items" :key="video.id"
-              class="flex flex-col items-center justify-center rounded-2xl shadow-md hover:shadow-xl cursor-pointer p-3 border border-gray-200 relative transform transition-all duration-300 hover:scale-105 hover:-translate-y-1 group"
-              :class="{ 'ring-2 ring-blue-400 bg-blue-100': selectedIds.includes(video.id) }"
+              class="flex flex-col items-center justify-center rounded-2xl shadow-md hover:shadow-xl cursor-pointer p-3 border border-gray-200 dark:border-gray-700 relative transform transition-all duration-300 hover:scale-105 hover:-translate-y-1 group bg-white dark:bg-gray-800"
+              :class="{ 'ring-2 ring-blue-400 dark:ring-blue-500 bg-blue-100 dark:bg-blue-900/30': selectedIds.includes(video.id) }"
               @click="onCardClick(video.id, $event)" @contextmenu.prevent.stop="onVideoContextMenu(video, $event)">
               <div
-                class="w-[100%] h-[100%] flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl mb-2 overflow-hidden relative group-hover:from-gray-200 group-hover:to-gray-300 transition-all duration-300"
+                class="w-[100%] h-[100%] flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 rounded-xl mb-2 overflow-hidden relative group-hover:from-gray-200 group-hover:to-gray-300 dark:group-hover:from-gray-600 dark:group-hover:to-gray-500 transition-all duration-300"
                 @mouseenter="hoveredVideoId = video.id" @mouseleave="hoveredVideoId = null">
                 <video :ref="el => (videoRefs[video.id] = el)" v-if="video.displayUrl" :src="video.displayUrl"
                   class="object-cover rounded-xl transition-transform duration-300 group-hover:scale-105"
@@ -100,7 +100,7 @@
                   @timeupdate="updateProgress(video.id, $event)"
                   @loadedmetadata="onVideoMetadataLoaded(video.id, $event)"
                   @error="(e) => handleVideoError(video.id, e, false)"></video>
-                <span v-else class="text-gray-400 text-sm">No Thumbnail</span>
+                <span v-else class="text-gray-400 dark:text-gray-500 text-sm">{{ t.noThumbnail }}</span>
                 <!-- 그리드: 재생 중이 아닐 때 어두워지는 오버레이 -->
                 <div v-if="video.displayUrl" class="absolute inset-0 pointer-events-none transition-colors duration-300"
                   :class="playingVideoIds.includes(video.id) ? 'bg-transparent' : 'bg-black/20'"></div>
@@ -169,11 +169,11 @@
               </div>
               <!-- 동영상 타이틀 및 정보 -->
               <div class="ml-4 w-full text-left">
-                <div v-if="video.title" class="text-sm font-medium text-gray-800 truncate">
+                <div v-if="video.title" class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
                   {{ video.title }}
                 </div>
                 <!-- 영상 정보: 길이, 해상도, 용량 (가로 나열) -->
-                <div class="mt-1 text-xs text-gray-500 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <div class="mt-1 text-xs text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <span v-if="durationMap[video.id]">
                     {{ formatTime(durationMap[video.id]) }}
                   </span>
@@ -192,9 +192,9 @@
           
           <!-- 우측 하단 원형 버튼 -->
           <button
-            class="absolute bottom-6 right-6 w-14 h-14 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg hover:shadow-xl flex items-center justify-center transition-all duration-300 transform hover:scale-110 active:scale-95 z-50"
+            class="absolute bottom-6 right-6 w-14 h-14 rounded-full bg-emerald-500 dark:bg-emerald-600 hover:bg-emerald-600 dark:hover:bg-emerald-500 text-white shadow-lg hover:shadow-xl flex items-center justify-center transition-all duration-300 transform hover:scale-110 active:scale-95 z-50"
             @click="handleAddButtonClick">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="w-6 h-6">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="w-6 h-6 text-white">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
             </svg>
           </button>
@@ -204,9 +204,9 @@
           <Transition name="modal">
             <div v-if="isZoomed" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
               @click.self="unzoomVideo">
-              <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl relative" @click.stop>
+              <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl relative" @click.stop>
                 <!-- 비디오 영역 (확대 전용 - 하얀 프레임 + 하단 진행 바/타이틀) -->
-                <div class="relative w-full p-4 bg-white rounded-2xl shadow-inner flex flex-col">
+                <div class="relative w-full p-4 bg-white dark:bg-gray-800 rounded-2xl shadow-inner flex flex-col">
                   <!-- 닫기 버튼: 프레임 우측 상단 -->
                   <button @click="unzoomVideo"
                     class="ml-auto mb-3 z-10 w-6 h-6 flex items-center justify-center bg-black/50 hover:bg-black/70 rounded-full text-white transition-all duration-200">
@@ -219,11 +219,11 @@
 
 
                   <div
-                    class="relative w-full aspect-video flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl overflow-hidden group zoom-group"
+                    class="relative w-full aspect-video flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 rounded-xl overflow-hidden group zoom-group"
                     @mouseenter="hoveredVideoId = zoomedVideo?.id" @mouseleave="hoveredVideoId = null">
-                <video v-if="zoomedVideo" ref="zoomVideoRef" :src="zoomedVideo.displayUrl"
-                  class="object-cover w-full h-full" preload="metadata" crossorigin="anonymous"
-                  @timeupdate="onZoomTimeUpdate($event)"
+                    <video v-if="zoomedVideo" ref="zoomVideoRef" :src="zoomedVideo.displayUrl"
+                      class="object-cover w-full h-full" preload="metadata" crossorigin="anonymous"
+                      @timeupdate="onZoomTimeUpdate($event)"
                   @error="(e) => handleZoomVideoError(zoomedVideo.id, e)"></video>
                     <div v-if="zoomedVideo" class="absolute inset-0 pointer-events-none transition-colors duration-300"
                       :class="zoomPlaying ? 'bg-transparent' : 'bg-black/30'"></div>
@@ -262,13 +262,13 @@
                         :class="{ 'transition-none': isDragging && draggedVideoId === zoomedVideo.id }"
                         :style="{ left: `${zoomProgress}%` }" @mousedown="startDragging(zoomedVideo.id, $event)"></div>
                     </div>
-                    <div class="flex items-center justify-between text-xs font-medium text-gray-600">
+                    <div class="flex items-center justify-between text-xs font-medium text-gray-600 dark:text-gray-300">
                       <div class="flex items-center gap-2">
                         <span v-if="zoomedVideo.title"
-                          class="text-sm font-semibold text-gray-800 truncate max-w-[50vw]">{{ zoomedVideo.title
+                          class="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[50vw]">{{ zoomedVideo.title
                           }}</span>
                       </div>
-                      <div class="flex items-center gap-3 text-gray-500">
+                      <div class="flex items-center gap-3 text-gray-500 dark:text-gray-400">
                         <span>{{ formatTime(zoomCurrentTime) }}</span>
                         <span>/</span>
                         <span>{{ formatTime(zoomDuration) }}</span>
@@ -284,15 +284,15 @@
         <Teleport to="body">
           <div v-if="contextMenu.visible" class="fixed z-[200]"
             :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click.stop>
-            <div class="bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden w-[200px]">
-              <button v-if="selectedIds.length < 2" class="w-full text-left px-4 py-3 hover:bg-gray-50"
-                @click.stop="contextZoom">확대</button>
-              <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextSummary">요약 진행</button>
-              <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextSearch" :disabled="selectedIds.length === 0">검색</button>
-              <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextRemoveSummary" :disabled="selectedIds.length === 0">요약 결과 제거</button>
-              <div class="h-px bg-gray-100"></div>
-              <button class="w-full text-left px-4 py-3 text-red-600 hover:bg-gray-50" @click.stop="contextDelete">{{
-                selectedIds.length > 1 ? `선택된 항목 삭제 (${selectedIds.length})` : '삭제' }}</button>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden w-[200px]">
+              <button v-if="selectedIds.length < 2" class="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
+                @click.stop="contextZoom">{{ t.expand }}</button>
+              <button class="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200" @click.stop="contextSummary">{{ t.summary }}</button>
+              <button class="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200" @click.stop="contextSearch" :disabled="selectedIds.length === 0">{{ t.search }}</button>
+              <button class="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200" @click.stop="contextRemoveSummary" :disabled="selectedIds.length === 0">{{ t.removeSummary }}</button>
+              <div class="h-px bg-gray-100 dark:bg-gray-700"></div>
+              <button class="w-full text-left px-4 py-3 text-red-600 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-700" @click.stop="contextDelete">{{
+                selectedIds.length > 1 ? `${t.deleteSelected} (${selectedIds.length})` : t.delete }}</button>
             </div>
           </div>
         </Teleport>
@@ -302,17 +302,17 @@
           <div v-if="showDeletePopup"
             class="fixed inset-0 flex items-center justify-center z-[100] bg-black/50 backdrop-blur-sm rounded-2xl">
             <div
-              class="bg-white rounded-2xl shadow-2xl p-8 min-w-[350px] max-w-[90vw] relative transform transition-all duration-300">
-              <div class="text-lg font-semibold mb-6 text-center text-gray-800">
-                <p class="mb-2">{{ selectedIds.length }}개의 동영상이 삭제됩니다.</p>
-                <p class="text-sm font-normal text-gray-600">진행하시겠습니까?</p>
+              class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 min-w-[350px] max-w-[90vw] relative transform transition-all duration-300">
+              <div class="text-lg font-semibold mb-6 text-center text-gray-800 dark:text-gray-200">
+                <p class="mb-2">{{ selectedIds.length }}{{ settingStore.language === 'ko' ? '개의 동영상이 삭제됩니다.' : ' ' + t.deleteConfirm }}</p>
+                <p class="text-sm font-normal text-gray-600 dark:text-gray-400">{{ t.deleteConfirmDetail }}</p>
               </div>
               <div class="flex justify-end gap-3 mt-8">
                 <button
-                  class="px-6 py-2.5 rounded-xl bg-slate-700 text-white hover:bg-slate-800 transition-all duration-300 transform hover:scale-105 active:scale-95 font-medium shadow-sm"
+                  class="px-6 py-2.5 rounded-xl bg-slate-700 dark:bg-gray-700 text-white hover:bg-slate-800 dark:hover:bg-gray-600 transition-all duration-300 transform hover:scale-105 active:scale-95 font-medium shadow-sm"
                   @click="confirmDelete">delete</button>
                 <button
-                  class="px-6 py-2.5 rounded-xl bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all duration-300 transform hover:scale-105 active:scale-95 font-medium shadow-sm"
+                  class="px-6 py-2.5 rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-300 transform hover:scale-105 active:scale-95 font-medium shadow-sm"
                   @click="showDeletePopup = false">cancel</button>
               </div>
             </div>
@@ -331,9 +331,9 @@
           <!-- 사이드바 패널 - ChatGPT 스타일 -->
           <Transition name="sidebar">
             <div v-if="showSearchSidebar"
-              class="fixed top-0 right-0 z-[151] bg-white w-[70%] h-full shadow-2xl flex flex-col" @click.stop>
+              class="fixed top-0 right-0 z-[151] bg-white dark:bg-gray-800 w-[70%] h-full shadow-2xl flex flex-col" @click.stop>
               <!-- 사이드바 헤더 -->
-              <div class="flex flex-col border-b border-gray-200 bg-gradient-to-r from-white to-gray-50">
+              <div class="flex flex-col border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-white to-gray-50 dark:from-gray-800 dark:to-gray-900">
                 <div class="flex items-center justify-between p-4">
                   <div class="flex items-center gap-3">
                     <div
@@ -343,26 +343,26 @@
                           d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"></path>
                       </svg>
                     </div>
-                    <h2 class="text-lg font-semibold text-gray-800">Video Search</h2>
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-200">{{ t.videoSearch }}</h2>
                   </div>
                   <div class="flex items-center gap-2">
                     <!-- 신규 채팅창 추가 버튼 -->
                     <button @click="handleNewChatButtonClick"
-                      class="relative p-2 hover:bg-gray-100 rounded-full transition-colors group" title="신규 채팅창 추가">
-                      <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      class="relative p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors group" :title="t.newChat">
+                      <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                       </svg>
                       <!-- 툴팍 -->
                       <div
-                        class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-2 py-1 bg-gray-800 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                        신규 채팅창 추가
+                        class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-2 py-1 bg-gray-800 dark:bg-gray-700 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                        {{ t.newChat }}
                         <div
-                          class="absolute bottom-full left-1/2 transform -translate-x-1/2 -mb-1 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-gray-800">
+                          class="absolute bottom-full left-1/2 transform -translate-x-1/2 -mb-1 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-gray-800 dark:border-b-gray-700">
                         </div>
                       </div>
                     </button>
-                    <button @click="closeSearchSidebar" class="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                      <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button @click="closeSearchSidebar" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
+                      <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
                         </path>
                       </svg>
@@ -374,7 +374,7 @@
                   <div v-for="(chat, index) in chatSessions" :key="chat.id"
                     @click="editingChatIndex !== index && switchChat(index)" :class="{
                       'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md': currentChatIndex === index,
-                      'bg-gray-100 text-gray-700 hover:bg-gray-200': currentChatIndex !== index
+                      'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600': currentChatIndex !== index
                     }"
                     class="px-3 py-1.5 rounded-t-xl text-sm font-medium transition-all duration-300 whitespace-nowrap flex items-center gap-2 cursor-pointer transform hover:scale-105">
                     <!-- 편집 모드 -->
@@ -398,7 +398,7 @@
               </div>
 
               <!-- 채팅 메시지 영역 -->
-              <div ref="chatContainer" class="flex-1 overflow-y-auto bg-gray-50 p-4 space-y-4">
+              <div ref="chatContainer" class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 space-y-4">
                 <!-- 채팅 메시지들 -->
                 <div v-for="(message, index) in currentChatMessages" :key="index" class="flex items-start gap-3"
                   :class="{ 'flex-row-reverse': message.role === 'user' }">
@@ -433,44 +433,44 @@
 
                   <div class="flex-1" :class="{ 'flex flex-col items-end': message.role === 'user' }">
                     <div :class="{
-                      'bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-md border border-gray-200': message.role === 'assistant',
+                      'bg-white dark:bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 shadow-md border border-gray-200 dark:border-gray-700': message.role === 'assistant',
                       'bg-gradient-to-r from-green-500 to-green-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-md': message.role === 'user'
                     }">
                       <p :class="{
-                        'text-gray-800 text-sm leading-relaxed': message.role === 'assistant',
+                        'text-gray-800 dark:text-gray-200 text-sm leading-relaxed': message.role === 'assistant',
                         'text-white text-sm leading-relaxed': message.role === 'user'
                       }" v-html="message.content"></p>
                       <!-- 초기 메시지의 선택된 동영상 목록 -->
                       <div v-if="message.isInitial && message.selectedVideos && message.selectedVideos.length > 0"
                         class="mt-3 space-y-2">
-                        <p class="text-xs text-gray-500 font-medium mb-2">선택된 동영상:</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">{{ t.selectedVideos }}</p>
                         <div v-for="video in message.selectedVideos" :key="video.id"
-                          class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                          class="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-xl">
                           <video :src="video.displayUrl" class="w-32 h-20 object-cover rounded flex-shrink-0"></video>
                           <div class="flex-1 min-w-0">
-                            <p class="text-sm font-medium text-gray-800 truncate">{{ video.title }}</p>
-                            <p class="text-xs text-gray-500 mt-1">{{ video.date }}</p>
+                            <p class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{{ video.title }}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ video.date }}</p>
                           </div>
                         </div>
                       </div>
                       <!-- 검색 결과(클립) 표시 -->
                       <div v-if="message.clips && message.clips.length > 0" class="mt-3 space-y-2">
                         <p
-                          :class="message.role === 'assistant' ? 'text-xs text-gray-500 font-medium mb-2' : 'text-xs text-green-100 font-medium mb-2'">
-                          검색 결과 ({{ message.clips.length }}개):
+                          :class="message.role === 'assistant' ? 'text-xs text-gray-500 dark:text-gray-400 font-medium mb-2' : 'text-xs text-green-100 font-medium mb-2'">
+                          {{ t.searchResults }} ({{ message.clips.length }}{{ settingStore.language === 'ko' ? '개' : ' ' + t.clips }}):
                         </p>
                         <div v-for="clip in message.clips" :key="clip.id"
-                          :class="message.role === 'assistant' ? 'flex items-center gap-3 p-3 bg-gray-50 rounded-xl transition-all duration-200 hover:bg-gray-100' : 'flex items-center gap-3 p-3 bg-green-600/80 rounded-xl transition-all duration-200 hover:bg-green-600'">
+                          :class="message.role === 'assistant' ? 'flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-xl transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-600' : 'flex items-center gap-3 p-3 bg-green-600/80 rounded-xl transition-all duration-200 hover:bg-green-600'">
                           <video :src="clip.url" class="w-32 h-20 object-cover rounded cursor-pointer flex-shrink-0" preload="metadata"
                             @click.stop="zoomClip(clip)"
                             @error="(e) => console.warn('clip thumbnail error', e, clip.url)"
                             crossorigin="anonymous"></video>
                           <div class="flex-1 min-w-0">
                             <p
-                              :class="message.role === 'assistant' ? 'text-sm font-medium text-gray-800 truncate' : 'text-sm font-medium text-white truncate'">
+                              :class="message.role === 'assistant' ? 'text-sm font-medium text-gray-800 dark:text-gray-200 truncate' : 'text-sm font-medium text-white truncate'">
                               {{ clip.title }}</p>
                             <p
-                              :class="message.role === 'assistant' ? 'text-xs text-gray-500 mt-1' : 'text-xs text-green-100 mt-1'">
+                              :class="message.role === 'assistant' ? 'text-xs text-gray-500 dark:text-gray-400 mt-1' : 'text-xs text-green-100 mt-1'">
                               <span v-if="clip.start_time !== undefined && clip.end_time !== undefined">
                                 {{ formatTime(clip.start_time) }} - {{ formatTime(clip.end_time) }}
                               </span>
@@ -483,7 +483,7 @@
                       </div>
                     </div>
                     <p
-                      :class="message.role === 'assistant' ? 'text-xs text-gray-400 mt-1 ml-2' : 'text-xs text-gray-400 mt-1 mr-2'">
+                      :class="message.role === 'assistant' ? 'text-xs text-gray-400 dark:text-gray-500 mt-1 ml-2' : 'text-xs text-gray-400 dark:text-gray-500 mt-1 mr-2'">
                       {{ message.timestamp }}</p>
                   </div>
                 </div>
@@ -498,12 +498,12 @@
                     </svg>
                   </div>
                   <div class="flex-1">
-                    <div class="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-200">
+                    <div class="bg-white dark:bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-200 dark:border-gray-700">
                       <div class="flex gap-1">
-                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0s"></div>
-                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s">
+                        <div class="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0s"></div>
+                        <div class="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0.2s">
                         </div>
-                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.4s">
+                        <div class="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0.4s">
                         </div>
                       </div>
                     </div>
@@ -512,12 +512,12 @@
               </div>
 
               <!-- 입력 영역 (하단 고정) -->
-              <div class="border-t border-gray-200 bg-white p-4">
+              <div class="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
                 <div class="flex items-end gap-2">
                   <div class="flex-1 relative">
                     <textarea v-model="searchInput" @keydown.enter.exact.prevent="handleSearch"
-                      @keydown.shift.enter.exact="searchInput += '\n'" placeholder="검색할 장면에 대한 정보를 입력해주세요..." rows="1"
-                      class="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none max-h-32 overflow-y-auto text-sm"
+                      @keydown.shift.enter.exact="searchInput += '\n'" :placeholder="t.searchPlaceholder" rows="1"
+                      class="w-full px-4 py-3 pr-12 border border-gray-300 dark:border-gray-600 rounded-2xl bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-400 focus:border-transparent resize-none max-h-32 overflow-y-auto text-sm"
                       style="min-height: 44px;"></textarea>
                     <button @click="handleSearch" :disabled="!searchInput.trim() || isSearching"
                       class="absolute right-2 bottom-2 p-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-110 active:scale-95 shadow-md">
@@ -529,7 +529,7 @@
                     </button>
                   </div>
                 </div>
-                <p class="text-xs text-gray-400 mt-2 text-center">Enter를 눌러 검색하거나 Shift+Enter로 줄바꿈</p>
+                <p class="text-xs text-gray-400 dark:text-gray-500 mt-2 text-center">{{ t.enterToSearch }}</p>
               </div>
             </div>
           </Transition>
@@ -538,36 +538,36 @@
         <!-- 업로드 진행률 모달 -->
         <Teleport to="body">
           <div v-if="showUploadModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 p-6">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 p-6">
               <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-800">동영상 업로드 중...</h3>
-                <button @click="closeUploadModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200">{{ t.uploading }}</h3>
+                <button @click="closeUploadModal" class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
                   <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
               <div class="space-y-4 max-h-[60vh] overflow-y-auto">
-                <div v-for="(upload, index) in uploadProgress" :key="upload.id" class="border border-gray-200 rounded-lg p-4">
+                <div v-for="(upload, index) in uploadProgress" :key="upload.id" class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-700">
                   <div class="flex items-center justify-between mb-2">
-                    <span class="text-sm font-medium text-gray-700 truncate flex-1 mr-2">{{ upload.fileName }}</span>
-                    <span class="text-sm text-gray-500 whitespace-nowrap">{{ upload.progress }}%</span>
+                    <span class="text-sm font-medium text-gray-700 dark:text-gray-200 truncate flex-1 mr-2">{{ upload.fileName }}</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ upload.progress }}%</span>
                   </div>
-                  <div class="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+                  <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5 mb-2">
                     <div 
                       class="bg-gradient-to-r from-emerald-500 to-emerald-600 h-2.5 rounded-full transition-all duration-300"
                       :style="{ width: `${upload.progress}%` }"
                     ></div>
                   </div>
-                  <div class="flex items-center justify-between text-xs text-gray-500">
+                  <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                     <span>{{ upload.status }}</span>
                     <span v-if="upload.uploaded > 0">{{ formatFileSize(upload.uploaded) }} / {{ formatFileSize(upload.total) }}</span>
                   </div>
                 </div>
               </div>
               <div v-if="allUploadsComplete" class="mt-4 text-center">
-                <button @click="closeUploadModal" class="px-6 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors">
-                  완료
+                <button @click="closeUploadModal" class="px-6 py-2 bg-emerald-500 dark:bg-emerald-600 text-white rounded-lg hover:bg-emerald-600 dark:hover:bg-emerald-500 transition-colors">
+                  {{ t.complete }}
                 </button>
               </div>
             </div>
@@ -581,6 +581,7 @@
 import { ref, onMounted, onActivated, computed, nextTick, watch, onBeforeUnmount } from "vue";
 import { useRouter } from 'vue-router';
 import { useSummaryVideoStore } from '@/stores/summaryVideoStore';
+import { useSettingStore } from '@/stores/settingStore';
 
 // ==================== 상수 정의 ====================
 const API_BASE_URL = 'http://localhost:8001';
@@ -588,6 +589,80 @@ const UNSUPPORTED_VIDEO_FORMATS = ['avi', 'mkv', 'flv', 'wmv']; // 브라우저�
 const MAX_ERROR_RETRIES = 2; // 비디오 로드 에러 최대 재시도 횟수
 const UPLOAD_TIMEOUT = 600000; // 업로드 타임아웃 (10분)
 const CONTEXT_MENU_SIZE = { width: 200, height: 200, margin: 10 };
+
+// ==================== 다국어 지원 ====================
+const settingStore = useSettingStore();
+
+const translations = {
+  ko: {
+    workspace: "Video Search Workspace",
+    description: "업로드한 여러 동영상에서 원하는 장면을 검색하고,",
+    descriptionDetail: "오른쪽 패널에서 검색 결과 클립을 한눈에 확인할 수 있습니다.",
+    selectAll: "전체 선택",
+    clearSelection: "선택 해제",
+    uploadVideo: "동영상 업로드",
+    pleaseUpload: "동영상을 업로드해주세요",
+    dropHere: "여기에 파일을 놓으세요",
+    noThumbnail: "썸네일 없음",
+    expand: "확대",
+    summary: "요약 진행",
+    search: "검색",
+    removeSummary: "요약 결과 제거",
+    delete: "삭제",
+    deleteSelected: "선택된 항목 삭제",
+    deleteConfirm: "개의 동영상이 삭제됩니다.",
+    deleteConfirmDetail: "진행하시겠습니까?",
+    videoSearch: "Video Search",
+    newChat: "신규 채팅창 추가",
+    searchPlaceholder: "검색할 장면에 대한 정보를 입력해주세요...",
+    enterToSearch: "Enter를 눌러 검색하거나 Shift+Enter로 줄바꿈",
+    uploading: "동영상 업로드 중...",
+    complete: "완료",
+    selectedVideos: "선택된 동영상:",
+    searchResults: "검색 결과",
+    clips: "개",
+    noMessages: "아직 메시지가 없습니다.",
+    noScenes: "해당하는 장면이 없습니다.",
+    foundScenes: "개의 동영상에서",
+    foundClips: "개의 장면을 찾았습니다.",
+    searchError: "검색 중 오류가 발생했습니다."
+  },
+  en: {
+    workspace: "Video Search Workspace",
+    description: "Search for desired scenes from multiple uploaded videos,",
+    descriptionDetail: "and view search result clips at a glance in the right panel.",
+    selectAll: "Select All",
+    clearSelection: "Clear Selection",
+    uploadVideo: "Upload Video",
+    pleaseUpload: "Please upload a video",
+    dropHere: "Drop files here",
+    noThumbnail: "No Thumbnail",
+    expand: "Expand",
+    summary: "Summary",
+    search: "Search",
+    removeSummary: "Remove Summary",
+    delete: "Delete",
+    deleteSelected: "Delete Selected",
+    deleteConfirm: "videos will be deleted.",
+    deleteConfirmDetail: "Do you want to proceed?",
+    videoSearch: "Video Search",
+    newChat: "New Chat",
+    searchPlaceholder: "Enter information about the scene to search...",
+    enterToSearch: "Press Enter to search or Shift+Enter for new line",
+    uploading: "Uploading videos...",
+    complete: "Complete",
+    selectedVideos: "Selected Videos:",
+    searchResults: "Search Results",
+    clips: "clips",
+    noMessages: "No messages yet.",
+    noScenes: "No matching scenes found.",
+    foundScenes: "videos,",
+    foundClips: "scenes found.",
+    searchError: "An error occurred during search."
+  }
+};
+
+const t = computed(() => translations[settingStore.language] || translations.ko);
 
 const isZoomed = ref(false);
 const zoomedVideo = ref(null);
@@ -719,13 +794,16 @@ function constrainContextMenuPosition(x, y) {
   if (y < margin) y = margin;
 
   return { x, y };
-}
+  }
 
 // ==================== 컨텍스트 메뉴 ====================
 function onVideoContextMenu(video, e) {
   if (selectedIds.value.length < 2 && !selectedIds.value.includes(video.id)) {
     selectedIds.value = [video.id];
   }
+
+  // 다른 메뉴들에게 비디오 컨텍스트 메뉴가 열릴 예정임을 먼저 알림 (다른 메뉴를 닫기 위해)
+  window.dispatchEvent(new CustomEvent('video-context-menu-opened'));
 
   const { x, y } = constrainContextMenuPosition(e.clientX, e.clientY);
   contextMenu.value = { visible: true, x, y, video };
@@ -820,6 +898,9 @@ async function contextRemoveSummary() {
 }
 
 function handleGlobalClick(e) {
+  // 우클릭 이벤트는 무시 (컨텍스트 메뉴가 열릴 수 있음)
+  if (e.button === 2 || e.which === 3) return;
+  
   if (!contextMenu.value.visible) return;
   // close when clicking outside
   closeContextMenu();
@@ -867,6 +948,8 @@ onMounted(() => {
   loadVideosFromStorage();
   // Summarize.vue에서 동영상이 추가되었을 때 이벤트 리스너
   window.addEventListener('search-videos-updated', loadVideosFromStorage);
+  // 다른 메뉴가 열렸을 때 컨텍스트 메뉴 닫기
+  window.addEventListener('profile-menu-opened', closeContextMenu);
 });
 
 onActivated(() => {
@@ -877,6 +960,7 @@ onActivated(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('search-videos-updated', loadVideosFromStorage);
+  window.removeEventListener('profile-menu-opened', closeContextMenu);
 });
 
 // ==================== 비디오 목록 관리 ====================
@@ -914,22 +998,22 @@ async function loadVideosFromStorage() {
 }
 
 function loadFromLocalStorage() {
-  const stored = localStorage.getItem("videoItems");
+    const stored = localStorage.getItem("videoItems");
   if (!stored) return;
   
-  items.value = JSON.parse(stored).map(v => {
-    const displayUrl = v.displayUrl || v.url || v.originUrl || '';
+      items.value = JSON.parse(stored).map(v => {
+        const displayUrl = v.displayUrl || v.url || v.originUrl || '';
     return createVideoObject({
       id: v.id,
       title: v.title,
-      originUrl: v.originUrl || v.url || displayUrl,
+          originUrl: v.originUrl || v.url || displayUrl,
       displayUrl,
       date: v.date,
       fileSize: v.fileSize,
       width: v.width,
       height: v.height
     });
-  });
+      });
 }
 
 function persistToStorage() {
@@ -1295,9 +1379,12 @@ function createNewChat(videos = selectedVideos.value, signature) {
   };
 
   // 초기 시스템 메시지 추가
+  const initialMessage = settingStore.language === 'ko'
+    ? `안녕하세요! 선택하신 <strong>${selectionSnapshot.length}개의 동영상</strong>에서 검색을 도와드리겠습니다.`
+    : `Hello! I'll help you search through <strong>${selectionSnapshot.length} selected videos</strong>.`;
   newChat.messages.push({
     role: 'assistant',
-    content: `안녕하세요! 선택하신 <strong>${selectionSnapshot.length}개의 동영상</strong>에서 검색을 도와드리겠습니다.`,
+    content: initialMessage,
     isInitial: true,
     selectedVideos: selectionSnapshot,
     timestamp: getCurrentTime()
@@ -1486,7 +1573,7 @@ async function handleSearch() {
     if (fileEntries.length === 0) {
       currentChat.messages.push({
         role: 'assistant',
-        content: '선택된 동영상을 가져오지 못했습니다. 다시 시도해주세요.',
+        content: settingStore.language === 'ko' ? '선택된 동영상을 가져오지 못했습니다. 다시 시도해주세요.' : 'Failed to load selected videos. Please try again.',
         timestamp: getCurrentTime()
       });
       return;
@@ -1556,16 +1643,19 @@ async function handleSearch() {
       // 클립이 추출되지 않았을 경우
       currentChat.messages.push({
         role: 'assistant',
-        content: '해당하는 장면이 없습니다.',
+        content: t.value.noScenes,
         timestamp: getCurrentTime()
       });
       return;
     }
 
     // 클립이 추출되었을 경우: 클립 동영상과 타임스탬프 표시
+    const foundMessage = settingStore.language === 'ko' 
+      ? `${groupedClipItems.length}${t.value.foundScenes} ${validClips.length}${t.value.foundClips}`
+      : `${validClips.length} ${t.value.foundClips} from ${groupedClipItems.length} ${t.value.foundScenes}`;
     currentChat.messages.push({
       role: 'assistant',
-      content: `${groupedClipItems.length}개의 동영상에서 ${validClips.length}개의 장면을 찾았습니다.`,
+      content: foundMessage,
       clips: validClips,
       groupedClips: groupedClipItems,
       timestamp: getCurrentTime()
@@ -1574,7 +1664,7 @@ async function handleSearch() {
     console.error('Search request failed:', error);
     currentChat.messages.push({
       role: 'assistant',
-      content: `검색 중 오류가 발생했습니다. (${error.message})`,
+      content: `${t.value.searchError} (${error.message})`,
       timestamp: getCurrentTime()
     });
   } finally {
@@ -1634,23 +1724,23 @@ function togglePlay(videoId) {
   
   if (!videoElement || !videoElement.src) {
     console.warn('togglePlay: video has no src');
-    return;
-  }
+      return;
+    }
   
   if (isZoom) {
     if (!zoomPlaying.value) {
       safePlayVideo(videoElement, () => { zoomPlaying.value = true; });
-    } else {
+      } else {
       try {
         videoElement.pause();
-        zoomPlaying.value = false;
+      zoomPlaying.value = false;
       } catch (e) {
         /* ignore */
       }
     }
     return;
   }
-  
+
   // 그리드 비디오 토글
   const index = playingVideoIds.value.indexOf(videoId);
   if (index === -1) {
@@ -1790,20 +1880,20 @@ function seekVideo(videoId, event) {
   const isZoom = zoomedVideo.value && zoomedVideo.value.id === videoId;
   const videoElement = isZoom ? zoomVideoRef.value : videoRefs.value[videoId];
   
-  if (!videoElement || !videoElement.src) return;
+    if (!videoElement || !videoElement.src) return;
   
-  const { left, width } = event.currentTarget.getBoundingClientRect();
-  const pct = Math.max(0, Math.min((event.clientX - left) / width, 1));
-  const targetTime = pct * (isFinite(videoElement.duration) ? videoElement.duration : 0);
+    const { left, width } = event.currentTarget.getBoundingClientRect();
+    const pct = Math.max(0, Math.min((event.clientX - left) / width, 1));
+    const targetTime = pct * (isFinite(videoElement.duration) ? videoElement.duration : 0);
   
-  if (!isFinite(targetTime)) return;
+    if (!isFinite(targetTime)) return;
   
-  try {
-    videoElement.currentTime = targetTime;
+    try {
+      videoElement.currentTime = targetTime;
     if (isZoom) {
-      zoomProgress.value = pct * 100;
-      zoomCurrentTime.value = videoElement.currentTime;
-      zoomDuration.value = videoElement.duration || 0;
+    zoomProgress.value = pct * 100;
+    zoomCurrentTime.value = videoElement.currentTime;
+    zoomDuration.value = videoElement.duration || 0;
     }
   } catch (e) {
     console.warn('seekVideo failed:', e);
@@ -1834,19 +1924,19 @@ function handleDragging(event) {
   
   if (!videoElement || !videoElement.duration || !progressBarEl) return;
   
-  const { left, width } = progressBarEl.getBoundingClientRect();
-  const clickX = event.clientX - left;
-  const percentage = Math.max(0, Math.min(clickX / width, 1));
+    const { left, width } = progressBarEl.getBoundingClientRect();
+    const clickX = event.clientX - left;
+    const percentage = Math.max(0, Math.min(clickX / width, 1));
   
-  videoElement.currentTime = percentage * videoElement.duration;
+    videoElement.currentTime = percentage * videoElement.duration;
   
   if (isZoom) {
     zoomProgress.value = percentage * 100;
     zoomCurrentTime.value = videoElement.currentTime;
     zoomDuration.value = videoElement.duration || 0;
   } else {
-    const video = items.value.find(v => v.id === draggedVideoId.value);
-    if (video) video.progress = percentage * 100;
+  const video = items.value.find(v => v.id === draggedVideoId.value);
+  if (video) video.progress = percentage * 100;
   }
 }
 
@@ -1877,8 +1967,8 @@ function closeUploadModal() {
   activeUploads.value = {};
   
   // 모달 닫기 및 진행률 초기화
-  showUploadModal.value = false;
-  uploadProgress.value = [];
+    showUploadModal.value = false;
+    uploadProgress.value = [];
 }
 
 

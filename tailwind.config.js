@@ -2,6 +2,7 @@
  * tailwind.config.cjs
  **************************************************/
 module.exports = {
+  darkMode: 'class', // class 전략 사용 (html 요소에 dark 클래스 추가)
   content: [
     "./index.html",
     "./src/**/*.{vue,js,ts}"

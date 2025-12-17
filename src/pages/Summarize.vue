@@ -1,39 +1,39 @@
 <template>
-  <div class="w-full h-full bg-gradient-to-br from-slate-200 to-slate-300 via-slate-100 p-10">
+  <div class="w-full h-full bg-gradient-to-br from-slate-200 to-slate-300 via-slate-100 dark:from-gray-950 dark:to-gray-900 dark:via-gray-950 p-10">
     <div class="grid lg:grid-cols-2 gap-6">
       <!-- 좌측: 비디오/업로드 -->
       <section
-        class="rounded-2xl p-5 bg-gradient-to-br from-white via-gray-50 to-gray-100 border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-300">
+        class="rounded-2xl p-5 bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-gray-950 dark:via-gray-950 dark:to-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow duration-300">
         <!-- 헤더 -->
-        <header class="flex items-center justify-between px-1 pb-3 mb-3 border-b border-slate-800/70">
+        <header class="flex items-center justify-between px-1 pb-3 mb-3 border-b border-slate-800/70 dark:border-gray-200/30">
           <!-- 좌측: 타이틀 / 설명 -->
           <div class="flex flex-col gap-1">
             <div
-              class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 w-fit">
+              class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-400/40 dark:border-emerald-400/60 w-fit">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span class="text-[11px] font-semibold tracking-wide text-emerald-600 uppercase">
-                Video Summarize Workspace
+              <span class="text-[11px] font-semibold tracking-wide text-emerald-600 dark:text-emerald-400 uppercase">
+                {{ tSummarize.workspace }}
               </span>
             </div>
-            <p class="text-xs md:text-sm text-black mt-1">
-              {{ isZoomed ? (videoFiles[zoomedIndex]?.name || 'Video Section') : (videoFiles.length > 1 ? 'Video Section' : (videoFiles[0]?.name || 'Video Section')) }}
-              <span class="hidden md:inline">요약 성능을 조정하고 싶다면 우측의 설정 버튼을 클릭하여 조정할 수 있습니다.</span>
+            <p class="text-xs md:text-sm text-black dark:text-gray-200 mt-1">
+              {{ isZoomed ? (videoFiles[zoomedIndex]?.name || tSummarize.videoSection) : (videoFiles.length > 1 ? tSummarize.videoSection : (videoFiles[0]?.name || tSummarize.videoSection)) }}
+              <span class="hidden md:inline">{{ tSummarize.adjustPerformance }}</span>
             </p>
           </div>
           <!-- 우측: 설정 버튼 -->
-          <button @click="showSettingModal = true" title="설정"
-            class="w-9 h-9 flex items-center justify-center bg-slate-200/70 hover:bg-slate-400/80 border border-slate-500/60 text-slate-100 backdrop-blur-md rounded-full shadow transition-all duration-200">
-            <img :src="settingIcon" alt="설정" class="w-5 h-5 object-contain" />
+          <button @click="showSettingModal = true" :title="tSummarize.setting"
+            class="w-9 h-9 flex items-center justify-center bg-slate-200/70 dark:bg-gray-700 hover:bg-slate-400/80 dark:hover:bg-gray-600 border border-slate-500/60 dark:border-gray-600 text-slate-100 dark:text-gray-200 backdrop-blur-md rounded-full shadow transition-all duration-200">
+            <img :src="settingIcon" alt="설정" class="w-5 h-5 object-contain dark:brightness-0 dark:invert" />
           </button>
         </header>
 
 
         <!-- 비디오 리스트 / 업로드 영역 -->
         <div
-          class="relative w-full border border-slate-200/80 bg-blue-100 rounded-3xl p-6 mt-4 mb-4 shadow-[0_18px_45px_rgba(15,23,42,0.25)] backdrop-blur-md">
+          class="relative w-full border border-slate-200/80 dark:border-gray-800 bg-blue-100 dark:bg-blue-900/30 rounded-3xl p-6 mt-4 mb-4 shadow-[0_18px_45px_rgba(15,23,42,0.25)] backdrop-blur-md">
           <div
-            class="aspect-video h-92 rounded-xl mb-3 flex items-center justify-center text-gray-600 transition-all cursor-pointer relative overflow-hidden group ring-1 ring-gray-300"
-            :class="[isDragging ? 'bg-blue-50 ring-blue-300' : 'bg-gray-200']" @dragover.prevent="onDragOver"
+            class="aspect-video h-92 rounded-xl mb-3 flex items-center justify-center text-gray-600 dark:text-gray-400 transition-all cursor-pointer relative overflow-hidden group ring-1 ring-gray-300 dark:ring-gray-600"
+            :class="[isDragging ? 'bg-blue-50 dark:bg-blue-900/50 ring-blue-300 dark:ring-blue-600' : 'bg-gray-200 dark:bg-gray-700']" @dragover.prevent="onDragOver"
             @dragleave.prevent="onDragLeave" @drop.prevent="onDrop" @click="onVideoAreaClick">
             <template v-if="!videoFiles || videoFiles.length === 0">
               <div v-if="streaming === false && sampleVideoPath"
@@ -43,16 +43,16 @@
                   autoplay loop muted playsinline preload="auto"></video>
                 <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <span v-if="!isDragging" class="font-bold text-white drop-shadow-lg text-center px-4">
-                    Drop Video here<br />-- or --<br />Click to upload
+                    {{ tSummarize.dropVideo }}<br />{{ tSummarize.or }}<br />{{ tSummarize.clickUpload }}
                   </span>
-                  <span v-else class="text-white font-bold drop-shadow-lg">여기에 파일을 놓으세요</span>
+                  <span v-else class="text-white font-bold drop-shadow-lg">{{ tSummarize.dropHere }}</span>
                 </div>
               </div>
               <span v-else-if="!isDragging"
-                class="font-bold text-blue-500 flex flex-col items-center justify-center text-center w-full">
-                Drop Video here<br>-- or --<br>Click to upload
+                class="font-bold text-blue-500 dark:text-blue-400 flex flex-col items-center justify-center text-center w-full">
+                {{ tSummarize.dropVideo }}<br>{{ tSummarize.or }}<br>{{ tSummarize.clickUpload }}
               </span>
-              <span v-else class="text-blue-600 font-bold">여기에 파일을 놓으세요</span>
+              <span v-else class="text-blue-600 dark:text-blue-400 font-bold">{{ tSummarize.dropHere }}</span>
             </template>
             <template v-else-if="videoFiles.length === 1">
               <div class="relative w-full h-full" @mouseenter="singleVideo && (hoveredVideoId = singleVideo.id)"
@@ -117,14 +117,14 @@
               <!-- 여러 개일 때 리스트 & 확대 분기 -->
               <div v-if="!isZoomed" id="list" class="relative w-full h-full">
                 <div
-                  class="w-full h-[100%] border border-slate-200/80 bg-gray-50 rounded-2xl overflow-y-auto shadow-inner">
+                  class="w-full h-[100%] border border-slate-200/80 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 rounded-2xl overflow-y-auto shadow-inner">
                   <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
                     <div v-for="(video, idx) in videoFiles" :key="video.id"
-                      class="flex flex-col items-center justify-center rounded-2xl shadow-md hover:shadow-xl cursor-pointer p-3 border border-gray-200 relative transform transition-all duration-300 hover:scale-105 hover:-translate-y-1 group"
-                      :class="{ 'ring-2 ring-blue-400 bg-blue-100': selectedIndexes.includes(video.id) }"
+                      class="flex flex-col items-center justify-center rounded-2xl shadow-md hover:shadow-xl cursor-pointer p-3 border border-gray-200 dark:border-gray-700 relative transform transition-all duration-300 hover:scale-105 hover:-translate-y-1 group bg-white dark:bg-gray-800"
+                      :class="{ 'ring-2 ring-blue-400 dark:ring-blue-500 bg-blue-100 dark:bg-blue-900/30': selectedIndexes.includes(video.id) }"
                       @click="selectVideo(video.id)" @contextmenu.prevent.stop="onVideoContextMenu(video, idx, $event)">
                       <div
-                        class="flex items-center justify-center bg-gray-200 rounded-xl overflow-hidden relative group"
+                        class="flex items-center justify-center bg-gray-200 dark:bg-gray-700 rounded-xl overflow-hidden relative group"
                         @mouseenter="hoveredVideoId = video.id" @mouseleave="hoveredVideoId = null">
                         <input type="checkbox" class="absolute top-1 left-1 z-10" v-model="selectedIndexes"
                           :value="video.id" />
@@ -137,7 +137,7 @@
                           class="absolute inset-0 pointer-events-none transition-colors duration-300"
                           :class="playingVideoIds.includes(video.id) ? 'bg-transparent' : 'bg-black/30'">
                         </div>
-                        <span v-else class="text-gray-400">No Thumbnail</span>
+                        <span v-else class="text-gray-400 dark:text-gray-500">{{ tSummarize.noThumbnail }}</span>
                         <div v-if="video.title || video.name"
                           class="absolute top-1 right-1 bg-gradient-to-r from-black/70 to-black/50 backdrop-blur-sm text-white text-xs px-2.5 py-2 rounded-lg truncate max-w-[70%] pointer-events-none shadow-lg leading-[1.6] z-30 overflow-visible">
                           <span class="relative">{{ video.title || video.name }}</span>
@@ -276,8 +276,8 @@
         <div class="mb-3 flex items-center gap-2">
           <div class="relative flex-1">
             <textarea v-model="prompt"
-              class="w-full border border-slate-300 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-300 rounded-xl px-3 py-2 resize-none transition-all bg-white"
-              placeholder="프롬프트를 입력하세요." rows="3" @keydown.enter.exact.prevent="runInference"></textarea>
+              class="w-full border border-slate-300 dark:border-gray-600 focus:border-emerald-400 dark:focus:border-emerald-500 focus:ring-2 focus:ring-emerald-300 dark:focus:ring-emerald-500 rounded-xl px-3 py-2 resize-none transition-all bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+              :placeholder="tSummarize.promptPlaceholder" rows="3" @keydown.enter.exact.prevent="runInference"></textarea>
             <button
               class="absolute right-[8px] top-[45px] p-2 rounded-lg bg-emerald-500/90 hover:bg-emerald-400 text-white flex items-center justify-center shadow-lg shadow-emerald-500/30 transition-all duration-200 transform hover:scale-[1.03] active:scale-[0.97]"
               @click="runInference" :disabled="videoFiles.length === 0 || selectedIndexes.length === 0">
@@ -295,13 +295,13 @@
         <Teleport to="body">
           <div v-if="contextMenu.visible" class="fixed z-[200]"
             :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click.stop>
-            <div class="bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden w-[200px]">
-              <button v-if="selectedIndexes.length < 2" class="w-full text-left px-4 py-3 hover:bg-gray-50"
-                @click.stop="contextZoom">확대</button>
-              <button class="w-full text-left px-4 py-3 hover:bg-gray-50" @click.stop="contextOpenSettings">설정</button>
-              <div class="h-px bg-gray-100"></div>
-              <button class="w-full text-left px-4 py-3 text-red-600 hover:bg-gray-50" @click.stop="contextDelete">
-                {{ selectedIndexes.length > 1 ? `선택된 항목 삭제 (${selectedIndexes.length})` : '삭제' }}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden w-[200px]">
+              <button v-if="selectedIndexes.length < 2" class="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
+                @click.stop="contextZoom">{{ tSummarize.expand }}</button>
+              <button class="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200" @click.stop="contextOpenSettings">{{ tSummarize.setting }}</button>
+              <div class="h-px bg-gray-100 dark:bg-gray-700"></div>
+              <button class="w-full text-left px-4 py-3 text-red-600 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-700" @click.stop="contextDelete">
+                {{ selectedIndexes.length > 1 ? `${tSummarize.deleteSelected} (${selectedIndexes.length})` : tSummarize.delete }}
               </button>
             </div>
           </div>
@@ -310,9 +310,9 @@
         <!-- 경고 모달 -->
         <div v-if="showWarningModal"
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
-            <h3 class="text-lg font-semibold mb-2 text-gray-800">경고</h3>
-            <p class="text-sm text-gray-700 mb-4" v-html="warningMessage"></p>
+          <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full p-6">
+            <h3 class="text-lg font-semibold mb-2 text-gray-800 dark:text-gray-200">경고</h3>
+            <p class="text-sm text-gray-700 dark:text-gray-300 mb-4" v-html="warningMessage"></p>
             <div class="flex justify-end gap-2">
               <button
                 class="px-6 py-2.5 rounded-xl bg-emerald-500/90 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/30 transition-all duration-200 transform hover:scale-[1.03] active:scale-[0.97]"
@@ -329,22 +329,22 @@
               <path stroke-linecap="round" stroke-linejoin="round"
                 d="M8 6V4.8c0-.442 0-.663.074-.842a1 1 0 01.418-.418C8.671 3.466 8.892 3.466 9.334 3.466h5.332c.442 0 .663 0 .842.074a1 1 0 01.418.418c.074.179.074.4.074.842V6m-6 5v5m4-5v5M5 6l1.2 12.4c.109 1.123.163 1.685.44 2.118a2 2 0 00.826.73c.458.222 1.021.222 2.147.222h4.374c1.126 0 1.689 0 2.147-.222a2 2 0 00.826-.73c.277-.433.331-.995.44-2.118L19 6" />
             </svg>
-            <span>동영상 삭제</span>
+            <span>{{ tSummarize.deleteVideo }}</span>
           </button>
         </div>
 
         <!-- Setting Modal -->
         <div v-if="showSettingModal"
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div class="bg-white rounded-2xl shadow-2xl max-w-[90%] max-h-[90%] w-full p-4 overflow-auto">
-            <div class="flex items-center justify-between mb-3 border-b border-slate-800/70 pb-3">
+          <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-[90%] max-h-[90%] w-full p-4 overflow-auto">
+            <div class="flex items-center justify-between mb-3 border-b border-slate-800/70 dark:border-gray-200/30 pb-3">
               <div
-                class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 w-fit">
+                class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-400/40 dark:border-emerald-400/60 w-fit">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <h3 class="text-[11px] font-semibold tracking-wide text-emerald-600 uppercase">Settings</h3>
+                <h3 class="text-[11px] font-semibold tracking-wide text-emerald-600 dark:text-emerald-400 uppercase">Settings</h3>
               </div>
               <button @click="closeSettingModal"
-                class="px-2 py-[1px] rounded-full border-[2px] border-slate-500/60 bg-slate-900/70 hover:bg-slate-800/80 text-slate-100 transition-all duration-200">X</button>
+                class="px-2 py-[1px] rounded-full border-[2px] border-slate-500/60 dark:border-gray-600 bg-slate-900/70 dark:bg-gray-700 hover:bg-slate-800/80 dark:hover:bg-gray-600 text-slate-100 dark:text-gray-200 transition-all duration-200">X</button>
             </div>
             <Setting />
           </div>
@@ -353,36 +353,36 @@
         <!-- 업로드 진행률 모달 -->
         <Teleport to="body">
           <div v-if="showUploadModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 p-6">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 p-6">
               <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-800">동영상 업로드 중...</h3>
-                <button @click="closeUploadModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200">{{ tSummarize.uploading }}</h3>
+                <button @click="closeUploadModal" class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
                   <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
               <div class="space-y-4 max-h-[60vh] overflow-y-auto">
-                <div v-for="(upload, index) in uploadProgress" :key="upload.id" class="border border-gray-200 rounded-lg p-4">
+                <div v-for="(upload, index) in uploadProgress" :key="upload.id" class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-700">
                   <div class="flex items-center justify-between mb-2">
-                    <span class="text-sm font-medium text-gray-700 truncate flex-1 mr-2">{{ upload.fileName }}</span>
-                    <span class="text-sm text-gray-500 whitespace-nowrap">{{ upload.progress }}%</span>
+                    <span class="text-sm font-medium text-gray-700 dark:text-gray-200 truncate flex-1 mr-2">{{ upload.fileName }}</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ upload.progress }}%</span>
                   </div>
-                  <div class="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+                  <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5 mb-2">
                     <div 
                       class="bg-gradient-to-r from-emerald-500 to-emerald-600 h-2.5 rounded-full transition-all duration-300"
                       :style="{ width: `${upload.progress}%` }"
                     ></div>
                   </div>
-                  <div class="flex items-center justify-between text-xs text-gray-500">
+                  <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                     <span>{{ upload.status }}</span>
                     <span v-if="upload.uploaded > 0">{{ formatFileSize(upload.uploaded) }} / {{ formatFileSize(upload.total) }}</span>
                   </div>
                 </div>
               </div>
               <div v-if="allUploadsComplete" class="mt-4 text-center">
-                <button @click="closeUploadModal" class="px-6 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors">
-                  완료
+                <button @click="closeUploadModal" class="px-6 py-2 bg-emerald-500 dark:bg-emerald-600 text-white rounded-lg hover:bg-emerald-600 dark:hover:bg-emerald-500 transition-colors">
+                  {{ tSummarize.complete }}
                 </button>
               </div>
             </div>
@@ -392,28 +392,28 @@
 
       <!-- 우측: 결과/프롬프트 -->
       <section
-        class="rounded-2xl p-5 bg-gradient-to-br from-white via-gray-50 to-gray-100 border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-300">
+        class="rounded-2xl p-5 bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-gray-950 dark:via-gray-950 dark:to-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow duration-300">
         <!-- 헤더 -->
-        <header class="flex items-center justify-between px-1 pb-3 mb-3 border-b border-slate-800/70">
+        <header class="flex items-center justify-between px-1 pb-3 mb-3 border-b border-slate-800/70 dark:border-gray-200/30">
           <div class="flex flex-col gap-1">
             <div
-              class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 w-fit">
+              class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-400/40 dark:border-emerald-400/60 w-fit">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span class="text-[11px] font-semibold tracking-wide text-emerald-600 uppercase">
-                Summary Result
+              <span class="text-[11px] font-semibold tracking-wide text-emerald-600 dark:text-emerald-400 uppercase">
+                {{ tSummarize.summaryResult }}
               </span>
             </div>
-            <p class="text-xs md:text-sm text-black mt-1">
-              요약 결과를 확인하고 질문을 입력할 수 있습니다.
+            <p class="text-xs md:text-sm text-black dark:text-gray-200 mt-1">
+              {{ tSummarize.resultDescription }}
             </p>
           </div>
         </header>
         <!-- 채팅 형태 출력 영역 -->
         <div
-          class="chat-window border border-gray-200 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 h-[600px] p-3 overflow-auto shadow-inner"
+          class="chat-window border border-gray-200 dark:border-gray-800 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900 h-[600px] p-3 overflow-auto shadow-inner"
           ref="chatWindowRef">
-          <div v-if="chatMessages.length === 0" class="text-gray-400 text-sm flex items-center justify-center h-full">
-            아직 메시지가 없습니다. 요약을 실행하거나 질문을 입력하세요.
+          <div v-if="chatMessages.length === 0" class="text-gray-400 dark:text-gray-500 text-sm flex items-center justify-center h-full">
+            {{ tSummarize.noMessages }}
           </div>
           <template v-else>
             <div v-for="m in chatMessages" :key="m.id" class="chat-row" :class="{
@@ -447,23 +447,23 @@
         </div>
 
         <div class="flex items-center gap-2 mt-3">
-          <input v-model="ask_prompt" placeholder="질문을 입력하세요..."
-            class="w-full rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-300 px-4 py-3 bg-white transition-all"
+          <input v-model="ask_prompt" :placeholder="tSummarize.askPlaceholder"
+            class="w-full rounded-xl border border-slate-300 dark:border-gray-600 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-2 focus:ring-emerald-300 dark:focus:ring-emerald-500 px-4 py-3 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 transition-all"
             @keyup.enter="() => { onAsk(ask_prompt); ask_prompt = ''; }" />
           <button
             class="rounded-lg bg-emerald-500/90 hover:bg-emerald-400 text-white px-4 py-2 shadow-lg shadow-emerald-500/30 transition-all duration-200 transform hover:scale-[1.03] active:scale-[0.97]"
             @click="() => { onAsk(ask_prompt); ask_prompt = ''; }">
-            Ask
+            {{ tSummarize.ask }}
           </button>
         </div>
 
         <div class="mt-3 flex gap-2">
           <button
-            class="px-3 py-2 rounded-md border border-slate-500/60 text-[13px] text-slate-100 bg-slate-900/70 hover:bg-slate-800/80 hover:border-emerald-400/70 hover:text-emerald-50 shadow-sm transition-all duration-200"
-            @click="saveResult">결과 저장</button>
+            class="px-3 py-2 rounded-md border border-slate-500/60 dark:border-gray-600 text-[13px] text-slate-100 dark:text-gray-200 bg-slate-900/70 dark:bg-gray-800 hover:bg-slate-800/80 dark:hover:bg-gray-700 hover:border-emerald-400/70 dark:hover:border-emerald-500 hover:text-emerald-50 dark:hover:text-emerald-300 shadow-sm transition-all duration-200"
+            @click="saveResult">{{ tSummarize.saveResult }}</button>
           <button
-            class="px-3 py-2 rounded-md border border-slate-500/60 text-[13px] text-slate-100 bg-slate-900/70 hover:bg-slate-800/80 hover:border-emerald-400/70 hover:text-emerald-50 shadow-sm transition-all duration-200"
-            @click="clear">초기화</button>
+            class="px-3 py-2 rounded-md border border-slate-500/60 dark:border-gray-600 text-[13px] text-slate-100 dark:text-gray-200 bg-slate-900/70 dark:bg-gray-800 hover:bg-slate-800/80 dark:hover:bg-gray-700 hover:border-emerald-400/70 dark:hover:border-emerald-500 hover:text-emerald-50 dark:hover:text-emerald-300 shadow-sm transition-all duration-200"
+            @click="clear">{{ tSummarize.clear }}</button>
         </div>
       </section>
     </div>
@@ -484,6 +484,62 @@ const METADATA_TIMEOUT = 5000; // 동영상 메타데이터 로드 타임아웃 
 const CHUNK_SIZE_UPDATE_DELAY = 1000; // chunk_size 업데이트 지연 시간 (ms)
 const UPLOAD_PROCESSING_DELAY = 500; // 업로드 후 처리 지연 시간 (ms)
 const AUTO_SAVE_DELAY = 1000; // 자동 저장 지연 시간 (ms)
+
+// ==================== 다국어 지원 ====================
+const summarizeTranslations = {
+  ko: {
+    workspace: "Video Summarize Workspace",
+    videoSection: "Video Section",
+    adjustPerformance: "요약 성능을 조정하고 싶다면 우측의 설정 버튼을 클릭하여 조정할 수 있습니다.",
+    setting: "설정",
+    dropVideo: "Drop Video here",
+    or: "-- or --",
+    clickUpload: "Click to upload",
+    dropHere: "여기에 파일을 놓으세요",
+    noThumbnail: "No Thumbnail",
+    expand: "확대",
+    delete: "삭제",
+    deleteSelected: "선택된 항목 삭제",
+    deleteVideo: "동영상 삭제",
+    promptPlaceholder: "프롬프트를 입력하세요.",
+    summaryResult: "Summary Result",
+    resultDescription: "요약 결과를 확인하고 질문을 입력할 수 있습니다.",
+    noMessages: "아직 메시지가 없습니다. 요약을 실행하거나 질문을 입력하세요.",
+    askPlaceholder: "질문을 입력하세요...",
+    ask: "Ask",
+    saveResult: "결과 저장",
+    clear: "초기화",
+    uploading: "동영상 업로드 중...",
+    complete: "완료"
+  },
+  en: {
+    workspace: "Video Summarize Workspace",
+    videoSection: "Video Section",
+    adjustPerformance: "Click the settings button on the right to adjust summarization performance.",
+    setting: "Settings",
+    dropVideo: "Drop Video here",
+    or: "-- or --",
+    clickUpload: "Click to upload",
+    dropHere: "Drop files here",
+    noThumbnail: "No Thumbnail",
+    expand: "Expand",
+    delete: "Delete",
+    deleteSelected: "Delete Selected",
+    deleteVideo: "Delete Video",
+    promptPlaceholder: "Enter a prompt...",
+    summaryResult: "Summary Result",
+    resultDescription: "View summary results and enter questions.",
+    noMessages: "No messages yet. Run a summary or enter a question.",
+    askPlaceholder: "Enter a question...",
+    ask: "Ask",
+    saveResult: "Save Result",
+    clear: "Clear",
+    uploading: "Uploading videos...",
+    complete: "Complete"
+  }
+};
+
+const tSummarize = computed(() => summarizeTranslations[settingStore.language] || summarizeTranslations.ko);
 
 const selectedIndexes = ref([]); // 선택된 동영상 id 배열
 const prompt = ref("");
@@ -818,6 +874,8 @@ async function filterVideosByCurrentUser(videos) {
 // Pinia 스토어에서 동영상 목록을 불러와서 Summarize 메뉴의 로컬 배열에 복사
 onMounted(async () => {
   document.addEventListener('click', handleGlobalClick);
+  // 다른 메뉴가 열렸을 때 컨텍스트 메뉴 닫기
+  window.addEventListener('profile-menu-opened', closeContextMenu);
 
   const userId = localStorage.getItem("vss_user_id");
   if (!userId) {
@@ -1218,6 +1276,7 @@ watch([prompt, response, chatMessages, ask_prompt, selectedIndexes, videoFiles, 
 // Summarize 페이지에서 벗어날 때 상태 저장
 onUnmounted(() => {
   document.removeEventListener('click', handleGlobalClick);
+  window.removeEventListener('profile-menu-opened', closeContextMenu);
   
   // 실행 중인 타이머 정리 (페이지를 벗어나도 백그라운드에서 계속 실행되도록 유지)
   // 타이머는 유지하되, 페이지 복귀 시 복원할 수 있도록 상태만 저장
@@ -1377,6 +1436,9 @@ function onVideoContextMenu(video, idx, event) {
     }
   }
 
+  // 다른 메뉴들에게 비디오 컨텍스트 메뉴가 열릴 예정임을 먼저 알림 (다른 메뉴를 닫기 위해)
+  window.dispatchEvent(new CustomEvent('video-context-menu-opened'));
+
   // 마우스 포인터 위치를 직접 사용
   const x = event.clientX;
   const y = event.clientY;
@@ -1390,7 +1452,10 @@ function onVideoContextMenu(video, idx, event) {
   };
 }
 
-function handleGlobalClick() {
+function handleGlobalClick(e) {
+  // 우클릭 이벤트는 무시 (컨텍스트 메뉴가 열릴 수 있음)
+  if (e && (e.button === 2 || e.which === 3)) return;
+  
   if (!contextMenu.value.visible) return;
   closeContextMenu();
 }

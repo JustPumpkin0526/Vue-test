@@ -11,11 +11,11 @@
               class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 w-fit">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               <span class="text-[11px] font-semibold tracking-wide text-emerald-600 uppercase">
-                Report Viewer
+                {{ tReport.reportViewer }}
               </span>
             </div>
             <p class="text-xs md:text-sm text-black mt-1">
-              {{ selectedReport?.title || '리포트를 선택하세요' }}
+              {{ selectedReport?.title || tReport.selectReport }}
               <span v-if="selectedReport?.createdAt" class="text-gray-500 ml-2">
                 · {{ formatDate(selectedReport.createdAt) }}
               </span>
@@ -27,7 +27,7 @@
               @click="prevPage"
               :disabled="currentPage <= 1"
               class="w-9 h-9 flex items-center justify-center bg-slate-200/70 hover:bg-slate-400/80 border border-slate-500/60 text-slate-700 rounded-lg shadow transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
-              title="이전 페이지">
+              :title="tReport.prevPage">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
               </svg>
@@ -37,7 +37,7 @@
               @click="nextPage"
               :disabled="currentPage >= totalPages"
               class="w-9 h-9 flex items-center justify-center bg-slate-200/70 hover:bg-slate-400/80 border border-slate-500/60 text-slate-700 rounded-lg shadow transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
-              title="다음 페이지">
+              :title="tReport.nextPage">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
               </svg>
@@ -50,7 +50,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <span class="text-sm font-medium">내보내기</span>
+              <span class="text-sm font-medium">{{ tReport.export }}</span>
             </button>
           </div>
         </header>
@@ -71,14 +71,14 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p class="text-gray-500 text-sm">리포트를 선택하여 내용을 확인하세요</p>
+            <p class="text-gray-500 text-sm">{{ tReport.selectToView }}</p>
           </div>
         </div>
 
         <!-- 페이지 정보 -->
         <div v-if="selectedReport" class="mt-4 flex items-center justify-between text-xs text-gray-500">
-          <span>페이지 {{ currentPage }} / {{ totalPages }}</span>
-          <span>{{ selectedReport.wordCount || 0 }} 단어</span>
+          <span>{{ tReport.page }} {{ currentPage }} / {{ totalPages }}</span>
+          <span>{{ selectedReport.wordCount || 0 }} {{ tReport.words }}</span>
         </div>
       </section>
 
@@ -92,10 +92,10 @@
               class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-400/40 w-fit">
               <span class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
               <span class="text-[11px] font-semibold tracking-wide text-blue-600 uppercase">
-                Report Library
+                {{ tReport.reportLibrary }}
               </span>
             </div>
-            <p class="text-xs text-black mt-1">총 {{ totalReports }}개의 리포트</p>
+            <p class="text-xs text-black mt-1">{{ settingStore.language === 'ko' ? '총 ' : '' }}{{ totalReports }}{{ settingStore.language === 'ko' ? '개의 리포트' : ' ' + tReport.totalReports }}</p>
           </div>
         </header>
 
@@ -105,7 +105,7 @@
             <input
               v-model="searchQuery"
               type="text"
-              placeholder="리포트 검색..."
+              :placeholder="tReport.searchPlaceholder"
               class="w-full rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-300 px-4 py-2.5 pl-10 bg-white text-sm transition-all"
               @input="handleSearch" />
             <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none"
@@ -123,7 +123,7 @@
                   ? 'bg-emerald-500 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               ]">
-              최신순
+              {{ tReport.sortByDate }}
             </button>
             <button
               @click="sortBy = 'title'"
@@ -133,7 +133,7 @@
                   ? 'bg-emerald-500 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               ]">
-              제목순
+              {{ tReport.sortByTitle }}
             </button>
           </div>
         </div>
@@ -145,7 +145,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p class="text-gray-500 text-sm">리포트가 없습니다</p>
+            <p class="text-gray-500 text-sm">{{ tReport.noReports }}</p>
           </div>
 
           <div
@@ -161,7 +161,7 @@
             <div class="flex items-start justify-between gap-3">
               <div class="flex-1 min-w-0">
                 <h4 class="font-semibold text-sm text-gray-900 mb-1 truncate group-hover:text-emerald-600 transition-colors">
-                  {{ r.title || '제목 없음' }}
+                  {{ r.title || tReport.noTitle }}
                 </h4>
                 <p v-if="r.description" class="text-xs text-gray-600 line-clamp-2 mb-2">
                   {{ r.description }}
@@ -179,7 +179,7 @@
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    {{ r.wordCount }} 단어
+                    {{ r.wordCount }} {{ tReport.words }}
                   </span>
                 </div>
               </div>
@@ -208,6 +208,51 @@ import { ref, computed, watch } from "vue";
 import Pagination from "@/components/Pagination.vue";
 import api from "@/services/api";
 import { marked } from 'marked';
+import { useSettingStore } from '@/stores/settingStore';
+
+const settingStore = useSettingStore();
+
+// ==================== 다국어 지원 ====================
+const reportTranslations = {
+  ko: {
+    reportViewer: "Report Viewer",
+    selectReport: "리포트를 선택하세요",
+    prevPage: "이전 페이지",
+    nextPage: "다음 페이지",
+    export: "내보내기",
+    reportLibrary: "Report Library",
+    totalReports: "개의 리포트",
+    searchPlaceholder: "리포트 검색...",
+    sortByDate: "최신순",
+    sortByTitle: "제목순",
+    noReports: "리포트가 없습니다",
+    noTitle: "제목 없음",
+    selectToView: "리포트를 선택하여 내용을 확인하세요",
+    page: "페이지",
+    word: "단어",
+    words: "단어"
+  },
+  en: {
+    reportViewer: "Report Viewer",
+    selectReport: "Select a report",
+    prevPage: "Previous Page",
+    nextPage: "Next Page",
+    export: "Export",
+    reportLibrary: "Report Library",
+    totalReports: "reports",
+    searchPlaceholder: "Search reports...",
+    sortByDate: "Latest",
+    sortByTitle: "Title",
+    noReports: "No reports",
+    noTitle: "No Title",
+    selectToView: "Select a report to view its content",
+    page: "Page",
+    word: "word",
+    words: "words"
+  }
+};
+
+const tReport = computed(() => reportTranslations[settingStore.language] || reportTranslations.ko);
 
 const report = ref("");
 const selectedReport = ref(null);

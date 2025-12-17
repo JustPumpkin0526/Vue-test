@@ -14,7 +14,6 @@ import json
 import time
 import os
 import re
-import asyncio
 from pathlib import Path
 import bcrypt
 import smtplib
@@ -48,6 +47,11 @@ app.mount("/clips", StaticFiles(directory="clips"), name="clips")
 videos_dir = Path("./videos")
 videos_dir.mkdir(exist_ok=True)
 app.mount("/video-files", StaticFiles(directory=str(videos_dir.resolve())), name="video-files")
+
+# Serve profile images as static files under /profile-images
+profile_images_dir = Path("./profile-images")
+profile_images_dir.mkdir(exist_ok=True)
+app.mount("/profile-images", StaticFiles(directory=str(profile_images_dir.resolve())), name="profile-images")
 
 # Serve sample videos as static files under /sample
 # 절대 경로를 사용하여 현재 스크립트 위치 기준으로 sample 폴더 찾기
@@ -90,6 +94,7 @@ OLLAMA_TIMEOUT = 60  # Ollama API 타임아웃 (초)
 
 # 파일 설정
 ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv'}
+ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
 FILE_BUFFER_SIZE = 8 * 1024 * 1024  # 8MB
 CLIP_CLEANUP_AGE = 86400  # 클립 파일 정리 기준 시간 (24시간, 초)
 
@@ -103,6 +108,41 @@ IP_PATTERN = r'^(\d{1,3}\.){3}\d{1,3}$'
 
 # 이메일 설정
 EMAIL_CODE_EXPIRY_MINUTES = 10
+
+# VIA 서버 요약 기본 설정 (generate-clips용)
+DEFAULT_SUMMARIZE_PROMPT = "Analyze the video and detect any threatening behavior, antisocial actions, or criminal activities. Identify events such as violence, aggression, property damage, theft, weapon-related actions, or any safety-risk situations. For each detected event, provide a clear description and output the start and end timestamps in seconds. Use the format: start_time - end_time - event_description."
+DEFAULT_CAPTION_SUMMARIZATION_PROMPT = "You will be given captions from sequential clips of a video. Aggregate captions in the format start_time:end_time:caption based on whether captions are related to one another or create a continuous scene."
+DEFAULT_SUMMARY_AGGREGATION_PROMPT = "Based on the available information, generate a summary that captures the important events in the video. The summary should be organized chronologically and in logical sections. This should be a concise, yet descriptive summary of all the important events. The format should be intuitive and easy for a user to read and understand what happened. Format the output in Markdown so it can be displayed nicely. Timestamps are in seconds so please format them as SS.SSS"
+
+# VIA 서버 요약 파라미터 기본값
+DEFAULT_FRAME_WIDTH = 0
+DEFAULT_FRAME_HEIGHT = 0
+DEFAULT_TOP_K = 80
+DEFAULT_TOP_P = 1.0
+DEFAULT_TEMPERATURE = 0.4
+DEFAULT_MAX_TOKENS = 512
+DEFAULT_SEED = 1
+DEFAULT_BATCH_SIZE = 6
+DEFAULT_RAG_BATCH_SIZE = 1
+DEFAULT_RAG_TOP_K = 5
+DEFAULT_SUMMARIZE_TOP_P = 0.7
+DEFAULT_SUMMARIZE_TEMPERATURE = 0.2
+DEFAULT_SUMMARIZE_MAX_TOKENS = 2048
+DEFAULT_CHAT_TOP_P = 0.7
+DEFAULT_CHAT_TEMPERATURE = 0.2
+DEFAULT_CHAT_MAX_TOKENS = 2048
+DEFAULT_NOTIFICATION_TOP_P = 0.7
+DEFAULT_NOTIFICATION_TEMPERATURE = 0.2
+DEFAULT_NOTIFICATION_MAX_TOKENS = 2048
+DEFAULT_ENABLE_AUDIO = True
+
+# VIA 서버 질의(query) 기본 설정
+DEFAULT_QUERY_TEMPERATURE = 0.3
+DEFAULT_QUERY_SEED = 42
+DEFAULT_QUERY_MAX_TOKENS = 1024  # VIA 서버는 최대 1024까지만 허용
+DEFAULT_QUERY_TOP_P = 1.0
+DEFAULT_QUERY_TOP_K = 80
+DEFAULT_QUERY_TIMESTAMP_SUFFIX = " 장면의 시작 타임스탬프와 종료 타임스탬프를 추출하여 출력해주세요. 타임스탬프 형식은 초 단위(예: 10.5, 120.3) 또는 분:초 형식(예: 1:30, 2:45)일 수 있습니다. 타임스탬프만 출력하고 다른 설명은 포함하지 마세요."
 
 # 전역 변수
 http_session: Optional[aiohttp.ClientSession] = None
@@ -159,8 +199,122 @@ def build_file_url(file_url: str) -> str:
         return file_url
     return f"{API_BASE_URL}{file_url}"
 
-# verify_user_exists와 validate_video_ownership은 db_pool 정의 후에 정의됨 (아래 참조)
+def build_summarize_params(
+    video_id: str,
+    chunk_duration: int,
+    model: str,
+    prompt: str = DEFAULT_SUMMARIZE_PROMPT,
+    cs_prompt: str = DEFAULT_CAPTION_SUMMARIZATION_PROMPT,
+    sa_prompt: str = DEFAULT_SUMMARY_AGGREGATION_PROMPT,
+    num_frames_per_chunk: Optional[int] = None,
+    frame_width: int = DEFAULT_FRAME_WIDTH,
+    frame_height: int = DEFAULT_FRAME_HEIGHT,
+    top_k: int = DEFAULT_TOP_K,
+    top_p: float = DEFAULT_TOP_P,
+    temperature: float = DEFAULT_TEMPERATURE,
+    max_new_tokens: int = DEFAULT_MAX_TOKENS,
+    seed: int = DEFAULT_SEED,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    rag_batch_size: int = DEFAULT_RAG_BATCH_SIZE,
+    rag_top_k: int = DEFAULT_RAG_TOP_K,
+    summarize_top_p: float = DEFAULT_SUMMARIZE_TOP_P,
+    summarize_temperature: float = DEFAULT_SUMMARIZE_TEMPERATURE,
+    summarize_max_tokens: int = DEFAULT_SUMMARIZE_MAX_TOKENS,
+    chat_top_p: float = DEFAULT_CHAT_TOP_P,
+    chat_temperature: float = DEFAULT_CHAT_TEMPERATURE,
+    chat_max_tokens: int = DEFAULT_CHAT_MAX_TOKENS,
+    notification_top_p: float = DEFAULT_NOTIFICATION_TOP_P,
+    notification_temperature: float = DEFAULT_NOTIFICATION_TEMPERATURE,
+    notification_max_tokens: int = DEFAULT_NOTIFICATION_MAX_TOKENS,
+    enable_audio: bool = DEFAULT_ENABLE_AUDIO
+):
+    """
+    summarize_video 함수 호출을 위한 파라미터 튜플 생성
+    
+    Args:
+        video_id: VIA 서버의 video_id
+        chunk_duration: 청크 지속 시간
+        model: 모델 ID
+        num_frames_per_chunk: None이면 chunk_duration // 4로 자동 계산
+        기타 파라미터: 기본값 사용 또는 커스텀 값 지정
+    
+    Returns:
+        summarize_video 함수에 전달할 파라미터 튜플
+    """
+    if num_frames_per_chunk is None:
+        num_frames_per_chunk = chunk_duration // 4
+    
+    return (
+        video_id,
+        prompt,
+        cs_prompt,
+        sa_prompt,
+        chunk_duration,
+        model,
+        num_frames_per_chunk,
+        frame_width,
+        frame_height,
+        top_k,
+        top_p,
+        temperature,
+        max_new_tokens,
+        seed,
+        batch_size,
+        rag_batch_size,
+        rag_top_k,
+        summarize_top_p,
+        summarize_temperature,
+        summarize_max_tokens,
+        chat_top_p,
+        chat_temperature,
+        chat_max_tokens,
+        notification_top_p,
+        notification_temperature,
+        notification_max_tokens,
+        enable_audio
+    )
 
+def build_query_video_params(
+    video_id: str,
+    model: str,
+    query: str,
+    chunk_size: int,
+    temperature: float = DEFAULT_QUERY_TEMPERATURE,
+    seed: int = DEFAULT_QUERY_SEED,
+    max_new_tokens: int = DEFAULT_QUERY_MAX_TOKENS,
+    top_p: float = DEFAULT_QUERY_TOP_P,
+    top_k: int = DEFAULT_QUERY_TOP_K
+):
+    """
+    query_video 함수 호출을 위한 파라미터 튜플 생성
+    
+    Args:
+        video_id: VIA 서버의 video_id
+        model: 모델 ID
+        query: 질문 텍스트
+        chunk_size: 청크 크기
+        temperature: 기본값 0.3
+        seed: 기본값 42
+        max_new_tokens: 기본값 1024 (VIA 서버 최대값)
+        top_p: 기본값 1.0
+        top_k: 기본값 80
+    
+    Returns:
+        query_video 함수에 전달할 파라미터 튜플
+    """
+    return (
+        video_id,
+        model,
+        chunk_size,
+        temperature,
+        seed,
+        max_new_tokens,
+        top_p,
+        top_k,
+        query
+    )
+
+# ==================== VSS API 클래스 ====================
 class VSS:
     """Wrapper to call VSS REST APIs"""
 
@@ -357,7 +511,52 @@ def get_closest_chunk_size(CHUNK_SIZES, x):
     closest_value = min(values, key=lambda v: abs(v - x))  # find the value closest to x
     return closest_value
 
+async def get_recommended_chunk_size(video_length):
+    """동영상 길이에 따른 추천 chunk_size 계산"""
+    recommended_chunk_size = 0
 
+    try:
+        session = await get_session()
+        async with session.post(
+            f"{VIA_SERVER_URL}/recommended_config",
+            json={
+                "video_length": int(video_length),
+                "target_response_time": int(DEFAULT_VIA_TARGET_RESPONSE_TIME),
+                "usecase_event_duration": int(DEFAULT_VIA_TARGET_USECASE_EVENT_DURATION),
+            },
+            timeout=aiohttp.ClientTimeout(total=VIA_MODEL_TIMEOUT)
+        ) as response:
+            if response.status < 400:
+                # Success response from API:
+                resp_json = await response.json()
+                recommended_chunk_size = int(resp_json.get("chunk_size", 0))
+    except Exception as e:
+        logger.warning(f"Failed to get recommended chunk size from backend: {e}")
+    
+    if recommended_chunk_size == 0:
+        # API fail to provide non-zero chunk size
+        # Choose the largest chunk-size in favor of quick VIA execution
+        recommended_chunk_size = video_length
+    
+    return get_closest_chunk_size(CHUNK_SIZES, recommended_chunk_size)
+
+# 추천 chunk_size 요청용 모델
+class RecommendedChunkSizeRequest(BaseModel):
+    video_length: float
+
+@app.post("/get-recommended-chunk-size")
+async def get_recommended_chunk_size_endpoint(request: RecommendedChunkSizeRequest):
+    """
+    동영상 길이를 받아서 추천 chunk_size를 반환하는 엔드포인트
+    """
+    try:
+        recommended_chunk_size = await get_recommended_chunk_size(request.video_length)
+        return {"recommended_chunk_size": recommended_chunk_size, "video_length": request.video_length}
+    except Exception as e:
+        logger.error(f"Error getting recommended chunk size: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting recommended chunk size: {e}")
+
+# ==================== 타임스탬프 파싱 함수 ====================
 def parse_timestamps(timestamp_text, video_duration):
     """
     타임스탬프 텍스트에서 시간 구간을 파싱하여 (start_time, end_time) 튜플 리스트를 반환합니다.
@@ -460,52 +659,6 @@ def parse_timestamps(timestamp_text, video_duration):
     logger.info(f"파싱된 타임스탬프: {merged}")
     return merged
 
-
-async def get_recommended_chunk_size(video_length):
-    """동영상 길이에 따른 추천 chunk_size 계산"""
-    recommended_chunk_size = 0
-
-    try:
-        session = await get_session()
-        async with session.post(
-            f"{VIA_SERVER_URL}/recommended_config",
-            json={
-                "video_length": int(video_length),
-                "target_response_time": int(DEFAULT_VIA_TARGET_RESPONSE_TIME),
-                "usecase_event_duration": int(DEFAULT_VIA_TARGET_USECASE_EVENT_DURATION),
-            },
-            timeout=aiohttp.ClientTimeout(total=VIA_MODEL_TIMEOUT)
-        ) as response:
-            if response.status < 400:
-                # Success response from API:
-                resp_json = await response.json()
-                recommended_chunk_size = int(resp_json.get("chunk_size", 0))
-    except Exception as e:
-        logger.warning(f"Failed to get recommended chunk size from backend: {e}")
-    
-    if recommended_chunk_size == 0:
-        # API fail to provide non-zero chunk size
-        # Choose the largest chunk-size in favor of quick VIA execution
-        recommended_chunk_size = video_length
-    
-    return get_closest_chunk_size(CHUNK_SIZES, recommended_chunk_size)
-
-# 추천 chunk_size 요청용 모델
-class RecommendedChunkSizeRequest(BaseModel):
-    video_length: float
-
-@app.post("/get-recommended-chunk-size")
-async def get_recommended_chunk_size_endpoint(request: RecommendedChunkSizeRequest):
-    """
-    동영상 길이를 받아서 추천 chunk_size를 반환하는 엔드포인트
-    """
-    try:
-        recommended_chunk_size = await get_recommended_chunk_size(request.video_length)
-        return {"recommended_chunk_size": recommended_chunk_size, "video_length": request.video_length}
-    except Exception as e:
-        logger.error(f"Error getting recommended chunk size: {e}")
-        raise HTTPException(status_code=500, detail=f"Error getting recommended chunk size: {e}")
-
 async def remove_all_media(session: aiohttp.ClientSession, media_ids):
     """
     VIA 서버에서 여러 미디어 파일을 삭제하는 함수
@@ -538,6 +691,7 @@ async def remove_media_endpoint(request: RemoveMediaRequest):
         logger.error(f"Error removing media: {e}")
         raise HTTPException(status_code=500, detail=f"Error removing media: {e}")
 
+# ==================== 장면 검색 결과 클립 생성 ====================
 @app.post("/generate-clips")
 async def generate_clips(
     request: Request,
@@ -604,7 +758,7 @@ async def generate_clips(
             # video_ids에서 내부 DB ID 가져오기 (VIA 서버의 video_id로 변환 필요)
             video_id = None
             db_internal_id = None
-            if user_id and video_id_map:
+            if video_id_map:
                 # 파일명으로 내부 DB ID 찾기
                 db_internal_id = video_id_map.get(file_path) or video_id_map.get(upfile.filename)
                 if db_internal_id:
@@ -655,37 +809,15 @@ async def generate_clips(
 
             # 저장된 요약이 있으면 summarize_video 건너뛰기
 
-            summary_prompt = f"""Analyze the video and detect any threatening behavior, antisocial actions, or criminal activities. Identify events such as violence, aggression, property damage, theft, weapon-related actions, or any safety-risk situations. For each detected event, provide a clear description and output the start and end timestamps in seconds. Use the format: start_time - end_time - event_description."""
+            summary_prompt = DEFAULT_SUMMARIZE_PROMPT
             if not has_stored_summary:
-                result = await vss_client.summarize_video(
-                    video_id,
-                    "Analyze the video and detect any threatening behavior, antisocial actions, or criminal activities. Identify events such as violence, aggression, property damage, theft, weapon-related actions, or any safety-risk situations. For each detected event, provide a clear description and output the start and end timestamps in seconds. Use the format: start_time - end_time - event_description.",
-                    "You will be given captions from sequential clips of a video. Aggregate captions in the format start_time:end_time:caption based on whether captions are related to one another or create a continuous scene.",
-                    "Based on the available information, generate a summary that captures the important events in the video. The summary should be organized chronologically and in logical sections. This should be a concise, yet descriptive summary of all the important events. The format should be intuitive and easy for a user to read and understand what happened. Format the output in Markdown so it can be displayed nicely. Timestamps are in seconds so please format them as SS.SSS",
-                    chunk_duration,
-                    model,
-                    chunk_duration // 4,
-                    0,
-                    0,
-                    80,
-                    1.0,
-                    0.4,
-                    512,
-                    1,
-                    6,
-                    1,
-                    5,
-                    0.7,
-                    0.2,
-                    2048,
-                    0.7,
-                    0.2,
-                    2048,
-                    0.7,
-                    0.2,
-                    2048,
-                    True  # enable_audio
+                # 요약 파라미터 준비 (기본값 사용)
+                summarize_params = build_summarize_params(
+                    video_id=video_id,
+                    chunk_duration=chunk_duration,
+                    model=model
                 )
+                result = await vss_client.summarize_video(*summarize_params)
                 
                 # 요약 결과를 DB에 저장
                 if user_id and video_id and result:
@@ -707,29 +839,20 @@ async def generate_clips(
             
             # prompt를 질문으로 처리: VIA 서버의 query_video 사용
             # 동영상 컨텍스트를 직접 활용하여 질문에 답변
-            try:                
-                # query_video 파라미터 설정
-                query_chunk_size = chunk_duration  # 요약에 사용한 chunk_duration과 동일하게
-                query_temperature = 0.3
-                query_seed = 42
-                query_max_tokens = 1024  # VIA 서버는 최대 1024까지만 허용
-                query_top_p = 1
-                query_top_k = 80
-
-                prompt += " 장면의 시작 타임스탬프와 종료 타임스탬프를 추출하여 출력해주세요. 타임스탬프 형식은 초 단위(예: 10.5, 120.3) 또는 분:초 형식(예: 1:30, 2:45)일 수 있습니다. 타임스탬프만 출력하고 다른 설명은 포함하지 마세요."
+            try:
+                # 타임스탬프 추출 지시 추가
+                enhanced_prompt = prompt + DEFAULT_QUERY_TIMESTAMP_SUFFIX
+                
+                # query_video 파라미터 준비 (기본값 사용)
+                query_params = build_query_video_params(
+                    video_id=video_id,
+                    model=model,
+                    query=enhanced_prompt,
+                    chunk_size=chunk_duration  # 요약에 사용한 chunk_duration과 동일하게
+                )
                 
                 # VIA 서버로 질문 전달
-                query_result = await vss_client.query_video(
-                    video_id,
-                    model,
-                    query_chunk_size,
-                    query_temperature,
-                    query_seed,
-                    query_max_tokens,
-                    query_top_p,
-                    query_top_k,
-                    prompt  # 사용자가 입력한 prompt를 질문으로 전달
-                )
+                query_result = await vss_client.query_video(*query_params)
                 
                 # query_result를 Ollama LLM에 보내서 타임스탬프만 추출
                 extracted_timestamps_text = None
@@ -879,7 +1002,7 @@ async def generate_clips(
     print(f"Returned clips payload: {json.dumps({'clips': grouped_clips, 'clips_extracted': clips_extracted}, ensure_ascii=False)}")
     return JSONResponse(content={"clips": grouped_clips, "clips_extracted": clips_extracted})
 
-
+# ==================== 동영상 요약 VSS API ====================
 @app.post("/vss-summarize")
 async def vss_summarize(
     file: UploadFile,
@@ -917,67 +1040,39 @@ async def vss_summarize(
     if not video_id:
         # video_id가 없으면 에러 반환 (업로드를 하지 않도록 수정)
         raise HTTPException(status_code=400, detail="video_id가 필요합니다. 이미 업로드된 동영상의 video_id를 제공해주세요.")
-    
-    # video_id가 제공된 경우, 업로드 없이 바로 사용
-    # upload_video 호출 제거됨
-
-    #print(video_id)
-    #print(prompt)
-    #print(csprompt)
-    #print(saprompt)
-    #print(chunk_duration)
-    #print(model)
-    #print(num_frames_per_chunk)
-    #print(frame_width)
-    #print(frame_height)
-    #print(top_k)
-    #print(top_p)
-    #print(temperature)
-    #print(max_tokens)
-    #print(seed)
-    #print(batch_size)
-    #print(rag_batch_size)
-    #print(rag_top_k)
-    #print(summary_top_p)
-    #print(summary_temperature)
-    #print(summary_max_tokens)
-    #print(chat_top_p)
-    #print(chat_temperature)
-    #print(chat_max_tokens)
-    #print(alert_top_p)
-    #print(alert_temperature)
-    #print(alert_max_tokens)
 
     try:
-        result = await vss_client.summarize_video(
-            video_id,
-            prompt,
-            csprompt,
-            saprompt,
-            chunk_duration,
-            model,
-            num_frames_per_chunk,
-            frame_width,
-            frame_height,
-            top_k,
-            top_p,
-            temperature,
-            max_tokens,
-            seed,
-            batch_size,
-            rag_batch_size,
-            rag_top_k,
-            summary_top_p,
-            summary_temperature,
-            summary_max_tokens,
-            chat_top_p,
-            chat_temperature,
-            chat_max_tokens,
-            alert_top_p,
-            alert_temperature,
-            alert_max_tokens,
-            enable_audio,
+        # summarize_video 파라미터 준비 (Form으로 받은 모든 값 전달)
+        summarize_params = build_summarize_params(
+            video_id=video_id,
+            chunk_duration=chunk_duration,
+            model=model,
+            prompt=prompt,
+            cs_prompt=csprompt,
+            sa_prompt=saprompt,
+            num_frames_per_chunk=num_frames_per_chunk,
+            frame_width=frame_width,
+            frame_height=frame_height,
+            top_k=top_k,
+            top_p=top_p,
+            temperature=temperature,
+            max_new_tokens=max_tokens,
+            seed=seed,
+            batch_size=batch_size,
+            rag_batch_size=rag_batch_size,
+            rag_top_k=rag_top_k,
+            summarize_top_p=summary_top_p,
+            summarize_temperature=summary_temperature,
+            summarize_max_tokens=summary_max_tokens,
+            chat_top_p=chat_top_p,
+            chat_temperature=chat_temperature,
+            chat_max_tokens=chat_max_tokens,
+            notification_top_p=alert_top_p,
+            notification_temperature=alert_temperature,
+            notification_max_tokens=alert_max_tokens,
+            enable_audio=enable_audio
         )
+        result = await vss_client.summarize_video(*summarize_params)
         return {"summary": result, "video_id": video_id}
     except HTTPException:
         # HTTPException은 그대로 전파
@@ -991,19 +1086,12 @@ async def vss_summarize(
         if "gst-stream-error" in error_msg or "qtdemux" in error_msg or "not-negotiated" in error_msg:
             raise HTTPException(
                 status_code=500,
-                detail=(
-                    "동영상 파일 처리 중 오류가 발생했습니다.\n\n"
-                    "가능한 원인:\n"
-                    "1. 손상된 동영상 파일 - 파일을 다시 다운로드하거나 다른 파일로 시도해보세요.\n"
-                    "2. 지원하지 않는 코덱 또는 포맷 - H.264 코덱의 MP4 파일을 권장합니다.\n"
-                    "3. 파일이 완전히 업로드되지 않음 - 네트워크 연결을 확인하고 다시 시도해보세요.\n"
-                    "4. 파일 메타데이터 문제 - 동영상 편집 프로그램으로 파일을 다시 저장해보세요.\n\n"
-                    f"기술적 오류: {error_msg}"
-                )
+                detail=f"기술적 오류: {error_msg}"
             )
         else:
             raise HTTPException(status_code=500, detail=f"요약 생성 중 오류가 발생했습니다: {error_msg}")
 
+# ==================== 동영상 검색 VSS API ====================
 @app.post("/vss-query")
 async def vss_query(
     video_id: Optional[str] = Form(None),
@@ -1029,11 +1117,21 @@ async def vss_query(
         elif not video_id:
             raise HTTPException(status_code=400, detail="video_id 또는 file 중 하나는 필요합니다.")
         
-        result = await vss_client.query_video(video_id, model, chunk_size, temperature, seed, max_new_tokens, top_p, top_k, query)
+        # query_video 파라미터 준비
+        query_params = build_query_video_params(
+            video_id=video_id,
+            model=model,
+            query=query,
+            chunk_size=chunk_size,
+            temperature=temperature,
+            seed=seed,
+            max_new_tokens=max_new_tokens,
+            top_p=top_p,
+            top_k=top_k
+        )
+        result = await vss_client.query_video(*query_params)
 
         return {"summary": result, "video_id": video_id}
-
-
 
 # 로그인용 모델
 class LoginRequest(BaseModel):
@@ -1051,6 +1149,7 @@ class VideoUploadResponse(BaseModel):
 import threading
 from queue import Queue, Empty
 
+# ==================== 데이터베이스 연결 풀 설정 클래스 ====================
 class ConnectionPool:
     """DB 커넥션 풀 (동시 요청 처리 최적화)"""
     def __init__(self, max_connections=10, **kwargs):
@@ -1061,7 +1160,6 @@ class ConnectionPool:
         self.created_connections = 0
         
         # 초기 연결 생성 (실패해도 애플리케이션 시작은 계속)
-        # Railway 등에서 DB 연결 정보가 없을 수 있으므로 예외 처리
         try:
             for _ in range(min(3, max_connections)):
                 try:
@@ -1144,30 +1242,30 @@ class ConnectionPool:
 # 데이터베이스 연결 풀 초기화
 # ============================================================================
 # 데이터베이스 연결 정보 (고정값 사용 - 환경 변수 없이)
-db_host = "172.16.15.69"
-db_user = "root"
-db_password = "pass0001!"  # 고정 비밀번호
-db_port = 3306
-db_name = "vss"
+DB_HOST = "172.16.15.69"
+DB_USER = "root"
+DB_PASSWORD = "pass0001!"  # 고정 비밀번호
+DB_PORT = 3306
+DB_NAME = "vss"
 
 # ConnectionPool에 명시적으로 host를 IP 주소로 전달
 # host.docker.internal 변환을 방지하기 위해 IP 주소를 문자열로 명시
 # IP 주소 형식 검증
-if not re.match(IP_PATTERN, str(db_host)):
-    logger.warning(f"⚠️ DB_HOST가 IP 주소 형식이 아닙니다: {db_host}")
+if not re.match(IP_PATTERN, str(DB_HOST)):
+    logger.warning(f"⚠️ DB_HOST가 IP 주소 형식이 아닙니다: {DB_HOST}")
     logger.warning("⚠️ IP 주소 형식(예: 172.16.15.69)을 사용하는 것을 권장합니다.")
 
 # IP 주소를 명시적으로 문자열로 변환 (호스트명 변환 방지)
-db_host_str = str(db_host).strip()
+db_host_str = str(DB_HOST).strip()
 logger.info(f"DB 연결 풀 초기화: host={db_host_str} (타입: {type(db_host_str).__name__})")
 
 db_pool = ConnectionPool(
     max_connections=20,
-    user=db_user,
-    password=db_password,
+    user=DB_USER,
+    password=DB_PASSWORD,
     host=db_host_str,  # IP 주소를 문자열로 명시적으로 전달
-    port=int(db_port),
-    database=db_name
+    port=int(DB_PORT),
+    database=DB_NAME
 )
 
 # 하위 호환성을 위한 전역 연결 (점진적 마이그레이션용)
@@ -1825,6 +1923,152 @@ def reset_password(request: ResetPasswordRequest):
     except Exception as e:
         logger.error(f"비밀번호 재설정 실패: {e}")
         raise HTTPException(status_code=500, detail=f"비밀번호 재설정 중 오류가 발생했습니다: {str(e)}")
+
+# 사용자 정보 조회 엔드포인트
+@app.get("/user/{user_id}")
+def get_user_info(user_id: str):
+    """사용자 정보 조회"""
+    try:
+        verify_user_exists(user_id)
+        ensure_db_connection()
+        cursor.execute(
+            "SELECT ID, EMAIL, CREATED_AT, UPDATED_AT FROM vss_user WHERE ID = ?",
+            (user_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        
+        # 프로필 이미지 경로 조회 (PROFILE_IMAGE_URL 필드가 있는 경우)
+        profile_image_url = None
+        try:
+            cursor.execute(
+                "SELECT PROFILE_IMAGE_URL FROM vss_user WHERE ID = ?",
+                (user_id,)
+            )
+            profile_row = cursor.fetchone()
+            if profile_row and profile_row[0]:
+                profile_image_url = profile_row[0]
+        except Exception as e:
+            # PROFILE_IMAGE_URL 필드가 없을 수 있으므로 무시
+            logger.debug(f"프로필 이미지 조회 중 오류 (무시됨): {e}")
+        
+        return {
+            "success": True,
+            "user": {
+                "id": row[0],
+                "email": row[1],
+                "created_at": row[2].isoformat() if row[2] else None,
+                "updated_at": row[3].isoformat() if row[3] else None,
+                "profile_image_url": profile_image_url
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"사용자 정보 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"사용자 정보 조회 중 오류가 발생했습니다: {str(e)}")
+
+# 사용자 이메일 업데이트 요청 모델
+class UpdateUserEmailRequest(BaseModel):
+    email: str
+
+# 사용자 이메일 업데이트 엔드포인트
+@app.put("/user/{user_id}/email")
+def update_user_email(user_id: str, request: UpdateUserEmailRequest):
+    """사용자 이메일 업데이트"""
+    try:
+        verify_user_exists(user_id)
+        email = validate_email(request.email)
+        
+        ensure_db_connection()
+        cursor.execute(
+            "UPDATE vss_user SET EMAIL = ?, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?",
+            (email, user_id)
+        )
+        conn.commit()
+        
+        logger.info(f"사용자 이메일 업데이트 성공: {user_id} -> {email}")
+        return {"success": True, "message": "이메일이 업데이트되었습니다.", "email": email}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"사용자 이메일 업데이트 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"이메일 업데이트 중 오류가 발생했습니다: {str(e)}")
+
+# 프로필 이미지 업로드 엔드포인트
+@app.post("/user/{user_id}/profile-image")
+async def upload_profile_image(user_id: str, file: UploadFile = File(...)):
+    """사용자 프로필 이미지 업로드"""
+    try:
+        verify_user_exists(user_id)
+        
+        # 파일 확장자 검증
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="파일명이 없습니다.")
+        
+        file_ext = Path(file.filename).suffix.lower()
+        if file_ext not in ALLOWED_IMAGE_EXTENSIONS:
+            raise HTTPException(status_code=400, detail=f"지원하지 않는 이미지 형식입니다: {file_ext}. 지원 형식: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}")
+        
+        # 파일 크기 제한 (5MB)
+        file_content = await file.read()
+        if len(file_content) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="이미지 파일 크기는 5MB를 초과할 수 없습니다.")
+        
+        # 고유한 파일명 생성
+        timestamp = int(time.time() * 1000)
+        unique_filename = f"{user_id}_{timestamp}{file_ext}"
+        file_path = profile_images_dir / unique_filename
+        file_url = f"/profile-images/{unique_filename}"
+        
+        # 파일 저장
+        with open(file_path, "wb") as buffer:
+            buffer.write(file_content)
+        
+        # DB에 프로필 이미지 경로 저장 (PROFILE_IMAGE_URL 필드가 있는 경우)
+        ensure_db_connection()
+        try:
+            # 먼저 컬럼이 있는지 확인하고 업데이트
+            cursor.execute(
+                "UPDATE vss_user SET PROFILE_IMAGE_URL = ?, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?",
+                (file_url, user_id)
+            )
+            conn.commit()
+        except Exception as db_error:
+            # PROFILE_IMAGE_URL 필드가 없을 수 있으므로 컬럼 추가 시도
+            logger.warning(f"프로필 이미지 URL 업데이트 실패, 컬럼 추가 시도: {db_error}")
+            try:
+                cursor.execute(
+                    "ALTER TABLE vss_user ADD COLUMN PROFILE_IMAGE_URL VARCHAR(500)"
+                )
+                conn.commit()
+                # 다시 업데이트 시도
+                cursor.execute(
+                    "UPDATE vss_user SET PROFILE_IMAGE_URL = ?, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?",
+                    (file_url, user_id)
+                )
+                conn.commit()
+            except Exception as alter_error:
+                logger.error(f"프로필 이미지 컬럼 추가 실패: {alter_error}")
+                # 컬럼 추가 실패해도 파일은 저장되었으므로 경로만 반환
+                return {
+                    "success": True,
+                    "message": "프로필 이미지가 업로드되었습니다. (DB 업데이트 실패)",
+                    "profile_image_url": build_file_url(file_url)
+                }
+        
+        logger.info(f"프로필 이미지 업로드 성공: {user_id} -> {file_url}")
+        return {
+            "success": True,
+            "message": "프로필 이미지가 업로드되었습니다.",
+            "profile_image_url": build_file_url(file_url)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"프로필 이미지 업로드 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"프로필 이미지 업로드 중 오류가 발생했습니다: {str(e)}")
 
 # 동영상 메타데이터 추출 함수 (백그라운드 작업)
 def extract_video_metadata(file_path: str, video_id: int, filename: str):
