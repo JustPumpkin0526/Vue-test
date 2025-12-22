@@ -1,5 +1,5 @@
 <template>
-  <div class="w-full h-full bg-gradient-to-br from-slate-200 to-slate-300 via-slate-100 dark:from-gray-950 dark:to-gray-900 dark:via-gray-950 p-10">
+  <div class="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300 via-gray-100 dark:from-gray-950 dark:to-gray-900 dark:via-gray-950 p-10">
     <div class="grid lg:grid-cols-2 gap-6">
       <!-- 좌측: 비디오/업로드 -->
       <section
@@ -61,17 +61,23 @@
                   class="w-full h-full rounded-xl object-cover transition-opacity duration-300" preload="metadata"
                   :ref="el => { if (el && singleVideo) videoRefs[singleVideo.id] = el }"
                   @timeupdate="updateProgress(singleVideo.id, $event)"
+                  @loadedmetadata="onVideoMetadataLoaded(singleVideo.id, $event)"
                   @ended="singleVideo && onVideoEnded(singleVideo.id)"
                   :class="{ 'brightness-75': !playingVideoIds.includes(singleVideo.id) }"></video>
                 <!-- 정지 시 어두운 오버레이 -->
                 <div v-if="singleVideo" class="absolute inset-0 pointer-events-none transition-colors duration-300"
-                  :class="playingVideoIds.includes(singleVideo.id) ? 'bg-transparent' : 'bg-black/40'"></div>
-                <!-- 하단 오버레이 진행바 & 시간 (overflow-hidden 영역 내에서 겹쳐 표시) -->
-                <div v-if="singleVideo"
+                  :class="playingVideoIds.includes(singleVideo.id) ? 'bg-transparent' : 'bg-black/20'"></div>
+                <!-- 재생하지 않은 동영상의 영상 길이 표시 (우측 하단) -->
+                <div v-if="singleVideo && !playingVideoIds.includes(singleVideo.id) && durationMap[singleVideo.id]"
+                  class="absolute bottom-2 right-2 px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs font-medium rounded pointer-events-none">
+                  {{ formatTime(durationMap[singleVideo.id]) }}
+                </div>
+                <!-- 하단 오버레이 진행바 & 시간 (재생 중일 때만 표시) -->
+                <div v-if="singleVideo && playingVideoIds.includes(singleVideo.id)"
                   class="absolute bottom-0 left-0 right-0 p-2 bg-black/30 backdrop-blur-sm rounded-b-xl transition-all duration-300 pointer-events-none"
                   :class="{
-                    'opacity-100 translate-y-0': hoveredVideoId === singleVideo.id || !playingVideoIds.includes(singleVideo.id),
-                    'opacity-0 translate-y-full': hoveredVideoId !== singleVideo.id && playingVideoIds.includes(singleVideo.id)
+                    'opacity-100 translate-y-0': hoveredVideoId === singleVideo.id,
+                    'opacity-0 translate-y-full': hoveredVideoId !== singleVideo.id
                   }">
                   <div class="flex flex-col gap-1">
                     <div
@@ -132,22 +138,24 @@
                           class="object-cover rounded-xl transition-opacity duration-300" preload="metadata"
                           :ref="el => (videoRefs[video.id] = el)" @ended="onVideoEnded(video.id)"
                           @timeupdate="updateProgress(video.id, $event)"
+                          @loadedmetadata="onVideoMetadataLoaded(video.id, $event)"
                           :class="{ 'brightness-75': !playingVideoIds.includes(video.id) }"></video>
                         <div v-if="video.displayUrl"
                           class="absolute inset-0 pointer-events-none transition-colors duration-300"
-                          :class="playingVideoIds.includes(video.id) ? 'bg-transparent' : 'bg-black/30'">
+                          :class="playingVideoIds.includes(video.id) ? 'bg-transparent' : 'bg-black/20'">
                         </div>
                         <span v-else class="text-gray-400 dark:text-gray-500">{{ tSummarize.noThumbnail }}</span>
-                        <div v-if="video.title || video.name"
-                          class="absolute top-1 right-1 bg-gradient-to-r from-black/70 to-black/50 backdrop-blur-sm text-white text-xs px-2.5 py-2 rounded-lg truncate max-w-[70%] pointer-events-none shadow-lg leading-[1.6] z-30 overflow-visible">
-                          <span class="relative">{{ video.title || video.name }}</span>
+                        <!-- 재생하지 않은 동영상의 영상 길이 표시 (우측 하단) -->
+                        <div v-if="video.displayUrl && !playingVideoIds.includes(video.id) && durationMap[video.id]"
+                          class="absolute bottom-2 right-2 px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs font-medium rounded pointer-events-none">
+                          {{ formatTime(durationMap[video.id]) }}
                         </div>
-                        <!-- 오버레이 진행바 & 시간 (멀티 비디오용) -->
-                        <div v-if="video.displayUrl"
+                        <!-- 오버레이 진행바 & 시간 (재생 중일 때만 표시) -->
+                        <div v-if="video.displayUrl && playingVideoIds.includes(video.id)"
                           class="absolute bottom-0 left-0 right-0 p-2 bg-black/30 backdrop-blur-sm rounded-b-xl transition-all duration-300 pointer-events-none"
                           :class="{
-                            'opacity-100 translate-y-0': hoveredVideoId === video.id || !playingVideoIds.includes(video.id),
-                            'opacity-0 translate-y-full': hoveredVideoId !== video.id && playingVideoIds.includes(video.id)
+                            'opacity-100 translate-y-0': hoveredVideoId === video.id,
+                            'opacity-0 translate-y-full': hoveredVideoId !== video.id
                           }">
                           <div class="flex flex-col gap-1">
                             <div
@@ -188,6 +196,26 @@
                           </svg>
                         </button>
                       </div>
+                      <!-- 동영상 타이틀 및 정보 -->
+                      <div class="ml-4 w-full text-left">
+                        <div v-if="video.title || video.name" class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
+                          {{ video.title || video.name }}
+                        </div>
+                        <!-- 영상 정보: 길이, 해상도, 용량 (가로 나열) -->
+                        <div class="mt-1 text-xs text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                          <span v-if="durationMap[video.id]">
+                            {{ formatTime(durationMap[video.id]) }}
+                          </span>
+                          <span v-if="durationMap[video.id] && (video.width && video.height || video.fileSize)" class="text-gray-400">•</span>
+                          <span v-if="video.width && video.height">
+                            {{ video.width }} × {{ video.height }}
+                          </span>
+                          <span v-if="video.width && video.height && video.fileSize" class="text-gray-400">•</span>
+                          <span v-if="video.fileSize">
+                            {{ formatFileSize(video.fileSize) }}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -209,22 +237,24 @@
                     class="w-full h-[100%] rounded-xl object-cover transition-all duration-300" preload="metadata"
                     :ref="el => { if (el && videoFiles[zoomedIndex]) videoRefs[videoFiles[zoomedIndex].id] = el }"
                     @timeupdate="updateProgress(videoFiles[zoomedIndex].id, $event)"
+                    @loadedmetadata="onVideoMetadataLoaded(videoFiles[zoomedIndex].id, $event)"
                     @ended="onVideoEnded(videoFiles[zoomedIndex].id)"
                     :class="{ 'brightness-75': !playingVideoIds.includes(videoFiles[zoomedIndex].id) }"></video>
                   <div v-if="videoFiles[zoomedIndex]"
                     class="absolute inset-0 pointer-events-none transition-colors duration-300"
-                    :class="playingVideoIds.includes(videoFiles[zoomedIndex].id) ? 'bg-transparent' : 'bg-black/40'">
+                    :class="playingVideoIds.includes(videoFiles[zoomedIndex].id) ? 'bg-transparent' : 'bg-black/20'">
                   </div>
-                  <div v-if="videoFiles[zoomedIndex]"
-                    class="absolute top-2 left-2 bg-gradient-to-r from-black/70 to-black/50 backdrop-blur-sm text-white text-xs px-2.5 py-2 rounded-lg truncate max-w-[70%] pointer-events-none shadow-lg leading-[1.6] z-30 overflow-visible">
-                    <span class="relative">{{ videoFiles[zoomedIndex].name || videoFiles[zoomedIndex].title }}</span>
+                  <!-- 재생하지 않은 동영상의 영상 길이 표시 (우측 하단) -->
+                  <div v-if="videoFiles[zoomedIndex] && !playingVideoIds.includes(videoFiles[zoomedIndex].id) && durationMap[videoFiles[zoomedIndex].id]"
+                    class="absolute bottom-2 right-2 px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs font-medium rounded pointer-events-none">
+                    {{ formatTime(durationMap[videoFiles[zoomedIndex].id]) }}
                   </div>
-                  <!-- 확대 뷰 재생 진행바 & 시간 (단일/멀티와 동일 스타일) -->
-                  <div v-if="videoFiles[zoomedIndex]"
+                  <!-- 확대 뷰 재생 진행바 & 시간 (재생 중일 때만 표시) -->
+                  <div v-if="videoFiles[zoomedIndex] && playingVideoIds.includes(videoFiles[zoomedIndex].id)"
                     class="absolute bottom-0 left-0 right-0 p-2 bg-black/30 backdrop-blur-sm rounded-b-xl transition-all duration-300 pointer-events-none"
                     :class="{
-                      'opacity-100 translate-y-0': hoveredVideoId === videoFiles[zoomedIndex].id || !playingVideoIds.includes(videoFiles[zoomedIndex].id),
-                      'opacity-0 translate-y-full': hoveredVideoId !== videoFiles[zoomedIndex].id && playingVideoIds.includes(videoFiles[zoomedIndex].id)
+                      'opacity-100 translate-y-0': hoveredVideoId === videoFiles[zoomedIndex].id,
+                      'opacity-0 translate-y-full': hoveredVideoId !== videoFiles[zoomedIndex].id
                     }">
                     <div class="flex flex-col gap-1">
                       <div
@@ -471,7 +501,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed, nextTick, watch } from "vue";
+import { ref, onMounted, onUnmounted, onActivated, computed, nextTick, watch } from "vue";
 import { useSummaryVideoStore } from '@/stores/summaryVideoStore';
 import { useSettingStore } from '@/stores/settingStore';
 import { marked } from 'marked';
@@ -591,6 +621,14 @@ const activeUploads = ref({}); // { uploadId: XMLHttpRequest } - 진행 중인 �
 const activeTasks = ref([]); // 실행 중인 작업 목록: { taskId, type, startTime, currentIndex, totalCount, videoIds, loadingIds, prompt }
 const activeIntervals = ref({}); // 실행 중인 타이머: { taskId: intervalId }
 
+// 전역 작업 관리자 초기화 (페이지 전환 후에도 작업이 계속 진행되도록)
+if (!window.__vssActiveTasks) {
+  window.__vssActiveTasks = new Map();
+}
+if (!window.__vssTaskResults) {
+  window.__vssTaskResults = new Map(); // 작업 완료 결과 저장
+}
+
 function closeSettingModal() { showSettingModal.value = false; }
 
 // ==================== 유틸리티 함수 ====================
@@ -668,7 +706,6 @@ async function updateRecommendedChunkSize(videoId) {
   if (recommendedChunkSize !== null && settingStore) {
     // 추천된 chunk_size를 설정 스토어에 저장
     settingStore.chunk = recommendedChunkSize;
-    console.log(`동영상 길이: ${duration.toFixed(2)}초, 추천 chunk_size: ${recommendedChunkSize}초`);
   }
 }
 
@@ -727,7 +764,7 @@ async function checkDuplicateFiles(files, userId) {
       }
     }
   } catch (error) {
-    console.warn('중복 체크 실패, 업로드 계속 진행:', error);
+    // 중복 체크 실패 시 업로드 계속 진행
   }
   return false; // 중복 파일 없음
 }
@@ -759,6 +796,20 @@ function updateProgress(videoId, event) {
   progress.value[videoId] = (video.currentTime / video.duration) * 100;
   currentTimeMap.value[videoId] = video.currentTime;
   durationMap.value[videoId] = video.duration;
+}
+
+function onVideoMetadataLoaded(videoId, event) {
+  const video = videoFiles.value.find(v => v.id === videoId);
+  if (video && event.target) {
+    const { videoWidth, videoHeight, duration } = event.target;
+    if (videoWidth && videoHeight) {
+      video.width = videoWidth;
+      video.height = videoHeight;
+    }
+    if (duration && isFinite(duration)) {
+      durationMap.value[videoId] = duration;
+    }
+  }
 }
 
 function seekVideo(videoId, event) {
@@ -812,7 +863,7 @@ async function restoreMissingFile(video) {
     const filename = (video.name || video.title || 'video') + (blob.type && !blob.type.includes('mp4') ? '' : '.mp4');
     video.file = new File([blob], filename, { type: blob.type || 'video/mp4' });
   } catch (e) {
-    console.warn('Failed to restore File from URL', e);
+    // File 복원 실패 시 무시
   }
 }
 
@@ -871,43 +922,11 @@ async function filterVideosByCurrentUser(videos) {
   });
 }
 
-// Pinia 스토어에서 동영상 목록을 불러와서 Summarize 메뉴의 로컬 배열에 복사
-onMounted(async () => {
-  document.addEventListener('click', handleGlobalClick);
-  // 다른 메뉴가 열렸을 때 컨텍스트 메뉴 닫기
-  window.addEventListener('profile-menu-opened', closeContextMenu);
-
+// summaryVideoStore에서 동영상을 로드하여 videoFiles에 설정하는 함수
+async function loadVideosFromStore() {
   const userId = localStorage.getItem("vss_user_id");
   if (!userId) {
-    // 사용자 ID가 없으면 모든 상태 초기화
-    videoFiles.value = [];
-    summaryVideoStore.clearVideos();
-    const storageKey = getStorageKey();
-    localStorage.removeItem(storageKey);
-    return;
-  }
-
-  // 먼저 localStorage에서 상태 복원 시도
-  const restored = restoreStateFromLocalStorage();
-
-  // 샘플 동영상 경로 초기화
-  sampleVideoPath.value = `${API_BASE_URL}/sample/sample.mp4`;
-
-  // 상태가 복원되지 않았거나 동영상이 없는 경우에만 기본 초기화
-  if (!restored || videoFiles.value.length === 0) {
-    // 초기 상태: 동영상이 없으면 streaming을 false로 설정
-    streaming.value = false;
-
-    // 샘플 동영상 재생 시작 (동영상이 없을 때만)
-    if (sampleVideoPath.value && sampleVideoRef.value && !streaming.value) {
-      nextTick(() => {
-        const video = sampleVideoRef.value;
-        if (video) {
-          video.play().catch(err => {
-            console.warn('샘플 동영상 자동 재생 실패:', err);
-          });
-        }
-      });
+    return false;
     }
 
     if (Array.isArray(summaryVideoStore.videos) && summaryVideoStore.videos.length > 0) {
@@ -915,6 +934,32 @@ onMounted(async () => {
       const filteredVideos = await filterVideosByCurrentUser(summaryVideoStore.videos);
       
       if (filteredVideos.length > 0) {
+      // 기존 summaryObjectUrl 정리 (메모리 누수 방지)
+      videoFiles.value.forEach(v => {
+        if (v.summaryObjectUrl) {
+          try {
+            URL.revokeObjectURL(v.summaryObjectUrl);
+          } catch (_) {}
+        }
+      });
+
+        // 동영상이 변경되면 기존 요약 메시지 정리 (중복 방지)
+        const newVideoIds = new Set(filteredVideos.map(v => v.id || v.dbId));
+        const currentVideoIds = new Set(videoFiles.value.map(v => v.id));
+        const videosChanged = newVideoIds.size !== currentVideoIds.size || 
+                             Array.from(newVideoIds).some(id => !currentVideoIds.has(id));
+        
+        if (videosChanged) {
+          // 동영상이 변경되었으면 기존 요약 메시지 제거
+          chatMessages.value = chatMessages.value.filter(m => {
+            // 시스템 메시지나 사용자 메시지는 유지, 요약 결과만 제거
+            if (m.role === 'assistant' && m.content.includes('요약')) {
+              return false;
+            }
+            return true;
+          });
+        }
+
         // Summarize 전용 표시 URL을 분리하여 Video Storage 원본 URL(ObjectURL)과 독립
         videoFiles.value = filteredVideos.map(v => {
           const hasFile = v.file instanceof File;
@@ -949,56 +994,359 @@ onMounted(async () => {
             videoFiles.value.forEach(video => {
               updateRecommendedChunkSize(video.id);
             });
-          }, CHUNK_SIZE_UPDATE_DELAY);
+        }, CHUNK_SIZE_UPDATE_DELAY);
         });
         
         // DB에서 저장된 요약 결과 로드
         await loadSummariesFromDB();
+        
+        // 채팅 스크롤 처리
+        nextTick(() => {
+          scrollChatToBottom();
+        });
+      return true;
       } else {
         // 현재 사용자의 동영상이 없으면 summaryVideoStore도 정리
         summaryVideoStore.clearVideos();
+      return false;
       }
     }
+  return false;
+}
+
+// Pinia 스토어에서 동영상 목록을 불러와서 Summarize 메뉴의 로컬 배열에 복사
+onMounted(async () => {
+  document.addEventListener('click', handleGlobalClick);
+  // 다른 메뉴가 열렸을 때 컨텍스트 메뉴 닫기
+  window.addEventListener('profile-menu-opened', closeContextMenu);
+
+  const userId = localStorage.getItem("vss_user_id");
+  if (!userId) {
+    // 사용자 ID가 없으면 모든 상태 초기화
+    videoFiles.value = [];
+    summaryVideoStore.clearVideos();
+    const storageKey = getStorageKey();
+    localStorage.removeItem(storageKey);
+    return;
+  }
+
+  // 먼저 localStorage에서 상태 복원 시도
+  const restored = restoreStateFromLocalStorage();
+
+  // 샘플 동영상 경로 초기화
+  sampleVideoPath.value = `${API_BASE_URL}/sample/sample.mp4`;
+
+  // 상태가 복원되지 않았거나 동영상이 없는 경우에만 기본 초기화
+  if (!restored || videoFiles.value.length === 0) {
+    // 초기 상태: 동영상이 없으면 streaming을 false로 설정
+    streaming.value = false;
+
+    // 샘플 동영상 재생 시작 (동영상이 없을 때만)
+    if (sampleVideoPath.value && sampleVideoRef.value && !streaming.value) {
+      nextTick(() => {
+        const video = sampleVideoRef.value;
+        if (video) {
+          video.play().catch(() => {});
+        }
+      });
+    }
+
+    // summaryVideoStore에서 동영상 로드
+    await loadVideosFromStore();
   } else {
-    // 상태가 복원된 경우, 복원된 동영상들이 현재 사용자의 것인지 확인
-    if (videoFiles.value.length > 0) {
-      const filteredVideos = await filterVideosByCurrentUser(videoFiles.value);
-      if (filteredVideos.length !== videoFiles.value.length) {
-        // 일부 동영상이 현재 사용자의 것이 아니면 필터링된 목록으로 교체
-        videoFiles.value = filteredVideos;
-        if (videoFiles.value.length === 0) {
-          // 모든 동영상이 제거되었으면 상태 초기화
-          streaming.value = false;
-          selectedIndexes.value = [];
-          isZoomed.value = false;
-          zoomedIndex.value = null;
-          prompt.value = "";
-          response.value = "";
-          chatMessages.value = [];
+    // 상태가 복원된 경우
+    // summaryVideoStore에 새로운 동영상이 있으면 우선시 (Search.vue에서 새로 선택한 경우)
+    if (Array.isArray(summaryVideoStore.videos) && summaryVideoStore.videos.length > 0) {
+      const storeVideoIds = new Set(summaryVideoStore.videos.map(v => v.id || v.dbId));
+      const currentVideoIds = new Set(videoFiles.value.map(v => v.id));
+      
+      // 동영상 목록이 다르면 summaryVideoStore의 동영상으로 업데이트
+      const isDifferent = storeVideoIds.size !== currentVideoIds.size || 
+                          Array.from(storeVideoIds).some(id => !currentVideoIds.has(id));
+      
+      if (isDifferent) {
+        await loadVideosFromStore();
+      } else {
+        // 동영상이 같으면 복원된 상태 유지하되, 현재 사용자의 것인지 확인
+        if (videoFiles.value.length > 0) {
+          const filteredVideos = await filterVideosByCurrentUser(videoFiles.value);
+          if (filteredVideos.length !== videoFiles.value.length) {
+            // 일부 동영상이 현재 사용자의 것이 아니면 필터링된 목록으로 교체
+            videoFiles.value = filteredVideos;
+            if (videoFiles.value.length === 0) {
+              // 모든 동영상이 제거되었으면 상태 초기화
+              streaming.value = false;
+              selectedIndexes.value = [];
+              isZoomed.value = false;
+              zoomedIndex.value = null;
+              prompt.value = "";
+              response.value = "";
+              chatMessages.value = [];
+            }
+          }
+        }
+        
+        // DB에서 저장된 요약 결과 로드
+        await loadSummariesFromDB();
+        
+        // 채팅 스크롤 처리
+        nextTick(() => {
+          scrollChatToBottom();
+        });
+      }
+    } else {
+      // summaryVideoStore가 비어있으면 복원된 상태 유지
+      if (videoFiles.value.length > 0) {
+        const filteredVideos = await filterVideosByCurrentUser(videoFiles.value);
+        if (filteredVideos.length !== videoFiles.value.length) {
+          // 일부 동영상이 현재 사용자의 것이 아니면 필터링된 목록으로 교체
+          videoFiles.value = filteredVideos;
+          if (videoFiles.value.length === 0) {
+            // 모든 동영상이 제거되었으면 상태 초기화
+            streaming.value = false;
+            selectedIndexes.value = [];
+            isZoomed.value = false;
+            zoomedIndex.value = null;
+            prompt.value = "";
+            response.value = "";
+            chatMessages.value = [];
+          }
+        }
+      }
+      
+      // DB에서 저장된 요약 결과 로드
+      await loadSummariesFromDB();
+      
+      // 채팅 스크롤 처리
+      nextTick(() => {
+        scrollChatToBottom();
+      });
+    }
+  }
+});
+
+// summaryVideoStore.videos 변경 감지하여 자동 업데이트
+watch(() => summaryVideoStore.videos, async (newVideos, oldVideos) => {
+  const userId = localStorage.getItem("vss_user_id");
+  if (!userId) {
+    return;
+  }
+
+  // 새로운 동영상이 있고, 실제로 변경되었는지 확인
+  if (Array.isArray(newVideos) && newVideos.length > 0) {
+    // 현재 videoFiles와 비교하여 변경되었는지 확인
+    const storeVideoIds = new Set(newVideos.map(v => v.id || v.dbId));
+    const currentVideoIds = new Set(videoFiles.value.map(v => v.id));
+    
+    // 동영상 목록이 다르면 업데이트
+    const isDifferent = storeVideoIds.size !== currentVideoIds.size || 
+                        Array.from(storeVideoIds).some(id => !currentVideoIds.has(id));
+    
+    if (isDifferent) {
+      // summaryVideoStore에서 동영상 로드
+      await loadVideosFromStore();
+    }
+  } else if (newVideos.length === 0 && videoFiles.value.length > 0) {
+    // summaryVideoStore가 비어있는데 videoFiles에 동영상이 있으면 초기화
+    videoFiles.value.forEach(v => {
+      if (v.summaryObjectUrl) {
+        try {
+          URL.revokeObjectURL(v.summaryObjectUrl);
+        } catch (_) {}
+      }
+    });
+    videoFiles.value = [];
+    selectedIndexes.value = [];
+    isZoomed.value = false;
+    zoomedIndex.value = null;
+    streaming.value = false;
+  }
+}, { deep: true });
+
+// 컴포넌트가 활성화될 때마다 실행 (Search.vue에서 다른 동영상 선택 후 돌아올 때)
+onActivated(async () => {
+  const userId = localStorage.getItem("vss_user_id");
+  if (!userId) {
+    return;
+  }
+
+  // 진행 중인 작업의 결과 확인 및 UI 업데이트
+  await checkAndUpdateTaskResults();
+
+  // summaryVideoStore에 새로운 동영상이 있는지 확인
+  if (Array.isArray(summaryVideoStore.videos) && summaryVideoStore.videos.length > 0) {
+    // 현재 videoFiles와 비교하여 변경되었는지 확인
+    const storeVideoIds = new Set(summaryVideoStore.videos.map(v => v.id || v.dbId));
+    const currentVideoIds = new Set(videoFiles.value.map(v => v.id));
+    
+    // 동영상 목록이 다르면 업데이트
+    const isDifferent = storeVideoIds.size !== currentVideoIds.size || 
+                        Array.from(storeVideoIds).some(id => !currentVideoIds.has(id));
+    
+    if (isDifferent) {
+      // summaryVideoStore에서 동영상 로드
+      await loadVideosFromStore();
+    }
+  } else if (videoFiles.value.length > 0) {
+    // summaryVideoStore가 비어있는데 videoFiles에 동영상이 있으면 초기화
+    // (다른 페이지에서 동영상을 삭제한 경우)
+    videoFiles.value.forEach(v => {
+      if (v.summaryObjectUrl) {
+        try {
+          URL.revokeObjectURL(v.summaryObjectUrl);
+        } catch (_) {}
+      }
+    });
+    videoFiles.value = [];
+    selectedIndexes.value = [];
+    isZoomed.value = false;
+    zoomedIndex.value = null;
+    streaming.value = false;
+  }
+});
+
+/**
+ * 진행 중인 작업의 결과를 확인하고 UI에 업데이트
+ */
+async function checkAndUpdateTaskResults() {
+  const userId = localStorage.getItem("vss_user_id");
+  if (!userId) return;
+
+  // 전역 작업 관리자에서 진행 중인 작업 확인
+  for (const [taskId, taskInfo] of window.__vssActiveTasks.entries()) {
+    // 작업이 완료되었는지 확인
+    if (taskInfo.status === 'completed') {
+      // 완료된 작업의 결과를 UI에 반영
+      await applyTaskResults(taskId, taskInfo);
+      continue;
+    }
+
+    // localStorage에서 작업 상태 확인
+    const storageKey = `vss_active_task_${userId}_${taskId}`;
+    const savedTaskState = localStorage.getItem(storageKey);
+    if (savedTaskState) {
+      try {
+        const taskState = JSON.parse(savedTaskState);
+        // 작업이 완료되었는지 확인
+        if (taskState.completedVideos && taskState.completedVideos.length > 0) {
+          // 완료된 비디오의 결과를 UI에 반영
+          for (const completedVideo of taskState.completedVideos) {
+            const resultKey = `vss_task_result_${taskId}_${completedVideo.videoId}`;
+            const result = window.__vssTaskResults.get(resultKey);
+            if (result && !chatMessages.value.some(m => 
+              m.role === 'assistant' && m.content.includes(`'${completedVideo.videoName}'`) && m.content.includes('요약 완료')
+            )) {
+              // 결과를 UI에 추가
+              addChatMessage({
+                id: Date.now() + Math.random(),
+                role: 'assistant',
+                content: result.summaryHtml
+              });
+              
+              // 요약 결과를 동영상 객체에 저장
+              const video = videoFiles.value.find(v => v.id === completedVideo.videoId);
+              if (video) {
+                video.summary = completedVideo.summaryText;
+                summarizedVideoMap.value[video.id] = completedVideo.serverVideoId;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('작업 상태 파싱 실패:', e);
+      }
+    }
+  }
+
+  // 전역 작업 결과에서 새로운 결과 확인
+  for (const [resultKey, result] of window.__vssTaskResults.entries()) {
+    if (result.timestamp && Date.now() - result.timestamp < 60000) { // 1분 이내 결과만
+      // 이미 표시된 결과인지 확인
+      const alreadyShown = chatMessages.value.some(m => 
+        m.role === 'assistant' && m.content.includes(`'${result.videoName}'`) && m.content.includes('요약 완료')
+      );
+      
+      if (!alreadyShown) {
+        // 결과를 UI에 추가
+        addChatMessage({
+          id: Date.now() + Math.random(),
+          role: 'assistant',
+          content: result.summaryHtml
+        });
+        
+        // 요약 결과를 동영상 객체에 저장
+        const video = videoFiles.value.find(v => v.id === result.videoId);
+        if (video) {
+          video.summary = result.summaryText;
+          summarizedVideoMap.value[video.id] = result.serverVideoId;
         }
       }
     }
-    
-    // DB에서 저장된 요약 결과 로드
-    await loadSummariesFromDB();
-    
-    // 채팅 스크롤 처리
-    nextTick(() => {
-      scrollChatToBottom();
-    });
   }
+}
+
+/**
+ * 작업 완료 결과를 UI에 적용
+ */
+async function applyTaskResults(taskId, taskInfo) {
+  // 완료된 비디오의 결과를 UI에 반영
+  for (const completedVideo of taskInfo.completedVideos) {
+    const resultKey = `vss_task_result_${taskId}_${completedVideo.videoId}`;
+    const result = window.__vssTaskResults.get(resultKey);
+    if (result && !chatMessages.value.some(m => 
+      m.role === 'assistant' && m.content.includes(`'${completedVideo.videoName}'`) && m.content.includes('요약 완료')
+    )) {
+      addChatMessage({
+        id: Date.now() + Math.random(),
+        role: 'assistant',
+        content: result.summaryHtml
+      });
+      
+      // 요약 결과를 동영상 객체에 저장
+      const video = videoFiles.value.find(v => v.id === completedVideo.videoId);
+      if (video) {
+        video.summary = completedVideo.summaryText;
+        summarizedVideoMap.value[video.id] = completedVideo.serverVideoId;
+      }
+    }
+  }
+
+  // 전체 완료 메시지 추가
+  if (taskInfo.completedVideos.length > 0) {
+    const alreadyShown = chatMessages.value.some(m => 
+      m.role === 'system' && m.content.includes('모든 요약 처리 완료')
+    );
+    
+    if (!alreadyShown) {
+      addChatMessage({
+        id: Date.now() + Math.random(),
+        role: 'system',
+        content: `✅ 모든 요약 처리 완료 (${taskInfo.completedVideos.length}개 성공). 질의 시 선택된 영상의 서버 요약을 우선 사용합니다.`
+      });
+    }
+  }
+}
+
+// 작업 완료 이벤트 리스너 등록
+window.addEventListener('vss-task-completed', async (event) => {
+  const { taskId, taskInfo } = event.detail;
+  await applyTaskResults(taskId, taskInfo);
 });
 
 // DB에서 저장된 요약 결과를 로드하는 함수
 async function loadSummariesFromDB() {
   const userId = localStorage.getItem("vss_user_id");
-  if (!userId || videoFiles.value.length === 0) return;
-
+  if (!userId || videoFiles.value.length === 0) {
+    return;
+  }
+  
   try {
     // 각 동영상의 요약 결과를 조회
     for (const video of videoFiles.value) {
       const dbInternalId = video.dbId || video.id;
-      if (!dbInternalId) continue;
+      if (!dbInternalId) {
+        continue;
+      }
 
       try {
         // 먼저 내부 DB ID로 vss_videos 테이블에서 VIDEO_ID (VIA 서버의 video_id) 조회
@@ -1011,29 +1359,45 @@ async function loadSummariesFromDB() {
               // VIDEO_ID (VIA 서버의 video_id)로 요약 결과 조회
               const response = await fetch(`${API_BASE_URL}/summaries/${dbVideo.video_id}?user_id=${userId}`);
               if (response.ok) {
-                const data = await response.json();
-                if (data.success && data.summary) {
-                  // 요약 결과를 동영상 객체에 저장
-                  video.summary = data.summary.summary_text;
+                try {
+                  const data = await response.json();
                   
-                  // 요약된 비디오 ID 매핑 업데이트 (VIA 서버의 video_id 사용)
-                  summarizedVideoMap.value[video.id] = dbVideo.video_id;
-                  summarizedVideoId.value = dbVideo.video_id;
-                  
-                  // 채팅 메시지에 요약 결과 추가 (이미 표시되지 않은 경우)
-                  const existingSummary = chatMessages.value.find(
-                    m => m.role === 'assistant' && m.content.includes(`'${video.name}'`)
-                  );
-                  if (!existingSummary) {
-                    const markedsummary = marked.parse(data.summary.summary_text);
-                    const summaryHtml = `<div class='font-semibold'>✅ '${video.name}' 요약 (저장된 결과)</div><br>${markedsummary}`;
-                    addChatMessage({
-                      id: Date.now() + Math.random(),
-                      role: 'assistant',
-                      content: summaryHtml
-                    });
+                  // data가 null이거나 undefined인 경우 처리
+                  if (data && data.success && data.summary) {
+                    // 요약 결과를 동영상 객체에 저장
+                    video.summary = data.summary.summary_text;
+                    
+                    // 프롬프트가 있으면 prompt에 설정 (첫 번째 요약 결과의 프롬프트만 사용)
+                    if (data.summary.prompt && !prompt.value) {
+                      prompt.value = data.summary.prompt;
+                    }
+                    
+                    // 요약된 비디오 ID 매핑 업데이트 (VIA 서버의 video_id 사용)
+                    summarizedVideoMap.value[video.id] = dbVideo.video_id;
+                    summarizedVideoId.value = dbVideo.video_id;
+                    
+                    // 채팅 메시지에 요약 결과 추가 (이미 표시되지 않은 경우)
+                    const existingSummary = chatMessages.value.find(
+                      m => m.role === 'assistant' && 
+                           (m.content.includes(`'${video.name}'`) || m.content.includes(`'${video.title || ''}'`))
+                    );
+                    if (!existingSummary) {
+                      const markedsummary = marked.parse(data.summary.summary_text);
+                      const videoName = video.name || video.title || '동영상';
+                      const summaryHtml = `<div class='font-semibold'>✅ '${videoName}' 요약 (저장된 결과)</div><br>${markedsummary}`;
+                      addChatMessage({
+                        id: Date.now() + Math.random(),
+                        role: 'assistant',
+                        content: summaryHtml
+                      });
+                    }
                   }
+                } catch (jsonError) {
+                  // JSON 파싱 실패 또는 null 응답 처리
+                  console.warn(`동영상 ${dbInternalId}의 요약 결과 파싱 실패:`, jsonError);
                 }
+              } else {
+                console.warn(`[loadSummariesFromDB] 요약 결과 조회 실패: HTTP ${response.status}`);
               }
             }
           }
@@ -1112,7 +1476,6 @@ function saveStateToLocalStorage() {
     };
     const storageKey = getStorageKey();
     localStorage.setItem(storageKey, JSON.stringify(state));
-    console.log('상태가 localStorage에 저장되었습니다.');
   } catch (e) {
     console.warn('localStorage 저장 실패:', e);
   }
@@ -1123,7 +1486,6 @@ function restoreStateFromLocalStorage() {
   try {
     const currentUserId = localStorage.getItem("vss_user_id");
     if (!currentUserId) {
-      console.log('사용자 ID가 없어 상태를 복원할 수 없습니다.');
       return false;
     }
 
@@ -1135,7 +1497,6 @@ function restoreStateFromLocalStorage() {
     
     // 저장된 사용자 ID와 현재 사용자 ID 비교
     if (state.userId && state.userId !== currentUserId) {
-      console.log('다른 사용자의 상태입니다. 복원하지 않습니다.');
       // 다른 사용자의 상태는 삭제하지 않고 그대로 두고, 복원만 하지 않음
       return false;
     }
@@ -1173,7 +1534,6 @@ function restoreStateFromLocalStorage() {
     
     // 실행 중인 작업 복원
     if (Array.isArray(state.activeTasks) && state.activeTasks.length > 0) {
-      console.log('실행 중인 작업 복원:', state.activeTasks);
       // 복원된 작업을 activeTasks에 추가하고 계속 실행
       nextTick(async () => {
         for (const savedTask of state.activeTasks) {
@@ -1249,7 +1609,6 @@ function restoreStateFromLocalStorage() {
       });
     }
     
-    console.log('상태가 localStorage에서 복원되었습니다.');
     return true;
   } catch (e) {
     console.warn('localStorage 복원 실패:', e);
@@ -1278,11 +1637,12 @@ onUnmounted(() => {
   document.removeEventListener('click', handleGlobalClick);
   window.removeEventListener('profile-menu-opened', closeContextMenu);
   
-  // 실행 중인 타이머 정리 (페이지를 벗어나도 백그라운드에서 계속 실행되도록 유지)
-  // 타이머는 유지하되, 페이지 복귀 시 복원할 수 있도록 상태만 저장
-  
   // 페이지를 벗어나기 전에 상태 저장
   saveStateToLocalStorage();
+  
+  // 진행 중인 작업은 전역 관리자에 등록되어 있으므로 계속 실행됨
+  // 타이머는 유지하지 않음 (페이지 전환 시 UI 업데이트가 불가능하므로)
+  // 하지만 fetch 요청은 계속 진행되며, 완료 시 결과가 전역 저장소에 저장됨
   
   // Summarize에서 만든 전용 ObjectURL만 해제 (원본은 유지)
   videoFiles.value.forEach(v => {
@@ -1346,6 +1706,7 @@ async function onDrop(e) {
         url: data.file_url
       }, file);
       newVideo.name = file.name;
+      newVideo.fileSize = file.size;
 
       // 업로드 완료된 동영상을 즉시 목록에 추가
       videoFiles.value.push(newVideo);
@@ -1388,7 +1749,6 @@ async function onDrop(e) {
     } catch (error) {
       // 업로드 취소는 정상적인 동작이므로 에러로 처리하지 않음
       if (error.message === '업로드 취소됨') {
-        console.log('업로드 취소됨:', file.name);
         return; // 조용히 종료
       }
       console.error('동영상 업로드 실패:', error);
@@ -1515,12 +1875,12 @@ async function onUpload(e) {
 
   // DB에서 중복 파일명 체크
   if (await checkDuplicateFiles(files, userId)) {
-    if (fileInputRef.value) fileInputRef.value.value = '';
-    return;
+          if (fileInputRef.value) fileInputRef.value.value = '';
+          return;
   }
 
   // 업로드 진행률 초기화
-  uploadProgress.value = validFiles.map((file, index) => ({
+  uploadProgress.value = files.map((file, index) => ({
     id: Date.now() + index,
     fileName: file.name,
     progress: 0,
@@ -1533,7 +1893,7 @@ async function onUpload(e) {
   showUploadModal.value = true;
 
   // 서버에 동영상 업로드 (각 동영상이 완료되는 대로 즉시 표시)
-  validFiles.forEach(async (file, index) => {
+  files.forEach(async (file, index) => {
     const uploadId = uploadProgress.value[index].id;
     try {
       const data = await uploadVideoWithProgress(file, userId, uploadId);
@@ -1545,6 +1905,7 @@ async function onUpload(e) {
         url: data.file_url
       }, file);
       newVideo.name = file.name;
+      newVideo.fileSize = file.size;
 
       // 업로드 완료된 동영상을 즉시 목록에 추가
       videoFiles.value.unshift(newVideo);
@@ -1587,7 +1948,6 @@ async function onUpload(e) {
     } catch (error) {
       // 업로드 취소는 정상적인 동작이므로 에러로 처리하지 않음
       if (error.message === '업로드 취소됨') {
-        console.log('업로드 취소됨:', file.name);
         return; // 조용히 종료
       }
       console.error('동영상 업로드 실패:', error);
@@ -1627,7 +1987,6 @@ async function restoreAndContinueAsk(savedTask) {
   }
   
   // 질문 계속 진행
-  console.log('질문 작업 복원 및 계속 진행');
   await onAskConfirmed(query);
   
   // 작업 완료
@@ -1668,15 +2027,51 @@ async function restoreAndContinueInference(savedTask) {
   }
   
   // 중단된 지점부터 계속 실행
-  console.log(`작업 복원: ${currentIndex + 1}/${totalCount}부터 계속 진행`);
   await continueInferenceFromIndex(taskId, targetVideos, currentIndex, totalCount, savedTask.prompt);
 }
 
 /**
- * 특정 인덱스부터 요약 계속 진행
+ * 특정 인덱스부터 요약 계속 진행 (백그라운드에서 계속 실행)
  */
 async function continueInferenceFromIndex(taskId, targetVideos, startIndex, totalCount, taskPrompt) {
   const VSS_API_URL = `${API_BASE_URL}/vss-summarize`;
+  
+  // 전역 작업 관리자에 등록 (페이지 전환 후에도 계속 실행되도록)
+  const taskInfo = {
+    taskId,
+    type: 'inference',
+    startTime: Date.now(),
+    currentIndex: startIndex,
+    totalCount,
+    videoIds: targetVideos.map(v => v.id),
+    videoNames: targetVideos.map(v => v.name || v.title),
+    prompt: taskPrompt,
+    status: 'running',
+    completedVideos: [],
+    failedVideos: []
+  };
+  window.__vssActiveTasks.set(taskId, taskInfo);
+  
+  // 작업 상태를 localStorage에 저장 (주기적으로 업데이트)
+  const updateTaskState = () => {
+    const taskState = {
+      taskId,
+      type: 'inference',
+      startTime: taskInfo.startTime,
+      currentIndex: taskInfo.currentIndex,
+      totalCount,
+      videoIds: taskInfo.videoIds,
+      videoNames: taskInfo.videoNames,
+      prompt: taskPrompt,
+      completedVideos: taskInfo.completedVideos,
+      failedVideos: taskInfo.failedVideos
+    };
+    const userId = localStorage.getItem("vss_user_id");
+    if (userId) {
+      const storageKey = `vss_active_task_${userId}_${taskId}`;
+      localStorage.setItem(storageKey, JSON.stringify(taskState));
+    }
+  };
   
   // NaN 방지 헬퍼
   const safeNum = (val, fallback) => {
@@ -1687,10 +2082,14 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
   for (let idx = startIndex; idx < targetVideos.length; idx++) {
     const videoObj = targetVideos[idx];
     
-    // 작업 상태 업데이트
+    // 작업 상태 업데이트 (로컬 및 전역)
     const currentTask = activeTasks.value.find(t => t.taskId === taskId);
     if (currentTask) {
       currentTask.currentIndex = idx;
+    }
+    if (taskInfo) {
+      taskInfo.currentIndex = idx;
+      updateTaskState();
     }
     
     // File 복원 시도
@@ -1707,11 +2106,15 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
     }
 
     const loadingId = Date.now() + Math.random();
-    addChatMessage({
-      id: loadingId,
-      role: 'system',
-      content: `⏳ [${idx + 1}/${totalCount}] '${videoObj.name}' 요약 요청 중... (복원된 작업)`
-    });
+    
+    // 로딩 메시지 추가 (페이지가 활성화된 경우에만)
+    if (document.visibilityState === 'visible') {
+      addChatMessage({
+        id: loadingId,
+        role: 'system',
+        content: `⏳ [${idx + 1}/${totalCount}] '${videoObj.name}' 요약 요청 중...`
+      });
+    }
     
     // 로딩 ID 저장
     if (currentTask) {
@@ -1779,28 +2182,38 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
     formData.append('enable_audio', settingStore.enableAudio ? true : false);
     formData.append('video_id', viaVideoId); // VIA 서버의 video_id 전달
 
-    // 경과 시간 추적기 설정
+    // 경과 시간 추적기 설정 (페이지가 활성화된 경우에만 UI 업데이트)
     const intervalId = setInterval(() => {
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
-      const loadingIdx = chatMessages.value.findIndex(m => m.id === loadingId);
-      if (loadingIdx !== -1) {
-        chatMessages.value[loadingIdx].content = `⏳ [${idx + 1}/${totalCount}] '${videoObj.name}' 요약 요청 중... (경과 시간: ${elapsed}s)`;
+      if (document.visibilityState === 'visible') {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+        const loadingIdx = chatMessages.value.findIndex(m => m.id === loadingId);
+        if (loadingIdx !== -1) {
+          chatMessages.value[loadingIdx].content = `⏳ [${idx + 1}/${totalCount}] '${videoObj.name}' 요약 요청 중... (경과 시간: ${elapsed}s)`;
+        }
       }
-    }, 10);
+    }, 1000); // 1초마다 업데이트 (성능 최적화)
     
-    // 타이머 저장 (작업 복원 시 사용)
-    activeIntervals.value[loadingId] = intervalId;
-    
-    // 작업 상태에 타이머 정보 저장
-    if (currentTask) {
-      if (!currentTask.intervals) currentTask.intervals = [];
-      currentTask.intervals.push({ loadingId, intervalId, startTime });
+    // 타이머 저장 (페이지가 활성화된 경우에만)
+    if (document.visibilityState === 'visible') {
+      activeIntervals.value[loadingId] = intervalId;
+      
+      // 작업 상태에 타이머 정보 저장
+      if (currentTask) {
+        if (!currentTask.intervals) currentTask.intervals = [];
+        currentTask.intervals.push({ loadingId, intervalId, startTime });
+      }
     }
 
     try {
       const res = await fetch(VSS_API_URL, { method: 'POST', body: formData });
-      clearInterval(intervalId);
-      delete activeIntervals.value[loadingId];
+      
+      // 타이머 정리 (설정된 경우에만)
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      if (activeIntervals.value[loadingId]) {
+        delete activeIntervals.value[loadingId];
+      }
       
       // 작업 상태에서 타이머 제거
       if (currentTask && currentTask.intervals) {
@@ -1813,9 +2226,23 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
       if (!res.ok) {
         let errText = await res.text();
         const errHtml = `❌ [${idx + 1}/${totalCount}] '${videoObj.name}' 실패 (HTTP ${res.status})<br><code>${errText}</code><br><div class='text-xs text-gray-500'>시간: ${elapsed}s`;
-        const loadingIdx = chatMessages.value.findIndex(m => m.id === loadingId);
-        if (loadingIdx !== -1) chatMessages.value.splice(loadingIdx, 1);
-        addChatMessage({ id: Date.now() + Math.random(), role: 'system', content: errHtml });
+        
+        // 실패한 작업 정보 저장
+        if (taskInfo) {
+          taskInfo.failedVideos.push({
+            videoId: videoObj.id,
+            videoName: videoObj.name,
+            error: errText
+          });
+          updateTaskState();
+        }
+        
+        // UI 업데이트 (컴포넌트가 활성화된 경우에만)
+        if (document.visibilityState === 'visible') {
+          const loadingIdx = chatMessages.value.findIndex(m => m.id === loadingId);
+          if (loadingIdx !== -1) chatMessages.value.splice(loadingIdx, 1);
+          addChatMessage({ id: Date.now() + Math.random(), role: 'system', content: errHtml });
+        }
         console.error('Summarization error response:', errText);
         continue;
       }
@@ -1827,9 +2254,39 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
       const markedsummary = marked.parse(summaryText);
       const summaryHtml = `<div class='font-semibold'>✅ [${idx + 1}/${totalCount}] '${videoObj.name}' 요약 완료</div><br>${markedsummary}<br><div class='text-xs text-gray-500'>시간: ${elapsed}s | 서버 ID: ${serverVideoId}</div>`;
       response.value = summaryHtml;
-      const loadingIdx = chatMessages.value.findIndex(m => m.id === loadingId);
-      if (loadingIdx !== -1) chatMessages.value.splice(loadingIdx, 1);
-      addChatMessage({ id: Date.now() + Math.random(), role: 'assistant', content: summaryHtml });
+      
+      // 작업 완료 결과 저장 (페이지 전환 후에도 결과를 받을 수 있도록)
+      const resultKey = `vss_task_result_${taskId}_${videoObj.id}`;
+      window.__vssTaskResults.set(resultKey, {
+        taskId,
+        videoId: videoObj.id,
+        videoName: videoObj.name,
+        summaryText,
+        summaryHtml,
+        serverVideoId,
+        elapsed,
+        index: idx + 1,
+        totalCount,
+        timestamp: Date.now()
+      });
+      
+      // 전역 작업 정보 업데이트
+      if (taskInfo) {
+        taskInfo.completedVideos.push({
+          videoId: videoObj.id,
+          videoName: videoObj.name,
+          serverVideoId,
+          summaryText
+        });
+        updateTaskState();
+      }
+      
+      // UI 업데이트 (컴포넌트가 활성화된 경우에만)
+      if (document.visibilityState === 'visible') {
+        const loadingIdx = chatMessages.value.findIndex(m => m.id === loadingId);
+        if (loadingIdx !== -1) chatMessages.value.splice(loadingIdx, 1);
+        addChatMessage({ id: Date.now() + Math.random(), role: 'assistant', content: summaryHtml });
+      }
       
       // DB에 요약 결과 저장
       const userId = localStorage.getItem("vss_user_id");
@@ -1895,8 +2352,7 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
             });
             
             if (saveResponse.ok) {
-              const saveData = await saveResponse.json();
-              console.log(`요약 결과 저장 완료: 동영상 ID ${dbVideoId}`, saveData);
+              await saveResponse.json();
             } else {
               const errorData = await saveResponse.json().catch(() => ({ detail: '알 수 없는 오류' }));
               console.warn('요약 결과 저장 실패:', errorData);
@@ -1911,8 +2367,13 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
         console.warn('요약 결과 저장 실패: 사용자 ID가 없습니다.');
       }
     } catch (e) {
-      clearInterval(intervalId);
-      delete activeIntervals.value[loadingId];
+      // 타이머 정리 (설정된 경우에만)
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      if (activeIntervals.value[loadingId]) {
+        delete activeIntervals.value[loadingId];
+      }
       
       // 작업 상태에서 타이머 제거
       if (currentTask && currentTask.intervals) {
@@ -1923,9 +2384,23 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
       const endTime = Date.now();
       const elapsed = ((endTime - startTime) / 1000).toFixed(2);
       const errHtml = `❌ [${idx + 1}/${totalCount}] '${videoObj.name}' 네트워크 오류: ${(e && e.message) || 'unknown'}<br><div class='text-xs text-gray-500'>시간: ${elapsed}s</div>`;
-      const loadingIdx = chatMessages.value.findIndex(m => m.id === loadingId);
-      if (loadingIdx !== -1) chatMessages.value.splice(loadingIdx, 1);
-      addChatMessage({ id: Date.now() + Math.random(), role: 'system', content: errHtml });
+      
+      // 실패한 작업 정보 저장
+      if (taskInfo) {
+        taskInfo.failedVideos.push({
+          videoId: videoObj.id,
+          videoName: videoObj.name,
+          error: (e && e.message) || 'unknown'
+        });
+        updateTaskState();
+      }
+      
+      // UI 업데이트 (컴포넌트가 활성화된 경우에만)
+      if (document.visibilityState === 'visible') {
+        const loadingIdx = chatMessages.value.findIndex(m => m.id === loadingId);
+        if (loadingIdx !== -1) chatMessages.value.splice(loadingIdx, 1);
+        addChatMessage({ id: Date.now() + Math.random(), role: 'system', content: errHtml });
+      }
       console.error('Summarization request failed:', e);
     }
     
@@ -1936,18 +2411,40 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
     }
   }
   
-  // 작업 완료
+  // 작업 완료 처리
+  taskInfo.status = 'completed';
+  taskInfo.completedAt = Date.now();
+  updateTaskState();
+  
+  // 전역 작업 관리자에서 제거 (결과는 __vssTaskResults에 저장됨)
+  window.__vssActiveTasks.delete(taskId);
+  
+  // localStorage에서 작업 상태 제거
+  const userId = localStorage.getItem("vss_user_id");
+  if (userId) {
+    const storageKey = `vss_active_task_${userId}_${taskId}`;
+    localStorage.removeItem(storageKey);
+  }
+  
+  // 로컬 작업 목록에서 제거
   const taskIndex = activeTasks.value.findIndex(t => t.taskId === taskId);
   if (taskIndex !== -1) {
     activeTasks.value.splice(taskIndex, 1);
   }
   
-  // 전체 완료 메시지
-  addChatMessage({
-    id: Date.now() + Math.random(),
-    role: 'system',
-    content: `✅ 모든 요약 처리 완료 (${Object.keys(summarizedVideoMap.value).length}개 성공). 질의 시 선택된 영상의 서버 요약을 우선 사용합니다.`
-  });
+  // 전체 완료 메시지 (컴포넌트가 활성화된 경우에만)
+  if (document.visibilityState === 'visible') {
+    addChatMessage({
+      id: Date.now() + Math.random(),
+      role: 'system',
+      content: `✅ 모든 요약 처리 완료 (${taskInfo.completedVideos.length}개 성공). 질의 시 선택된 영상의 서버 요약을 우선 사용합니다.`
+    });
+  }
+  
+  // 작업 완료 이벤트 발생 (다른 컴포넌트에서도 감지 가능)
+  window.dispatchEvent(new CustomEvent('vss-task-completed', {
+    detail: { taskId, taskInfo }
+  }));
 }
 
 async function runInference() {
@@ -2208,7 +2705,6 @@ function clear() {
   // localStorage도 초기화 (사용자별 키 사용)
   const storageKey = getStorageKey();
   localStorage.removeItem(storageKey);
-  console.log('초기화 완료: localStorage도 삭제되었습니다.');
 }
 
 function copyMessage(m) {
@@ -2389,7 +2885,6 @@ function saveResult() {
     role: 'system',
     content: '💾 결과가 저장되었습니다. 다른 페이지로 이동해도 정보가 유지됩니다.'
   });
-  console.log('Save result:', response.value);
 }
 </script>
 

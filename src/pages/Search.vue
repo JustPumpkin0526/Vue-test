@@ -66,7 +66,7 @@
           @drop.prevent="onDropUpload">
           <div v-if="items.length === 0" class="flex items-center justify-center h-full">
             <div
-              class="w-[30%] h-[9%] inline-flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 text-gray-500 dark:text-gray-400 text-center text-[24px] border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm backdrop-blur-sm transition-all duration-300"
+              class="w-[30%] h-[9%] inline-flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-center text-[24px] border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm backdrop-blur-sm transition-all duration-300"
               :class="isDragOverUpload ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-500 text-blue-600 dark:text-blue-400' : ''">
               <p v-if="!isDragOverUpload" class="font-light">{{ t.pleaseUpload }}</p>
               <p v-else class="font-bold">{{ t.dropHere }}</p>
@@ -329,7 +329,13 @@
           </Transition>
 
           <!-- 사이드바 패널 - ChatGPT 스타일 -->
-          <Transition name="sidebar">
+          <Transition
+            enter-active-class="transition-transform duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
+            leave-active-class="transition-transform duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
+            enter-from-class="translate-x-full"
+            enter-to-class="translate-x-0"
+            leave-from-class="translate-x-0"
+            leave-to-class="translate-x-full">
             <div v-if="showSearchSidebar"
               class="fixed top-0 right-0 z-[151] bg-white dark:bg-gray-800 w-[70%] h-full shadow-2xl flex flex-col" @click.stop>
               <!-- 사이드바 헤더 -->
@@ -2118,26 +2124,3 @@ function uploadVideoWithProgress(file, userId, uploadId) {
 
 </script>
 
-<style scoped>
-/* 사이드바 애니메이션 */
-.sidebar-enter-active,
-.sidebar-leave-active {
-  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.sidebar-enter-from {
-  transform: translateX(100%);
-}
-
-.sidebar-enter-to {
-  transform: translateX(0);
-}
-
-.sidebar-leave-from {
-  transform: translateX(0);
-}
-
-.sidebar-leave-to {
-  transform: translateX(100%);
-}
-</style>

@@ -1,22 +1,22 @@
 <template>
-  <div class="w-full h-full bg-gradient-to-br from-slate-200 to-slate-300 via-slate-100 p-10">
+  <div class="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300 via-gray-100 dark:from-gray-950 dark:to-gray-900 dark:via-gray-950 p-10">
     <div class="grid lg:grid-cols-[1fr_400px] gap-6 h-full">
       <!-- 좌측: 리포트 뷰어 -->
       <section
-        class="rounded-2xl p-6 bg-gradient-to-br from-white via-gray-50 to-gray-100 border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col">
+        class="rounded-2xl p-6 bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-gray-950 dark:via-gray-950 dark:to-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col">
         <!-- 헤더 -->
-        <header class="flex items-center justify-between px-1 pb-4 mb-4 border-b border-slate-800/70">
+        <header class="flex items-center justify-between px-1 pb-4 mb-4 border-b border-slate-800/70 dark:border-gray-200/30">
           <div class="flex flex-col gap-1">
             <div
-              class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 w-fit">
+              class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-400/40 dark:border-emerald-400/60 w-fit">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span class="text-[11px] font-semibold tracking-wide text-emerald-600 uppercase">
+              <span class="text-[11px] font-semibold tracking-wide text-emerald-600 dark:text-emerald-400 uppercase">
                 {{ tReport.reportViewer }}
               </span>
             </div>
-            <p class="text-xs md:text-sm text-black mt-1">
+            <p class="text-xs md:text-sm text-black dark:text-gray-200 mt-1">
               {{ selectedReport?.title || tReport.selectReport }}
-              <span v-if="selectedReport?.createdAt" class="text-gray-500 ml-2">
+              <span v-if="selectedReport?.createdAt" class="text-gray-500 dark:text-gray-400 ml-2">
                 · {{ formatDate(selectedReport.createdAt) }}
               </span>
             </p>
@@ -26,7 +26,7 @@
               v-if="selectedReport"
               @click="prevPage"
               :disabled="currentPage <= 1"
-              class="w-9 h-9 flex items-center justify-center bg-slate-200/70 hover:bg-slate-400/80 border border-slate-500/60 text-slate-700 rounded-lg shadow transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+              class="w-9 h-9 flex items-center justify-center bg-slate-200/70 dark:bg-gray-700 hover:bg-slate-400/80 dark:hover:bg-gray-600 border border-slate-500/60 dark:border-gray-600 text-slate-700 dark:text-gray-200 rounded-lg shadow transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
               :title="tReport.prevPage">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -36,7 +36,7 @@
               v-if="selectedReport"
               @click="nextPage"
               :disabled="currentPage >= totalPages"
-              class="w-9 h-9 flex items-center justify-center bg-slate-200/70 hover:bg-slate-400/80 border border-slate-500/60 text-slate-700 rounded-lg shadow transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+              class="w-9 h-9 flex items-center justify-center bg-slate-200/70 dark:bg-gray-700 hover:bg-slate-400/80 dark:hover:bg-gray-600 border border-slate-500/60 dark:border-gray-600 text-slate-700 dark:text-gray-200 rounded-lg shadow transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
               :title="tReport.nextPage">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -45,7 +45,7 @@
             <button
               v-if="selectedReport"
               @click="exportFile"
-              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/90 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/30 transition-all duration-200 transform hover:scale-[1.03] active:scale-[0.97]">
+              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/90 dark:bg-emerald-600 hover:bg-emerald-400 dark:hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 dark:shadow-emerald-600/30 transition-all duration-200 transform hover:scale-[1.03] active:scale-[0.97]">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -58,25 +58,25 @@
         <!-- 리포트 내용 -->
         <div
           v-if="selectedReport"
-          class="flex-1 border border-gray-200 rounded-xl p-6 bg-white overflow-auto shadow-inner">
-          <div class="prose prose-sm max-w-none">
-            <div class="whitespace-pre-wrap text-sm leading-relaxed text-gray-800" v-html="formattedReport"></div>
+          class="flex-1 border border-gray-200 dark:border-gray-800 rounded-xl p-6 bg-white dark:bg-gray-900 overflow-auto shadow-inner">
+          <div class="prose prose-sm max-w-none dark:prose-invert">
+            <div class="whitespace-pre-wrap text-sm leading-relaxed text-gray-800 dark:text-gray-200" v-html="formattedReport"></div>
           </div>
         </div>
 
         <!-- 빈 상태 -->
-        <div v-else class="flex-1 flex items-center justify-center border border-gray-200 rounded-xl bg-gray-50">
+        <div v-else class="flex-1 flex items-center justify-center border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-900">
           <div class="text-center">
-            <svg class="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-16 h-16 mx-auto text-gray-400 dark:text-gray-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p class="text-gray-500 text-sm">{{ tReport.selectToView }}</p>
+            <p class="text-gray-500 dark:text-gray-400 text-sm">{{ tReport.selectToView }}</p>
           </div>
         </div>
 
         <!-- 페이지 정보 -->
-        <div v-if="selectedReport" class="mt-4 flex items-center justify-between text-xs text-gray-500">
+        <div v-if="selectedReport" class="mt-4 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
           <span>{{ tReport.page }} {{ currentPage }} / {{ totalPages }}</span>
           <span>{{ selectedReport.wordCount || 0 }} {{ tReport.words }}</span>
         </div>
@@ -84,18 +84,18 @@
 
       <!-- 우측: 리포트 리스트 -->
       <aside
-        class="rounded-2xl p-6 bg-gradient-to-br from-white via-gray-50 to-gray-100 border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col">
+        class="rounded-2xl p-6 bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-gray-950 dark:via-gray-950 dark:to-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col">
         <!-- 헤더 -->
-        <header class="flex items-center justify-between px-1 pb-4 mb-4 border-b border-slate-800/70">
+        <header class="flex items-center justify-between px-1 pb-4 mb-4 border-b border-slate-800/70 dark:border-gray-200/30">
           <div class="flex flex-col gap-1">
             <div
-              class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-400/40 w-fit">
+              class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-500/10 dark:bg-blue-500/20 border border-blue-400/40 dark:border-blue-400/60 w-fit">
               <span class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
-              <span class="text-[11px] font-semibold tracking-wide text-blue-600 uppercase">
+              <span class="text-[11px] font-semibold tracking-wide text-blue-600 dark:text-blue-400 uppercase">
                 {{ tReport.reportLibrary }}
               </span>
             </div>
-            <p class="text-xs text-black mt-1">{{ settingStore.language === 'ko' ? '총 ' : '' }}{{ totalReports }}{{ settingStore.language === 'ko' ? '개의 리포트' : ' ' + tReport.totalReports }}</p>
+            <p class="text-xs text-black dark:text-gray-200 mt-1">{{ tReport.total }} {{ totalReports }} {{ tReport.totalReports }}</p>
           </div>
         </header>
 
@@ -106,9 +106,9 @@
               v-model="searchQuery"
               type="text"
               :placeholder="tReport.searchPlaceholder"
-              class="w-full rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-300 px-4 py-2.5 pl-10 bg-white text-sm transition-all"
+              class="w-full rounded-xl border border-slate-300 dark:border-gray-600 focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-2 focus:ring-emerald-300 dark:focus:ring-emerald-500 px-4 py-2.5 pl-10 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-sm transition-all"
               @input="handleSearch" />
-            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none"
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" fill="none"
               stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -120,8 +120,8 @@
               :class="[
                 'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
                 sortBy === 'date'
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-emerald-500 dark:bg-emerald-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
               ]">
               {{ tReport.sortByDate }}
             </button>
@@ -130,8 +130,8 @@
               :class="[
                 'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
                 sortBy === 'title'
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-emerald-500 dark:bg-emerald-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
               ]">
               {{ tReport.sortByTitle }}
             </button>
@@ -141,11 +141,11 @@
         <!-- 리포트 리스트 -->
         <div class="flex-1 overflow-y-auto space-y-3">
           <div v-if="filteredList.length === 0" class="text-center py-12">
-            <svg class="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-12 h-12 mx-auto text-gray-400 dark:text-gray-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p class="text-gray-500 text-sm">{{ tReport.noReports }}</p>
+            <p class="text-gray-500 dark:text-gray-400 text-sm">{{ tReport.noReports }}</p>
           </div>
 
           <div
@@ -155,18 +155,18 @@
             :class="[
               'group p-4 border rounded-xl cursor-pointer transition-all duration-200',
               selectedReport?.id === r.id
-                ? 'bg-emerald-50 border-emerald-300 shadow-md'
-                : 'bg-white border-gray-200 hover:border-emerald-300 hover:shadow-md'
+                ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-600 shadow-md'
+                : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-emerald-300 dark:hover:border-emerald-600 hover:shadow-md'
             ]">
             <div class="flex items-start justify-between gap-3">
               <div class="flex-1 min-w-0">
-                <h4 class="font-semibold text-sm text-gray-900 mb-1 truncate group-hover:text-emerald-600 transition-colors">
+                <h4 class="font-semibold text-sm text-gray-900 dark:text-gray-100 mb-1 truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                   {{ r.title || tReport.noTitle }}
                 </h4>
-                <p v-if="r.description" class="text-xs text-gray-600 line-clamp-2 mb-2">
+                <p v-if="r.description" class="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 mb-2">
                   {{ r.description }}
                 </p>
-                <div class="flex items-center gap-3 text-xs text-gray-500">
+                <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                   <span v-if="r.createdAt" class="flex items-center gap-1">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -185,7 +185,7 @@
               </div>
               <button
                 @click.stop="open(r)"
-                class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-emerald-500/10 dark:bg-emerald-500/20 hover:bg-emerald-500/20 dark:hover:bg-emerald-500/30 text-emerald-600 dark:text-emerald-400 rounded-lg transition-all opacity-0 group-hover:opacity-100">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                 </svg>
@@ -195,7 +195,7 @@
         </div>
 
         <!-- 페이지네이션 -->
-        <div class="mt-4 pt-4 border-t border-gray-200">
+        <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
           <Pagination :page="page" :pages="pages" @update:page="(p) => { page = p; loadList(); }" />
         </div>
       </aside>
@@ -221,6 +221,7 @@ const reportTranslations = {
     nextPage: "다음 페이지",
     export: "내보내기",
     reportLibrary: "Report Library",
+    total: "총",
     totalReports: "개의 리포트",
     searchPlaceholder: "리포트 검색...",
     sortByDate: "최신순",
@@ -239,6 +240,7 @@ const reportTranslations = {
     nextPage: "Next Page",
     export: "Export",
     reportLibrary: "Report Library",
+    total: "Total",
     totalReports: "reports",
     searchPlaceholder: "Search reports...",
     sortByDate: "Latest",
@@ -391,7 +393,8 @@ function handleSearch() {
 function formatDate(dateString) {
   if (!dateString) return '';
   const date = new Date(dateString);
-  return date.toLocaleDateString('ko-KR', {
+  const locale = settingStore.language === 'ko' ? 'ko-KR' : 'en-US';
+  return date.toLocaleDateString(locale, {
     year: 'numeric',
     month: 'long',
     day: 'numeric'
@@ -403,87 +406,3 @@ watch(sortBy, () => {
   // computed property가 자동으로 업데이트됨
 });
 </script>
-
-<style scoped>
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.prose {
-  color: #374151;
-}
-
-.prose :deep(h1) {
-  font-size: 1.875rem;
-  font-weight: 700;
-  margin-top: 0;
-  margin-bottom: 1rem;
-  color: #111827;
-}
-
-.prose :deep(h2) {
-  font-size: 1.5rem;
-  font-weight: 600;
-  margin-top: 1.5rem;
-  margin-bottom: 0.75rem;
-  color: #1f2937;
-}
-
-.prose :deep(h3) {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin-top: 1.25rem;
-  margin-bottom: 0.5rem;
-  color: #374151;
-}
-
-.prose :deep(p) {
-  margin-bottom: 1rem;
-  line-height: 1.75;
-}
-
-.prose :deep(ul),
-.prose :deep(ol) {
-  margin-bottom: 1rem;
-  padding-left: 1.5rem;
-}
-
-.prose :deep(li) {
-  margin-bottom: 0.5rem;
-}
-
-.prose :deep(code) {
-  background-color: #f3f4f6;
-  padding: 0.125rem 0.375rem;
-  border-radius: 0.25rem;
-  font-size: 0.875em;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-}
-
-.prose :deep(pre) {
-  background-color: #1f2937;
-  color: #f9fafb;
-  padding: 1rem;
-  border-radius: 0.5rem;
-  overflow-x: auto;
-  margin-bottom: 1rem;
-}
-
-.prose :deep(pre code) {
-  background-color: transparent;
-  padding: 0;
-  color: inherit;
-}
-
-.prose :deep(blockquote) {
-  border-left: 4px solid #10b981;
-  padding-left: 1rem;
-  margin-left: 0;
-  margin-bottom: 1rem;
-  color: #6b7280;
-  font-style: italic;
-}
-</style>
