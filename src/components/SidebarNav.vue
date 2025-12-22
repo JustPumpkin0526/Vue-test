@@ -1,9 +1,9 @@
 <template>
   <aside :class="[collapsed ? 'w-[105px]' : 'w-64', ' h-[100vh] shrink-0 border-r bg-gray-100 dark:bg-gray-950 border-gray-200 dark:border-gray-800 p-6 flex flex-col justify-between relative transition-all duration-200']">
     <!-- 로고 (최상단) -->
-    <div class="flex items-center gap-3 cursor-pointer mb-6" @click="goToVideoList" :class="collapsed ? 'justify-center' : ''">
-      <img :src="logoUrl" alt="Intellivix Logo" class="h-8 w-auto object-contain" />
-      <h1 v-if="!collapsed" class="text-2xl font-bold text-vix-primary dark:text-white">Vix VSS</h1>
+    <div class="flex items-center gap-3 cursor-pointer mb-6 overflow-hidden" @click="goToVideoList" :class="collapsed ? 'justify-center' : ''">
+      <img :src="logoUrl" alt="Intellivix Logo" class="h-8 w-auto object-contain flex-shrink-0" />
+      <h1 v-if="!collapsed" class="text-2xl font-bold text-vix-primary dark:text-white whitespace-nowrap flex-shrink-0">Vix VSS</h1>
     </div>
 
     <nav class="flex flex-col flex-1">
@@ -11,46 +11,78 @@
         to="/search"
         class="flex items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white dark:hover:bg-gray-800 active:scale-[0.97]"
         :class="isActive('/search')">
-        <svg viewBox="0 0 24 24" class="w-6 h-6 transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3 icon-base text-gray-700 dark:text-white">
+        <svg viewBox="0 0 24 24" class="w-6 h-6 icon-base text-gray-700 dark:text-white">
           <circle cx="11" cy="11" r="7" stroke="currentColor" fill="none" />
           <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" />
         </svg>
-        <span v-if="!collapsed" class="transition-opacity duration-200 text-lg text-gray-700 dark:text-white">{{ tSidebar.search }}</span>
+        <span v-if="!collapsed" class="transition-opacity duration-200 text-lg text-gray-700 dark:text-white overflow-hidden whitespace-nowrap">{{ tSidebar.search }}</span>
       </RouterLink>
       <RouterLink
         to="/summarize"
         class="flex items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white dark:hover:bg-gray-800 active:scale-[0.97]"
         :class="isActive('/summarize')">
-        <svg viewBox="0 0 24 24" class="w-6 h-6 transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3 icon-base text-gray-700 dark:text-white">
+        <svg viewBox="0 0 24 24" class="w-6 h-6 icon-base text-gray-700 dark:text-white">
           <rect x="3" y="4" width="18" height="16" rx="2" ry="2" stroke="currentColor" fill="none" />
           <line x1="7" y1="8" x2="17" y2="8" stroke="currentColor" />
           <line x1="7" y1="12" x2="13" y2="12" stroke="currentColor" />
           <line x1="7" y1="16" x2="11" y2="16" stroke="currentColor" />
         </svg>
-        <span v-if="!collapsed" class="transition-opacity duration-200 text-lg text-gray-700 dark:text-white">{{ tSidebar.summarize }}</span>
+        <span v-if="!collapsed" class="transition-opacity duration-200 text-lg text-gray-700 dark:text-white overflow-hidden whitespace-nowrap">{{ tSidebar.summarize }}</span>
       </RouterLink>
       <RouterLink
         to="/report"
         class="flex items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white dark:hover:bg-gray-800 active:scale-[0.97]"
         :class="isActive('/report')">
-        <svg viewBox="0 0 24 24" class="w-6 h-6 transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3 icon-base text-gray-700 dark:text-white">
+        <svg viewBox="0 0 24 24" class="w-6 h-6 icon-base text-gray-700 dark:text-white">
           <path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" stroke="currentColor" fill="none" />
           <polyline points="14 3 14 8 19 8" stroke="currentColor" fill="none" />
           <line x1="8" y1="13" x2="16" y2="13" stroke="currentColor" />
           <line x1="8" y1="17" x2="12" y2="17" stroke="currentColor" />
         </svg>
-        <span v-if="!collapsed" class="transition-opacity duration-200 text-lg text-gray-700 dark:text-white">{{ tSidebar.report }}</span>
+        <span v-if="!collapsed" class="transition-opacity duration-200 text-lg text-gray-700 dark:text-white overflow-hidden whitespace-nowrap">{{ tSidebar.report }}</span>
       </RouterLink>
 
       <div class="absolute left-6 right-6 bottom-[1vh] flex flex-col items-start space-y-3">
         <!-- Collapse button positioned with the bottom group -->
         <button
-          :class="['w-full text-center bg-white dark:bg-gray-800', 'items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow active:scale-[0.97]']"
+          :class="[
+            'w-full flex items-center justify-center',
+            collapsed ? 'px-3 py-3' : 'px-4 py-3',
+            'bg-white dark:bg-gray-800',
+            'rounded-lg border border-gray-200 dark:border-gray-700',
+            'hover:bg-gray-50 dark:hover:bg-gray-700',
+            'hover:border-gray-300 dark:hover:border-gray-600',
+            'active:scale-[0.97]',
+            'transition-all duration-200',
+            'group shadow-sm hover:shadow-md'
+          ]"
           @click="toggleCollapse"
           aria-label="Toggle sidebar"
           :aria-expanded="(!collapsed).toString()"
+          :title="collapsed ? tSidebar.expandSidebar : tSidebar.collapseSidebar"
         >
-          <span class="transition-opacity duration-200 select-none text-lg text-gray-700 dark:text-white">{{ collapsed ? '>>' : '<<' }}</span>
+          <svg 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            stroke-width="2" 
+            stroke-linecap="round" 
+            stroke-linejoin="round"
+            :class="[
+              'w-5 h-5 text-gray-600 dark:text-gray-300',
+              'group-hover:text-vix-primary dark:group-hover:text-vix-primary',
+              'transition-all duration-200',
+              collapsed ? 'rotate-180' : 'rotate-0'
+            ]"
+          >
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          <span 
+            v-if="!collapsed" 
+            class="ml-2 text-sm font-medium text-gray-600 dark:text-gray-300 group-hover:text-vix-primary dark:group-hover:text-vix-primary transition-colors duration-200 overflow-hidden whitespace-nowrap"
+          >
+            {{ tSidebar.collapse }}
+          </span>
         </button>
 
         <!-- 사용자 프로필 (최하단) -->
@@ -76,16 +108,16 @@
                   />
                   <span v-else>{{ getUserInitial(userId) }}</span>
                 </div>
-                <div class="flex-1 min-w-0">
-                  <div class="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{{ userId }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ tSidebar.user }}</div>
+                <div class="flex-1 min-w-0 overflow-hidden">
+                  <div class="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate overflow-hidden">{{ userId }}</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400 overflow-hidden whitespace-nowrap">{{ tSidebar.user }}</div>
                 </div>
               </div>
             </div>
             <!-- 프로필 (접힌 상태) -->
-            <div v-else class="flex justify-center">
+            <div v-else class="flex justify-center px-2 py-2">
               <div 
-                class="profile-avatar w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md cursor-pointer hover:scale-110 transition-transform overflow-hidden"
+                class="profile-avatar w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md cursor-pointer hover:scale-110 transition-transform overflow-hidden"
                 :class="profileImageUrl ? 'bg-white' : 'bg-gradient-to-br from-vix-primary to-blue-600'"
                 @click="toggleProfileMenu"
                 ref="profileBlockRef"
@@ -109,41 +141,41 @@
                 @click.stop
               >
               <button 
-                class="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors"
+                class="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors overflow-hidden"
                 @click="openProfileSettings"
               >
-                <svg viewBox="0 0 24 24" class="w-4 h-4 text-gray-700 dark:text-white">
+                <svg viewBox="0 0 24 24" class="w-4 h-4 text-gray-700 dark:text-white flex-shrink-0">
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
                   <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
                 </svg>
-                {{ tSidebar.profileSettings }}
+                <span class="overflow-hidden whitespace-nowrap">{{ tSidebar.profileSettings }}</span>
               </button>
               <div class="border-t border-gray-200 dark:border-gray-700 my-1"></div>
               <button 
-                class="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors"
+                class="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors overflow-hidden"
                 @click="handleSetting"
               >
-                <img src="@/assets/icons/setting.png" alt="Setting" class="w-4 h-4 object-contain dark:brightness-0 dark:invert" />
-                {{ tSidebar.setting }}
+                <img src="@/assets/icons/setting.png" alt="Setting" class="w-4 h-4 object-contain dark:brightness-0 dark:invert flex-shrink-0" />
+                <span class="overflow-hidden whitespace-nowrap">{{ tSidebar.setting }}</span>
               </button>
               <button 
-                class="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors"
+                class="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors overflow-hidden"
                 @click="handleHelp"
               >
-                <img src="@/assets/icons/help.png" alt="Help" class="w-4 h-4 object-contain dark:brightness-0 dark:invert" />
-                {{ tSidebar.help }}
+                <img src="@/assets/icons/help.png" alt="Help" class="w-4 h-4 object-contain dark:brightness-0 dark:invert flex-shrink-0" />
+                <span class="overflow-hidden whitespace-nowrap">{{ tSidebar.help }}</span>
               </button>
               <div class="border-t border-gray-200 dark:border-gray-700 my-1"></div>
               <button 
-                class="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2 transition-colors"
+                class="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2 transition-colors overflow-hidden"
                 @click="handleLogout"
               >
-                <svg viewBox="0 0 24 24" class="w-4 h-4 text-red-600 dark:text-red-400">
+                <svg viewBox="0 0 24 24" class="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
                   <polyline points="16 17 21 12 16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
                   <line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-                {{ tSidebar.logout }}
+                <span class="overflow-hidden whitespace-nowrap">{{ tSidebar.logout }}</span>
               </button>
               </div>
             </Teleport>
@@ -156,7 +188,7 @@
             >
                 <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
                   <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-                    <h2 class="text-xl font-bold text-gray-800 dark:text-gray-200">{{ tSidebar.profileSettings }}</h2>
+                    <h2 class="text-xl font-bold text-gray-800 dark:text-gray-200 overflow-hidden whitespace-nowrap">{{ tSidebar.profileSettings }}</h2>
                   <button 
                     @click="closeProfileSettings"
                     class="text-gray-400 hover:text-gray-600 transition-colors"
@@ -201,16 +233,16 @@
                       class="hidden"
                       @change="handleImageUpload"
                     />
-                      <div class="text-center">
-                        <div class="text-lg font-semibold text-gray-800 dark:text-gray-200">{{ userId }}</div>
-                        <div class="text-sm text-gray-500 dark:text-gray-400">{{ tSidebar.user }}</div>
+                      <div class="text-center overflow-hidden">
+                        <div class="text-lg font-semibold text-gray-800 dark:text-gray-200 overflow-hidden whitespace-nowrap">{{ userId }}</div>
+                        <div class="text-sm text-gray-500 dark:text-gray-400 overflow-hidden whitespace-nowrap">{{ tSidebar.user }}</div>
                       </div>
                     </div>
                     
                     <!-- 프로필 정보 -->
                     <div class="space-y-4">
                       <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{{ tSidebar.userId }}</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 overflow-hidden whitespace-nowrap">{{ tSidebar.userId }}</label>
                         <input 
                           type="text" 
                           :value="userId" 
@@ -219,7 +251,7 @@
                         />
                       </div>
                       <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{{ tSidebar.email }}</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 overflow-hidden whitespace-nowrap">{{ tSidebar.email }}</label>
                         <input 
                           type="email" 
                           v-model="userEmail"
@@ -227,20 +259,20 @@
                           :placeholder="tSidebar.emailPlaceholder"
                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-vix-primary focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-gray-700 disabled:text-gray-500 dark:disabled:text-gray-400 disabled:cursor-not-allowed"
                         />
-                        <p v-if="isLoadingUserInfo" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ tSidebar.loadingEmail }}</p>
+                        <p v-if="isLoadingUserInfo" class="mt-1 text-xs text-gray-500 dark:text-gray-400 overflow-hidden whitespace-nowrap">{{ tSidebar.loadingEmail }}</p>
                       </div>
                     </div>
                   </div>
                   <div class="flex justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
                   <button 
                     @click="closeProfileSettings"
-                    class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
+                    class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors overflow-hidden whitespace-nowrap"
                   >
                     {{ tSidebar.cancel }}
                   </button>
                   <button 
                     @click="saveProfileSettings"
-                    class="px-4 py-2 text-sm font-medium text-white bg-vix-primary hover:bg-blue-700 rounded-md transition-colors"
+                    class="px-4 py-2 text-sm font-medium text-white bg-vix-primary hover:bg-blue-700 rounded-md transition-colors overflow-hidden whitespace-nowrap"
                   >
                     {{ tSidebar.save }}
                   </button>
@@ -256,7 +288,7 @@
             >
                 <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
                   <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-                    <h2 class="text-xl font-bold text-gray-800 dark:text-gray-200">{{ tSidebar.setting }}</h2>
+                    <h2 class="text-xl font-bold text-gray-800 dark:text-gray-200 overflow-hidden whitespace-nowrap">{{ tSidebar.setting }}</h2>
                   <button 
                     @click="closeSettingModal"
                     class="text-gray-400 hover:text-gray-600 transition-colors"
@@ -273,24 +305,24 @@
                   <button
                     @click="settingCategory = settingStore.language === 'ko' ? '일반' : 'General'"
                     :class="[
-                      'px-4 py-3 text-sm font-medium transition-colors border-b-2',
+                      'px-4 py-3 text-sm font-medium transition-colors border-b-2 overflow-hidden',
                       settingCategory === (settingStore.language === 'ko' ? '일반' : 'General')
                         ? 'text-vix-primary border-vix-primary'
                         : 'text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-gray-300'
                     ]"
                   >
-                    {{ tSidebar.general }}
+                    <span class="overflow-hidden whitespace-nowrap">{{ tSidebar.general }}</span>
                   </button>
                   <button
                     @click="settingCategory = settingStore.language === 'ko' ? '고급' : 'Advanced'"
                     :class="[
-                      'px-4 py-3 text-sm font-medium transition-colors border-b-2',
+                      'px-4 py-3 text-sm font-medium transition-colors border-b-2 overflow-hidden',
                       settingCategory === (settingStore.language === 'ko' ? '고급' : 'Advanced')
                         ? 'text-vix-primary border-vix-primary'
                         : 'text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-gray-300'
                     ]"
                   >
-                    {{ tSidebar.advanced }}
+                    <span class="overflow-hidden whitespace-nowrap">{{ tSidebar.advanced }}</span>
                   </button>
                 </div>
                 
@@ -299,10 +331,10 @@
                   <!-- 일반 설정 -->
                   <div v-if="settingCategory === (settingStore.language === 'ko' ? '일반' : 'General')" class="space-y-6">
                     <div>
-                      <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">{{ tSidebar.generalSettings }}</h3>
+                      <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4 overflow-hidden whitespace-nowrap">{{ tSidebar.generalSettings }}</h3>
                       <div class="space-y-4">
                         <div>
-                          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{{ tSidebar.language }}</label>
+                          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 overflow-hidden whitespace-nowrap">{{ tSidebar.language }}</label>
                           <select 
                             v-model="settingStore.language"
                             class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-vix-primary focus:border-transparent">
@@ -311,7 +343,7 @@
                           </select>
                         </div>
                         <div>
-                          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{{ tSidebar.theme }}</label>
+                          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 overflow-hidden whitespace-nowrap">{{ tSidebar.theme }}</label>
                           <select 
                             v-model="settingStore.theme"
                             class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-vix-primary focus:border-transparent"
@@ -323,8 +355,8 @@
                         </div>
                         <div class="flex items-center justify-between">
                           <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{{ tSidebar.receiveNotifications }}</label>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">{{ tSidebar.receiveNotificationsDesc }}</p>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 overflow-hidden whitespace-nowrap">{{ tSidebar.receiveNotifications }}</label>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 overflow-hidden">{{ tSidebar.receiveNotificationsDesc }}</p>
                           </div>
                           <label class="relative inline-flex items-center cursor-pointer">
                             <input type="checkbox" class="sr-only peer">
@@ -333,8 +365,8 @@
                         </div>
                         <div class="flex items-center justify-between">
                           <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{{ tSidebar.emailNotifications }}</label>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">{{ tSidebar.emailNotificationsDesc }}</p>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 overflow-hidden whitespace-nowrap">{{ tSidebar.emailNotifications }}</label>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 overflow-hidden">{{ tSidebar.emailNotificationsDesc }}</p>
                           </div>
                           <label class="relative inline-flex items-center cursor-pointer">
                             <input type="checkbox" class="sr-only peer">
@@ -348,10 +380,10 @@
                   <!-- 고급 설정 -->
                   <div v-if="settingCategory === (settingStore.language === 'ko' ? '고급' : 'Advanced')" class="space-y-6">
                     <div>
-                      <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">{{ tSidebar.advancedSettings }}</h3>
+                      <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4 overflow-hidden whitespace-nowrap">{{ tSidebar.advancedSettings }}</h3>
                       <div class="space-y-4">
                         <div>
-                          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{{ tSidebar.apiTimeout }}</label>
+                          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 overflow-hidden whitespace-nowrap">{{ tSidebar.apiTimeout }}</label>
                           <input 
                             type="number" 
                             value="60"
@@ -361,7 +393,7 @@
                           />
                         </div>
                         <div>
-                          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{{ tSidebar.maxConcurrentUploads }}</label>
+                          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 overflow-hidden whitespace-nowrap">{{ tSidebar.maxConcurrentUploads }}</label>
                           <input 
                             type="number" 
                             value="5"
@@ -371,7 +403,7 @@
                           />
                         </div>
                         <div>
-                          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{{ tSidebar.cacheSize }}</label>
+                          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 overflow-hidden whitespace-nowrap">{{ tSidebar.cacheSize }}</label>
                           <input 
                             type="number" 
                             value="100"
@@ -382,8 +414,8 @@
                         </div>
                         <div class="flex items-center justify-between">
                           <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{{ tSidebar.debugMode }}</label>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">{{ tSidebar.debugModeDesc }}</p>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 overflow-hidden whitespace-nowrap">{{ tSidebar.debugMode }}</label>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 overflow-hidden">{{ tSidebar.debugModeDesc }}</p>
                           </div>
                           <label class="relative inline-flex items-center cursor-pointer">
                             <input type="checkbox" class="sr-only peer">
@@ -392,8 +424,8 @@
                         </div>
                         <div class="flex items-center justify-between">
                           <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{{ tSidebar.autoSave }}</label>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">{{ tSidebar.autoSaveDesc }}</p>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 overflow-hidden whitespace-nowrap">{{ tSidebar.autoSave }}</label>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 overflow-hidden">{{ tSidebar.autoSaveDesc }}</p>
                           </div>
                           <label class="relative inline-flex items-center cursor-pointer">
                             <input type="checkbox" class="sr-only peer" checked>
@@ -410,22 +442,22 @@
           <template v-else>
             <!-- 로그인 안 됨 (펼쳐진 상태) -->
             <div v-if="!collapsed" class="flex flex-col gap-2">
-              <router-link class="text-sm text-gray-600 hover:text-vix-primary px-4 py-2 rounded-md hover:bg-white transition-colors flex items-center gap-2" to="/login">
-                <svg viewBox="0 0 24 24" class="w-4 h-4">
+              <router-link class="text-sm text-gray-600 hover:text-vix-primary px-4 py-2 rounded-md hover:bg-white transition-colors flex items-center gap-2 overflow-hidden" to="/login">
+                <svg viewBox="0 0 24 24" class="w-4 h-4 flex-shrink-0">
                   <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
                   <polyline points="10 17 15 12 10 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
                   <line x1="15" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-                {{ tSidebar.signIn }}
+                <span class="overflow-hidden whitespace-nowrap">{{ tSidebar.signIn }}</span>
               </router-link>
-              <router-link class="text-sm text-gray-600 hover:text-vix-primary px-4 py-2 rounded-md hover:bg-white transition-colors flex items-center gap-2" to="/register">
-                <svg viewBox="0 0 24 24" class="w-4 h-4">
+              <router-link class="text-sm text-gray-600 hover:text-vix-primary px-4 py-2 rounded-md hover:bg-white transition-colors flex items-center gap-2 overflow-hidden" to="/register">
+                <svg viewBox="0 0 24 24" class="w-4 h-4 flex-shrink-0">
                   <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
                   <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
                   <line x1="19" y1="8" x2="19" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                   <line x1="22" y1="11" x2="16" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-                {{ tSidebar.signUp }}
+                <span class="overflow-hidden whitespace-nowrap">{{ tSidebar.signUp }}</span>
               </router-link>
             </div>
             <!-- 로그인 안 됨 (접힌 상태) -->
@@ -510,7 +542,10 @@ const sidebarTranslations = {
     cancel: "취소",
     save: "저장",
     changeProfileImage: "프로필 이미지 변경",
-    uploading: "업로드 중..."
+    uploading: "업로드 중...",
+    collapse: "접기",
+    expandSidebar: "사이드바 펼치기",
+    collapseSidebar: "사이드바 접기"
   },
   en: {
     search: "Search",
@@ -550,7 +585,10 @@ const sidebarTranslations = {
     cancel: "Cancel",
     save: "Save",
     changeProfileImage: "Change Profile Image",
-    uploading: "Uploading..."
+    uploading: "Uploading...",
+    collapse: "Collapse",
+    expandSidebar: "Expand sidebar",
+    collapseSidebar: "Collapse sidebar"
   }
 };
 
