@@ -3,13 +3,13 @@
  **************************************************/
 import { createRouter, createWebHistory } from "vue-router";
 
-import Summarize from "@/pages/Summarize.vue";
-import search from "@/pages/Search.vue"; // 파일명 유지, 변수명/라우트명 카멜/파스칼 통일
-import Report from "@/pages/Report.vue";
-import Setting from "@/pages/Setting.vue";
-import Login from "@/pages/Login.vue";
-import Register from "@/pages/Register.vue";
-import ResetPassword from "@/pages/ResetPassword.vue";
+import Summarize from "@/components/Summarize.vue";
+import search from "@/components/Search.vue"; // 파일명 유지, 변수명/라우트명 카멜/파스칼 통일
+import Report from "@/components/Report.vue";
+import Setting from "@/components/Setting.vue";
+import Login from "@/components/Login.vue";
+import Register from "@/components/Register.vue";
+import ResetPassword from "@/components/ResetPassword.vue";
 
 const routes = [
   { path: "/", redirect: "/login" },

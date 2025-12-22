@@ -505,7 +505,7 @@ import { ref, onMounted, onUnmounted, onActivated, computed, nextTick, watch } f
 import { useSummaryVideoStore } from '@/stores/summaryVideoStore';
 import { useSettingStore } from '@/stores/settingStore';
 import { marked } from 'marked';
-import Setting from '@/pages/Setting.vue';
+import Setting from '@/components/Setting.vue';
 import settingIcon from '@/assets/icons/setting.png';
 
 // ==================== 상수 정의 ====================
