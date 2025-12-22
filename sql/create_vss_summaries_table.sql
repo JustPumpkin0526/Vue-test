@@ -2,6 +2,7 @@ CREATE TABLE `vss_summaries` (
 	`ID` INT(11) NOT NULL AUTO_INCREMENT,
 	`VIDEO_ID` VARCHAR(255) NOT NULL COLLATE 'utf8mb4_unicode_ci',
 	`USER_ID` VARCHAR(255) NOT NULL COLLATE 'utf8mb4_unicode_ci',
+	`PROMPT` LONGTEXT NOT NULL COLLATE 'utf8mb4_unicode_ci',
 	`SUMMARY_TEXT` LONGTEXT NOT NULL COLLATE 'utf8mb4_unicode_ci',
 	`CREATED_AT` TIMESTAMP NOT NULL DEFAULT current_timestamp(),
 	`UPDATED_AT` TIMESTAMP NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
@@ -14,5 +15,5 @@ CREATE TABLE `vss_summaries` (
 )
 COLLATE='utf8mb4_unicode_ci'
 ENGINE=InnoDB
-AUTO_INCREMENT=150
+AUTO_INCREMENT=159
 ;

@@ -4,6 +4,7 @@ CREATE TABLE `vss_user` (
 	`EMAIL` VARCHAR(255) NOT NULL COMMENT '사용자 이메일 주소' COLLATE 'utf8mb4_unicode_ci',
 	`CREATED_AT` TIMESTAMP NOT NULL DEFAULT current_timestamp() COMMENT '계정 생성일시',
 	`UPDATED_AT` TIMESTAMP NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp() COMMENT '계정 정보 수정일시',
+	`PROFILE_IMAGE_URL` VARCHAR(500) NULL DEFAULT NULL COLLATE 'utf8mb4_unicode_ci',
 	PRIMARY KEY (`ID`) USING BTREE,
 	UNIQUE INDEX `EMAIL` (`EMAIL`) USING BTREE,
 	INDEX `idx_email` (`EMAIL`) USING BTREE,
