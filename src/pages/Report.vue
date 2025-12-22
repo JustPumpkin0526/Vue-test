@@ -196,7 +196,21 @@
 
         <!-- 페이지네이션 -->
         <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <Pagination :page="page" :pages="pages" @update:page="(p) => { page = p; loadList(); }" />
+          <div class="flex items-center justify-center gap-2">
+            <button 
+              class="px-3 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all" 
+              :disabled="page <= 1" 
+              @click="handlePageChange(page - 1)">
+              〈
+            </button>
+            <span class="text-sm text-gray-600 dark:text-gray-400">Page {{ page }} / {{ pages }}</span>
+            <button 
+              class="px-3 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all" 
+              :disabled="page >= pages" 
+              @click="handlePageChange(page + 1)">
+              〉
+            </button>
+          </div>
         </div>
       </aside>
     </div>
@@ -205,7 +219,6 @@
 
 <script setup>
 import { ref, computed, watch } from "vue";
-import Pagination from "@/components/Pagination.vue";
 import api from "@/services/api";
 import { marked } from 'marked';
 import { useSettingStore } from '@/stores/settingStore';
@@ -388,6 +401,13 @@ function exportFile() {
 
 function handleSearch() {
   // 검색은 computed property에서 자동 처리됨
+}
+
+function handlePageChange(newPage) {
+  if (newPage >= 1 && newPage <= pages.value) {
+    page.value = newPage;
+    loadList();
+  }
 }
 
 function formatDate(dateString) {
