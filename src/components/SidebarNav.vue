@@ -65,7 +65,8 @@
               >
                 <!-- 프로필 이미지 (이니셜 아바타) -->
                 <div 
-                  class="profile-avatar flex-shrink-0 w-12 h-12 rounded-full bg-gradient-to-br from-vix-primary to-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-md hover:scale-110 transition-transform overflow-hidden"
+                  class="profile-avatar flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md hover:scale-110 transition-transform overflow-hidden"
+                  :class="profileImageUrl ? 'bg-white' : 'bg-gradient-to-br from-vix-primary to-blue-600'"
                 >
                   <img 
                     v-if="profileImageUrl" 
@@ -84,7 +85,8 @@
             <!-- 프로필 (접힌 상태) -->
             <div v-else class="flex justify-center">
               <div 
-                class="profile-avatar w-10 h-10 rounded-full bg-gradient-to-br from-vix-primary to-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-md cursor-pointer hover:scale-110 transition-transform overflow-hidden"
+                class="profile-avatar w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md cursor-pointer hover:scale-110 transition-transform overflow-hidden"
+                :class="profileImageUrl ? 'bg-white' : 'bg-gradient-to-br from-vix-primary to-blue-600'"
                 @click="toggleProfileMenu"
                 ref="profileBlockRef"
               >
@@ -169,7 +171,8 @@
                   <div class="flex flex-col items-center gap-4 mb-6">
                     <!-- 프로필 이미지 -->
                     <div 
-                      class="relative w-24 h-24 rounded-full bg-gradient-to-br from-vix-primary to-blue-600 flex items-center justify-center text-white font-bold text-4xl shadow-lg cursor-pointer hover:opacity-80 transition-opacity overflow-hidden"
+                      class="relative w-24 h-24 rounded-full flex items-center justify-center text-white font-bold text-4xl shadow-lg cursor-pointer hover:opacity-80 transition-opacity overflow-hidden"
+                      :class="profileImageUrl ? 'bg-white' : 'bg-gradient-to-br from-vix-primary to-blue-600'"
                       @click="triggerImageUpload"
                       :title="tSidebar.changeProfileImage"
                     >
@@ -711,10 +714,10 @@ async function saveProfileSettings() {
     if (response.ok) {
       const data = await response.json();
       if (data.success) {
-        alert('이메일이 성공적으로 업데이트되었습니다.');
+        alert('프로필 정보가 성공적으로 수정되었습니다!');
         closeProfileSettings();
       } else {
-        alert('이메일 업데이트에 실패했습니다.');
+        alert('프로필 수정에 실패했습니다.');
       }
     } else {
       const errorData = await response.json().catch(() => ({ detail: '이메일 업데이트에 실패했습니다.' }));

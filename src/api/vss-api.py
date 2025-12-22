@@ -142,7 +142,7 @@ DEFAULT_QUERY_SEED = 42
 DEFAULT_QUERY_MAX_TOKENS = 1024  # VIA 서버는 최대 1024까지만 허용
 DEFAULT_QUERY_TOP_P = 1.0
 DEFAULT_QUERY_TOP_K = 80
-DEFAULT_QUERY_TIMESTAMP_SUFFIX = " 장면의 시작 타임스탬프와 종료 타임스탬프를 추출하여 출력해주세요. 타임스탬프 형식은 초 단위(예: 10.5, 120.3) 또는 분:초 형식(예: 1:30, 2:45)일 수 있습니다. 타임스탬프만 출력하고 다른 설명은 포함하지 마세요."
+DEFAULT_QUERY_TIMESTAMP_SUFFIX = " 장면의 시작 타임스탬프와 종료 타임스탬프를 추출하여 반드시 '시작시간-끝시간' 형태로만 출력해주세요. 타임스탬프 형식은 초 단위(예: 10.5-120.3) 또는 분:초 형식(예: 1:30-2:45)일 수 있습니다. 타임스탬프만 출력하고 다른 설명은 포함하지 마세요."
 
 # 전역 변수
 http_session: Optional[aiohttp.ClientSession] = None
@@ -862,7 +862,7 @@ async def generate_clips(
                     timestamp_extraction_prompt = f"""다음은 동영상 질의 응답 결과입니다:
 {query_result}
 
-위 응답에서 타임스탬프만 추출하여 출력해주세요. 타임스탬프 형식은 초 단위(예: 10.5, 120.3) 또는 분:초 형식(예: 1:30, 2:45)일 수 있습니다. 타임스탬프만 출력하고 다른 설명은 포함하지 마세요."""
+위 응답에서 타임스탬프만 추출하여 반드시 '시작시간-끝시간' 형태로만 출력해주세요. 타임스탬프 형식은 초 단위(예: 10.5-120.3) 또는 분:초 형식(예: 1:30-2:45)일 수 있습니다. 타임스탬프만 출력하고 다른 설명은 포함하지 마세요."""
                     
                     # Ollama API 호출 (aiohttp 사용)
                     session = await get_session()
@@ -2439,7 +2439,7 @@ async def get_summary(video_id: str, user_id: str = Query(...)):
         # 요약 결과 조회 (소유권 확인 포함)
         ensure_db_connection()
         cursor.execute(
-            """SELECT s.ID, s.SUMMARY_TEXT, s.CREATED_AT, s.UPDATED_AT
+            """SELECT s.ID, s.SUMMARY_TEXT, s.PROMPT, s.CREATED_AT, s.UPDATED_AT
                FROM vss_summaries s
                INNER JOIN vss_videos v ON s.VIDEO_ID = v.VIDEO_ID
                WHERE s.VIDEO_ID = ? AND s.USER_ID = ? AND v.USER_ID = ?""",
@@ -2453,15 +2453,16 @@ async def get_summary(video_id: str, user_id: str = Query(...)):
                 "message": "요약 결과를 찾을 수 없습니다."
             }
         
-            return {
-                "success": True,
-                "summary": {
-                    "id": row[0],
-                    "summary_text": row[1],
-                    "created_at": row[2].isoformat() if row[2] else None,
-                    "updated_at": row[3].isoformat() if row[3] else None
-                }
+        return {
+            "success": True,
+            "summary": {
+                "id": row[0],
+                "summary_text": row[1],
+                "prompt": row[2] if len(row) > 2 else None,
+                "created_at": row[3].isoformat() if len(row) > 3 and row[3] else None,
+                "updated_at": row[4].isoformat() if len(row) > 4 and row[4] else None
             }
+        }
     except HTTPException:
         raise
     except Exception as e:
