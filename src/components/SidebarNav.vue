@@ -1,6 +1,6 @@
 <template>
-  <aside :class="[collapsed ? 'w-[105px]' : 'w-64', ' h-[100vh] shrink-0 border-r bg-gray-100 dark:bg-gray-950 border-gray-200 dark:border-gray-800 p-6 flex flex-col justify-between relative transition-all duration-200']">
-    <!-- 로고 (최상단) -->
+  <aside :class="[collapsed ? 'w-[105px]' : 'w-64', ' h-full shrink-0 border-r bg-gray-100 dark:bg-gray-950 border-gray-200 dark:border-gray-800 p-6 flex flex-col justify-between relative transition-all duration-200']">
+    <!-- 로고 -->
     <div class="flex items-center gap-3 cursor-pointer mb-6 overflow-hidden" @click="goToVideoList" :class="collapsed ? 'justify-center' : ''">
       <img :src="logoUrl" alt="Intellivix Logo" class="h-8 w-auto object-contain flex-shrink-0" />
       <h1 v-if="!collapsed" class="text-2xl font-bold text-vix-primary dark:text-white whitespace-nowrap flex-shrink-0">Vix VSS</h1>
@@ -186,7 +186,7 @@
               class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
               @click.self="closeProfileSettings"
             >
-                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-[800px] h-full max-h-[800px] mx-4">
                   <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
                     <h2 class="text-xl font-bold text-gray-800 dark:text-gray-200 overflow-hidden whitespace-nowrap">{{ tSidebar.profileSettings }}</h2>
                   <button 
@@ -494,7 +494,6 @@ const showSettingModal = ref(false);
 // 현재 언어에 맞는 기본 카테고리로 초기화
 const settingCategory = ref(settingStore.language === 'ko' ? '일반' : 'General'); // "일반"/"General" 또는 "고급"/"Advanced"
 const contextMenuStyle = ref({});
-const profileImageRef = ref(null);
 const profileBlockRef = ref(null);
 const userEmail = ref("");
 const isLoadingUserInfo = ref(false);
@@ -698,7 +697,7 @@ function closeProfileSettings() {
 }
 
 // API 설정
-const API_BASE_URL = 'http://localhost:8001';
+const API_BASE_URL = 'http://172.16.15.69:8001';
 
 async function loadUserInfo() {
   if (!userId.value) return;
@@ -784,6 +783,7 @@ function closeSettingModal() {
 }
 
 function handleHelp() {
+  router.push("/help");
   closeContextMenu();
   // TODO: 도움말 페이지로 이동하거나 도움말 모달 열기
   console.log('Help 클릭');

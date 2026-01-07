@@ -1,6 +1,6 @@
 <template>
-  <div class="min-h-screen flex flex-col bg-white dark:bg-gray-900">
-    <div class="flex flex-1 overflow-hidden">
+  <div class="h-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
+    <div class="flex flex-1 min-h-0">
       <!-- Sidebar - 로그인/회원가입 페이지에서는 숨김 -->
       <SidebarNav v-if="!isAuthPage" class="hidden md:flex"/>
 

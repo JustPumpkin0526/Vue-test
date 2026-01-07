@@ -1,9 +1,11 @@
 <template>
-  <div class="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300 via-gray-100 dark:from-gray-950 dark:to-gray-900 dark:via-gray-950 p-10">
+  <div class="w-full min-h-screen bg-gradient-to-br from-gray-200 to-gray-300 via-gray-100 dark:from-gray-950 dark:to-gray-900 dark:via-gray-950 p-10">
     <div class="grid lg:grid-cols-[1fr_400px] gap-6 h-full">
       <!-- 좌측: 리포트 뷰어 -->
       <section
-        class="rounded-2xl p-6 bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-gray-950 dark:via-gray-950 dark:to-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col">
+        ref="viewerSectionRef"
+        class="h-[calc(100vh-10rem)] rounded-2xl p-6 bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-gray-950 dark:via-gray-950 dark:to-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col relative"
+        >
         <!-- 헤더 -->
         <header class="flex items-center justify-between px-1 pb-4 mb-4 border-b border-slate-800/70 dark:border-gray-200/30">
           <div class="flex flex-col gap-1">
@@ -58,7 +60,8 @@
         <!-- 리포트 내용 -->
         <div
           v-if="selectedReport"
-          class="flex-1 border border-gray-200 dark:border-gray-800 rounded-xl p-6 bg-white dark:bg-gray-900 overflow-auto shadow-inner">
+          class="flex-1 border border-gray-200 dark:border-gray-800 rounded-xl p-6 bg-white dark:bg-gray-900 overflow-hidden shadow-inner"
+          :style="{ maxHeight: '100%', overflowY: 'auto' }">
           <div class="prose prose-sm max-w-none dark:prose-invert">
             <div class="whitespace-pre-wrap text-sm leading-relaxed text-gray-800 dark:text-gray-200" v-html="formattedReport"></div>
           </div>
@@ -79,6 +82,15 @@
         <div v-if="selectedReport" class="mt-4 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
           <span>{{ tReport.page }} {{ currentPage }} / {{ totalPages }}</span>
           <span>{{ selectedReport.wordCount || 0 }} {{ tReport.words }}</span>
+        </div>
+
+        <!-- Resize 핸들 (하단) -->
+        <div
+          v-if="selectedReport"
+          class="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-emerald-500/20 dark:hover:bg-emerald-500/30 transition-colors group"
+          @mousedown="startResize"
+          :title="tReport.resizeHint">
+          <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-12 h-0.5 bg-emerald-500/50 dark:bg-emerald-400/50 rounded-full group-hover:bg-emerald-500 dark:group-hover:bg-emerald-400 transition-colors"></div>
         </div>
       </section>
 
@@ -153,7 +165,7 @@
             :key="r.id"
             @click="open(r)"
             :class="[
-              'group p-4 border rounded-xl cursor-pointer transition-all duration-200',
+              'group p-4 border rounded-xl cursor-pointer transition-all duration-200 relative',
               selectedReport?.id === r.id
                 ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-600 shadow-md'
                 : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-emerald-300 dark:hover:border-emerald-600 hover:shadow-md'
@@ -183,13 +195,25 @@
                   </span>
                 </div>
               </div>
-              <button
-                @click.stop="open(r)"
-                class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-emerald-500/10 dark:bg-emerald-500/20 hover:bg-emerald-500/20 dark:hover:bg-emerald-500/30 text-emerald-600 dark:text-emerald-400 rounded-lg transition-all opacity-0 group-hover:opacity-100">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
+              <div class="flex items-center gap-1">
+                <button
+                  @click.stop="open(r)"
+                  class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-emerald-500/10 dark:bg-emerald-500/20 hover:bg-emerald-500/20 dark:hover:bg-emerald-500/30 text-emerald-600 dark:text-emerald-400 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+                <!-- 햄버거 메뉴 버튼 -->
+                <button
+                  @click.stop="openContextMenu(r, $event)"
+                  class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <circle cx="12" cy="5" r="1.5" />
+                    <circle cx="12" cy="12" r="1.5" />
+                    <circle cx="12" cy="19" r="1.5" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -214,16 +238,56 @@
         </div>
       </aside>
     </div>
+
+    <!-- 컨텍스트 메뉴 (Teleport로 body에 렌더링) -->
+    <Teleport to="body">
+      <div v-if="contextMenu.visible" class="fixed z-[200]"
+        :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click.stop>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden w-[160px]">
+          <button 
+            class="w-full text-left px-4 py-3 text-red-600 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors"
+            @click.stop="handleDeleteReport">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            <span>{{ tReport.delete }}</span>
+          </button>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- 삭제 확인 다이얼로그 -->
+    <Transition name="modal">
+      <div v-if="showDeleteConfirm" class="fixed inset-0 flex items-center justify-center z-[100] bg-black/50 backdrop-blur-sm">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 min-w-[350px] max-w-[90vw] relative transform transition-all duration-300">
+          <div class="text-lg font-semibold mb-6 text-center text-gray-800 dark:text-gray-200">
+            <p class="mb-2">{{ tReport.deleteConfirm }}</p>
+            <p class="text-sm font-normal text-gray-600 dark:text-gray-400">{{ tReport.deleteConfirmDetail }}</p>
+          </div>
+          <div class="flex justify-end gap-3 mt-8">
+            <button
+              class="px-6 py-2.5 rounded-xl bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600 transition-all duration-300 transform hover:scale-105 active:scale-95 font-medium shadow-sm"
+              @click="confirmDeleteReport">{{ tReport.delete }}</button>
+            <button
+              class="px-6 py-2.5 rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-300 transform hover:scale-105 active:scale-95 font-medium shadow-sm"
+              @click="showDeleteConfirm = false">{{ tReport.cancel }}</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import api from "@/services/api";
 import { marked } from 'marked';
 import { useSettingStore } from '@/stores/settingStore';
 
 const settingStore = useSettingStore();
+
+// ==================== 상수 정의 ====================
+const API_BASE_URL = 'http://172.16.15.69:8001';
 
 // ==================== 다국어 지원 ====================
 const reportTranslations = {
@@ -244,7 +308,12 @@ const reportTranslations = {
     selectToView: "리포트를 선택하여 내용을 확인하세요",
     page: "페이지",
     word: "단어",
-    words: "단어"
+    words: "단어",
+    delete: "삭제",
+    deleteConfirm: "이 보고서를 삭제하시겠습니까?",
+    deleteConfirmDetail: "이 작업은 되돌릴 수 없습니다.",
+    cancel: "취소",
+    resizeHint: "드래그하여 높이 조절"
   },
   en: {
     reportViewer: "Report Viewer",
@@ -263,7 +332,12 @@ const reportTranslations = {
     selectToView: "Select a report to view its content",
     page: "Page",
     word: "word",
-    words: "words"
+    words: "words",
+    delete: "Delete",
+    deleteConfirm: "Are you sure you want to delete this report?",
+    deleteConfirmDetail: "This action cannot be undone.",
+    cancel: "Cancel",
+    resizeHint: "Drag to resize height"
   }
 };
 
@@ -278,6 +352,14 @@ const searchQuery = ref("");
 const sortBy = ref("date");
 const currentPage = ref(1);
 const totalPages = ref(1);
+const contextMenu = ref({ visible: false, x: 0, y: 0, report: null });
+const showDeleteConfirm = ref(false);
+const reportToDelete = ref(null);
+const viewerSectionRef = ref(null);
+const viewerHeight = ref(600); // 기본 높이
+const isResizing = ref(false);
+const resizeStartY = ref(0);
+const resizeStartHeight = ref(0);
 
 // 필터링 및 정렬된 리스트
 const filteredList = computed(() => {
@@ -324,37 +406,75 @@ const formattedReport = computed(() => {
   }
 });
 
-function loadList() {
-  // 실제 API 연동 시 아래 주석 해제
-  // const res = api.listReports({ page: page.value });
-  // list.value = res.items;
-  // pages.value = res.pages;
+async function loadList() {
+  const userId = localStorage.getItem("vss_user_id");
   
-  // 임시 더미 데이터 (개발용)
-  list.value = [
-    {
-      id: 1,
-      title: "2024년 1분기 보안 리포트",
-      description: "1분기 동안 발생한 보안 사고 및 대응 현황을 정리한 리포트입니다.",
-      content: "# 2024년 1분기 보안 리포트\n\n## 개요\n\n2024년 1분기 동안 총 15건의 보안 사고가 발생했습니다.\n\n## 주요 사항\n\n- 네트워크 침입 시도: 8건\n- 악성 코드 감지: 5건\n- 데이터 유출 시도: 2건\n\n## 대응 조치\n\n모든 사고에 대해 즉시 대응 조치를 취했으며, 추가 보안 강화 방안을 수립했습니다.",
-      createdAt: "2024-03-31T10:00:00Z",
-      wordCount: 250
-    },
-    {
-      id: 2,
-      title: "월간 활동 보고서 - 3월",
-      description: "3월 한 달간의 주요 활동 및 성과를 정리한 리포트입니다.",
-      content: "# 월간 활동 보고서 - 3월\n\n## 주요 성과\n\n- 신규 프로젝트 3건 완료\n- 고객 만족도 95% 달성\n- 팀 회의 12회 진행\n\n## 향후 계획\n\n4월에는 더욱 적극적인 활동을 계획하고 있습니다.",
-      createdAt: "2024-03-30T14:30:00Z",
-      wordCount: 180
+  try {
+    // API에서 보고서 목록 로드 시도
+    if (userId) {
+      const response = await fetch(`${API_BASE_URL}/reports?user_id=${userId}&page=${page.value}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.reports) {
+          list.value = data.reports.map(r => ({
+            id: r.id || r.report_id,
+            title: r.title,
+            description: r.description || '',
+            content: r.content || r.report_content || '',
+            createdAt: r.created_at || r.createdAt,
+            wordCount: r.word_count || r.wordCount || 0
+          }));
+          pages.value = data.pages || Math.max(1, Math.ceil(list.value.length / 10));
+          return;
+        }
+      }
     }
-  ];
-  pages.value = 1;
+  } catch (error) {
+    console.warn('보고서 API 로드 실패, localStorage에서 로드:', error);
+  }
+  
+  // API 실패 시 localStorage에서 로드
+  const reportsKey = `vss_reports_${userId || 'guest'}`;
+  const storedReports = JSON.parse(localStorage.getItem(reportsKey) || '[]');
+  
+  // 페이지네이션 적용
+  const itemsPerPage = 10;
+  const startIndex = (page.value - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  
+  list.value = storedReports.slice(startIndex, endIndex);
+  pages.value = Math.max(1, Math.ceil(storedReports.length / itemsPerPage));
+  
+  // 보고서가 없으면 빈 배열
+  if (storedReports.length === 0) {
+    list.value = [];
+    pages.value = 1;
+  }
 }
 loadList();
 
-function open(r) {
+async function open(r) {
   selectedReport.value = r;
+  
+  // 보고서 내용이 없으면 API에서 로드 시도
+  if (!r.content) {
+    const userId = localStorage.getItem("vss_user_id");
+    if (userId && r.id) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/reports/${r.id}?user_id=${userId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.report) {
+            r.content = data.report.content || data.report.report_content || '';
+            r.wordCount = data.report.word_count || data.report.wordCount || 0;
+          }
+        }
+      } catch (error) {
+        console.warn('보고서 상세 로드 실패:', error);
+      }
+    }
+  }
+  
   report.value = r.content || "";
   currentPage.value = 1;
   // 리포트 내용을 페이지로 나누는 로직 (간단한 구현)
@@ -424,5 +544,140 @@ function formatDate(dateString) {
 // 정렬 변경 시 자동 업데이트
 watch(sortBy, () => {
   // computed property가 자동으로 업데이트됨
+});
+
+// ==================== 컨텍스트 메뉴 ====================
+function openContextMenu(report, event) {
+  event.stopPropagation();
+  
+  // 메뉴 위치 계산 (화면 경계 고려)
+  const x = Math.min(event.clientX, window.innerWidth - 180);
+  const y = Math.min(event.clientY, window.innerHeight - 100);
+  
+  contextMenu.value = {
+    visible: true,
+    x: x,
+    y: y,
+    report: report
+  };
+}
+
+function closeContextMenu() {
+  contextMenu.value.visible = false;
+  contextMenu.value.report = null;
+}
+
+function handleDeleteReport() {
+  if (!contextMenu.value.report) return;
+  
+  reportToDelete.value = contextMenu.value.report;
+  closeContextMenu();
+  showDeleteConfirm.value = true;
+}
+
+async function confirmDeleteReport() {
+  if (!reportToDelete.value) return;
+  
+  const reportId = reportToDelete.value.id;
+  const userId = localStorage.getItem("vss_user_id");
+  
+  try {
+    // API에서 삭제 시도
+    if (userId && reportId) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/reports/${reportId}?user_id=${userId}`, {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            // API 삭제 성공
+            console.log('보고서 삭제 성공 (API)');
+          }
+        }
+      } catch (error) {
+        console.warn('보고서 API 삭제 실패, localStorage에서 삭제:', error);
+      }
+    }
+    
+    // localStorage에서 삭제
+    const reportsKey = `vss_reports_${userId || 'guest'}`;
+    const storedReports = JSON.parse(localStorage.getItem(reportsKey) || '[]');
+    const updatedReports = storedReports.filter(r => r.id !== reportId);
+    localStorage.setItem(reportsKey, JSON.stringify(updatedReports));
+    
+    // 현재 선택된 보고서가 삭제된 경우 선택 해제
+    if (selectedReport.value && selectedReport.value.id === reportId) {
+      selectedReport.value = null;
+      report.value = "";
+    }
+    
+    // 목록 새로고침
+    await loadList();
+    
+    showDeleteConfirm.value = false;
+    reportToDelete.value = null;
+  } catch (error) {
+    console.error('보고서 삭제 중 오류:', error);
+    alert(settingStore.language === 'ko' 
+      ? '보고서 삭제 중 오류가 발생했습니다.' 
+      : 'An error occurred while deleting the report.');
+  }
+}
+
+// 전역 클릭 이벤트로 컨텍스트 메뉴 닫기
+function handleGlobalClick(e) {
+  if (!contextMenu.value.visible) return;
+  closeContextMenu();
+}
+
+// ==================== Resize 기능 ====================
+function startResize(event) {
+  event.preventDefault();
+  isResizing.value = true;
+  resizeStartY.value = event.clientY;
+  resizeStartHeight.value = viewerHeight.value;
+  
+  document.addEventListener('mousemove', handleResize);
+  document.addEventListener('mouseup', stopResize);
+  document.body.style.cursor = 'ns-resize';
+  document.body.style.userSelect = 'none';
+}
+
+function handleResize(event) {
+  if (!isResizing.value) return;
+  
+  const deltaY = event.clientY - resizeStartY.value;
+  const newHeight = resizeStartHeight.value - deltaY; // 위로 드래그하면 높이 증가, 아래로 드래그하면 높이 감소
+  
+  // 최소 높이와 최대 높이 제한
+  const minHeight = 300;
+  const maxHeight = window.innerHeight - 100; // 상하 여백 고려
+  
+  viewerHeight.value = Math.max(minHeight, Math.min(maxHeight, newHeight));
+}
+
+function stopResize() {
+  isResizing.value = false;
+  document.removeEventListener('mousemove', handleResize);
+  document.removeEventListener('mouseup', stopResize);
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+}
+
+// 컴포넌트 마운트 시 전역 클릭 리스너 추가
+onMounted(() => {
+  window.addEventListener('click', handleGlobalClick);
+  // 초기 높이를 화면 높이의 70%로 설정
+  viewerHeight.value = Math.min(800, window.innerHeight * 0.7);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('click', handleGlobalClick);
+  // Resize 이벤트 리스너 정리
+  if (isResizing.value) {
+    stopResize();
+  }
 });
 </script>

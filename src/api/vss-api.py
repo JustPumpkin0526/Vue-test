@@ -48,6 +48,11 @@ videos_dir = Path("./videos")
 videos_dir.mkdir(exist_ok=True)
 app.mount("/video-files", StaticFiles(directory=str(videos_dir.resolve())), name="video-files")
 
+# Serve converted videos as static files under /converted-videos
+converted_videos_dir = Path("./converted-videos")
+converted_videos_dir.mkdir(exist_ok=True)
+app.mount("/converted-videos", StaticFiles(directory=str(converted_videos_dir.resolve())), name="converted-videos")
+
 # Serve profile images as static files under /profile-images
 profile_images_dir = Path("./profile-images")
 profile_images_dir.mkdir(exist_ok=True)
@@ -78,7 +83,7 @@ else:
 
 # ==================== 상수 정의 ====================
 # API 설정
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8001")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://172.16.15.69:8001")
 
 # VIA 서버 설정
 VIA_SERVER_URL = "http://172.16.7.64:8101"
@@ -88,7 +93,7 @@ VIA_UPLOAD_TIMEOUT_MAX = 600  # 최대 업로드 타임아웃 (초)
 VIA_UPLOAD_TIMEOUT_PER_MB = 10  # 1MB당 타임아웃 (초)
 
 # Ollama 설정
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://172.16.15.69:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
 OLLAMA_TIMEOUT = 60  # Ollama API 타임아웃 (초)
 
@@ -110,7 +115,7 @@ IP_PATTERN = r'^(\d{1,3}\.){3}\d{1,3}$'
 EMAIL_CODE_EXPIRY_MINUTES = 10
 
 # VIA 서버 요약 기본 설정 (generate-clips용)
-DEFAULT_SUMMARIZE_PROMPT = "Analyze the video and detect any threatening behavior, antisocial actions, or criminal activities. Identify events such as violence, aggression, property damage, theft, weapon-related actions, or any safety-risk situations. For each detected event, provide a clear description and output the start and end timestamps in seconds. Use the format: start_time - end_time - event_description."
+DEFAULT_SUMMARIZE_PROMPT = "You are a video monitoring and incident analysis system. Describe the events in this video and look for any anomalies. Start each sentence with the start and end timestamp of the event."
 DEFAULT_CAPTION_SUMMARIZATION_PROMPT = "You will be given captions from sequential clips of a video. Aggregate captions in the format start_time:end_time:caption based on whether captions are related to one another or create a continuous scene."
 DEFAULT_SUMMARY_AGGREGATION_PROMPT = "Based on the available information, generate a summary that captures the important events in the video. The summary should be organized chronologically and in logical sections. This should be a concise, yet descriptive summary of all the important events. The format should be intuitive and easy for a user to read and understand what happened. Format the output in Markdown so it can be displayed nicely. Timestamps are in seconds so please format them as SS.SSS"
 
@@ -199,6 +204,148 @@ def build_file_url(file_url: str) -> str:
         return file_url
     return f"{API_BASE_URL}{file_url}"
 
+async def create_summarize_prompt(user_prompt: str) -> str:
+    """
+    Ollama를 사용하여 요약 프롬프트 생성
+    
+    Args:
+        user_prompt: 사용자가 입력한 프롬프트
+    
+    Returns:
+        생성된 요약 프롬프트 (Ollama 실패 시 기본 프롬프트 반환)
+    """
+    try:
+        # Ollama API 호출을 위한 프롬프트 구성
+        ollama_prompt = f""" 사용자 질문: {user_prompt}
+        사용자 질문을 아래 조건에 맞는 프롬프트로 수정해주세요.
+
+        아래는 예시 프롬프트입니다. 해당 프롬프트의 형태를 참고하여 사용자 질문을 프롬프트로 수정해주세요.
+        {DEFAULT_SUMMARIZE_PROMPT}
+
+        조건:
+        1. 목적을 정확히 명시해주세요.
+        2. 시작 시간 - 종료 시간 형식의 타임스탬프를 출력하게 해주세요.
+        3. 출력 결과는 영어여야 하며 문장의 형태로 출력해주세요.
+        """
+        
+        # Ollama API 호출 (aiohttp 사용)
+        session = await get_session()
+        ollama_url = f"{OLLAMA_BASE_URL}/api/chat"
+        payload = {
+            "model": OLLAMA_MODEL,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": """You are a text generator.
+                                Return ONLY the final prompt text.
+                                Do NOT add any preface, explanation, or quotes.
+                                Do NOT say things like "Here is ..." or "Sure". """
+                },
+                {
+                    "role": "user",
+                    "content": ollama_prompt
+                }
+            ],
+            "stream": False,
+            "options": {
+                "temperature": 0.0,  # 창의성과 일관성의 균형
+                "num_predict": 1000  # 충분한 길이의 프롬프트 생성
+            }
+        }
+        
+        async with session.post(
+            ollama_url,
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=OLLAMA_TIMEOUT)
+        ) as ollama_response:
+            if ollama_response.status == 200:
+                ollama_data = await ollama_response.json()
+                generated_prompt = ollama_data.get("message", {}).get("content", "")
+                print(f"generated_prompt: {generated_prompt}")
+                if generated_prompt:
+                    generated_prompt = generated_prompt.strip()
+                    logger.info(f"Ollama를 사용하여 요약 프롬프트 생성 성공")
+                    return generated_prompt
+                else:
+                    logger.warning("Ollama 응답에 content가 없습니다. 기본 프롬프트 사용")
+            else:
+                error_text = await ollama_response.text()
+                logger.warning(f"Ollama API 호출 실패 (HTTP {ollama_response.status}): {error_text}")
+    except aiohttp.ClientConnectorError as e:
+        logger.warning(f"Ollama 서버에 연결할 수 없습니다: {e}")
+        logger.info("Ollama가 실행 중인지 확인하세요: ollama serve")
+    except Exception as e:
+        logger.warning(f"Ollama를 사용한 프롬프트 생성 중 오류 발생: {e}")
+    
+    # Ollama 실패 시 기본 프롬프트와 사용자 프롬프트 결합
+    return f"{DEFAULT_SUMMARIZE_PROMPT}\n\n사용자 요청: {user_prompt}"
+
+async def build_query_prompt(prompt: str) -> str:
+    """
+    Ollama를 사용하여 프롬프트를 영어로 번역하고 query_video 함수 호출을 위한 프롬프트 생성
+    
+    Args:
+        prompt: 사용자가 입력한 프롬프트
+    
+    Returns:
+        영어로 번역된 프롬프트 (Ollama 실패 시 원본 프롬프트 반환)
+    """
+    try:
+        # Ollama API 호출을 위한 프롬프트 구성
+        ollama_prompt = f"""다음 프롬프트를 영어로 번역해주세요:
+"{prompt}"
+
+번역된 프롬프트만 출력하고 다른 설명이나 지시사항은 포함하지 마세요."""
+        
+        # Ollama API 호출 (aiohttp 사용)
+        session = await get_session()
+        ollama_url = f"{OLLAMA_BASE_URL}/api/chat"
+        payload = {
+            "model": OLLAMA_MODEL,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are an expert translator. Translate the given prompt to English accurately and naturally. Output only the translated text without any additional explanations."
+                },
+                {
+                    "role": "user",
+                    "content": ollama_prompt
+                }
+            ],
+            "stream": False,
+            "options": {
+                "temperature": 0.0,  # 번역은 정확성이 중요하므로 낮은 temperature
+                "num_predict": 500  # 번역은 적은 토큰 수로 충분
+            }
+        }
+        
+        async with session.post(
+            ollama_url,
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=OLLAMA_TIMEOUT)
+        ) as ollama_response:
+            if ollama_response.status == 200:
+                ollama_data = await ollama_response.json()
+                translated_prompt = ollama_data.get("message", {}).get("content", "")
+                print(f"translated_prompt: {translated_prompt}")
+                if translated_prompt:
+                    translated_prompt = translated_prompt.strip()
+                    logger.info(f"Ollama를 사용하여 프롬프트 영어 번역 성공")
+                    return f"{translated_prompt}"
+                else:
+                    logger.warning("Ollama 응답에 content가 없습니다. 원본 프롬프트 사용")
+            else:
+                error_text = await ollama_response.text()
+                logger.warning(f"Ollama API 호출 실패 (HTTP {ollama_response.status}): {error_text}")
+    except aiohttp.ClientConnectorError as e:
+        logger.warning(f"Ollama 서버에 연결할 수 없습니다: {e}")
+        logger.info("Ollama가 실행 중인지 확인하세요: ollama serve")
+    except Exception as e:
+        logger.warning(f"Ollama를 사용한 프롬프트 번역 중 오류 발생: {e}")
+    
+    # Ollama 실패 시 원본 프롬프트와 타임스탬프 서픽스 결합
+    return f"{prompt} {DEFAULT_QUERY_TIMESTAMP_SUFFIX}"
+
 def build_summarize_params(
     video_id: str,
     chunk_duration: int,
@@ -242,8 +389,11 @@ def build_summarize_params(
         summarize_video 함수에 전달할 파라미터 튜플
     """
     if num_frames_per_chunk is None:
-        num_frames_per_chunk = chunk_duration // 4
-    
+        num_frames_per_chunk = chunk_duration // 2
+        if num_frames_per_chunk > 256:
+            num_frames_per_chunk = 256
+        if num_frames_per_chunk < 1:
+            num_frames_per_chunk = 1
     return (
         video_id,
         prompt,
@@ -373,7 +523,7 @@ class VSS:
                 VIA_UPLOAD_TIMEOUT_MIN,
                 min(VIA_UPLOAD_TIMEOUT_MAX, int(file_size / (1024 * 1024) * VIA_UPLOAD_TIMEOUT_PER_MB))
             )
-            
+
             async with session.post(
                 self.files_endpoint, 
                 data=data,
@@ -382,6 +532,7 @@ class VSS:
                 self.f_count += 1
                 json_data = await self.check_response(response)
                 return json_data.get("id")  # return uploaded file id
+
         finally:
             # 파일 핸들 닫기
             file_handle.close()
@@ -448,6 +599,41 @@ class VSS:
             else:
                 # JSON이 아니거나 에러일 때는 원본 텍스트 또는 에러 메시지 반환
                 return json_data
+
+    async def list_files(self, purpose: str = "vision"):
+        """
+        VIA 서버에서 파일 목록 조회
+        
+        Args:
+            purpose: 파일 목적 (기본값: "vision")
+        
+        Returns:
+            파일 목록 (ListFilesResponse 형식)
+        """
+        session = await get_session()
+        try:
+            async with session.get(
+                self.files_endpoint,
+                params={"purpose": purpose},
+                timeout=aiohttp.ClientTimeout(total=VIA_MODEL_TIMEOUT)
+            ) as response:
+                json_data = await self.check_response(response)
+                
+                # 오류 응답 처리
+                if response.status != 200:
+                    error_msg = json_data if isinstance(json_data, str) else str(json_data)
+                    raise HTTPException(status_code=response.status, detail=f"VIA 서버 파일 목록 조회 오류: {error_msg}")
+                
+                # 정상 응답 처리
+                if isinstance(json_data, dict) and "data" in json_data:
+                    return json_data
+                else:
+                    raise HTTPException(status_code=502, detail=f"VIA 서버 응답 형식 오류: {json_data}")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"VIA 서버 파일 목록 조회 실패: {e}")
+            raise HTTPException(status_code=502, detail=f"VIA 서버 파일 목록 조회 실패: {str(e)}")
 
     async def query_video(self, video_id, model, chunk_size, temperature, seed, max_new_tokens, top_p, top_k, query):
         
@@ -807,15 +993,50 @@ async def generate_clips(
                 except Exception as e:
                     print(f"요약 결과 확인 중 오류: {e}")
 
-            # 저장된 요약이 있으면 summarize_video 건너뛰기
+            # 요약 파라미터 준비 (Ollama를 사용하여 프롬프트 생성)
+            AI_prompt = await create_summarize_prompt(prompt)
+            
+            # 저장된 요약이 있으면 PROMPT를 비교하여 프롬프트가 변경되었는지 확인
+            if has_stored_summary and user_id and video_id:
+                try:
+                    cursor.execute(
+                        """SELECT PROMPT FROM vss_summaries WHERE VIDEO_ID = ? AND USER_ID = ?;""",
+                        (video_id, user_id)
+                    )
+                    summary_row = cursor.fetchone()
+                    if summary_row and summary_row[0]:
+                        # SELECT PROMPT만 했으므로 인덱스는 [0]만 존재
+                        stored_prompt = summary_row[0]
+                        print(f"저장된 PROMPT: {stored_prompt}")
+                        print(f"현재 AI_prompt: {AI_prompt}")
+                        # 저장된 PROMPT와 현재 AI_prompt를 비교
+                        if stored_prompt.strip() == AI_prompt.strip():
+                            # 프롬프트가 같으면 저장된 요약 사용
+                            has_stored_summary = True
+                            print(f"프롬프트가 동일하여 저장된 요약을 사용합니다. (VIDEO_ID: {video_id})")
+                        else:
+                            # 프롬프트가 다르면 요약을 다시 수행해야 함
+                            has_stored_summary = False
+                            print(f"프롬프트가 변경되어 요약을 다시 수행합니다. (VIDEO_ID: {video_id})")
+                    else:
+                        # PROMPT가 없거나 NULL인 경우 요약을 다시 수행
+                        has_stored_summary = False
+                        print(f"저장된 PROMPT가 없어 요약을 다시 수행합니다. (VIDEO_ID: {video_id})")
+                except Exception as e:
+                    logger.warning(f"PROMPT 조회 중 오류: {e}")
+                    # 오류 발생 시 요약을 다시 수행
+                    has_stored_summary = False
 
-            summary_prompt = DEFAULT_SUMMARIZE_PROMPT
             if not has_stored_summary:
-                # 요약 파라미터 준비 (기본값 사용)
                 summarize_params = build_summarize_params(
                     video_id=video_id,
                     chunk_duration=chunk_duration,
-                    model=model
+                    model=model,
+                    prompt=AI_prompt,  # Ollama로 생성된 프롬프트 사용
+                    temperature=0,
+                    summarize_temperature=0,
+                    chat_temperature=0,
+                    notification_temperature=0
                 )
                 result = await vss_client.summarize_video(*summarize_params)
                 
@@ -830,7 +1051,7 @@ async def generate_clips(
                             summary_text = str(result)
                         
                         # 공통 저장 함수 사용
-                        _save_summary_to_db(video_id, user_id, summary_text, summary_prompt)
+                        _save_summary_to_db(video_id, user_id, summary_text, AI_prompt)
                     except Exception as e:
                         logger.error(f"요약 결과 DB 저장 실패: {e}")
                         # DB 저장 실패해도 요약은 계속 진행
@@ -840,15 +1061,16 @@ async def generate_clips(
             # prompt를 질문으로 처리: VIA 서버의 query_video 사용
             # 동영상 컨텍스트를 직접 활용하여 질문에 답변
             try:
-                # 타임스탬프 추출 지시 추가
-                enhanced_prompt = prompt + DEFAULT_QUERY_TIMESTAMP_SUFFIX
+                # Ollama를 사용하여 프롬프트를 영어로 번역하고 타임스탬프 추출 지시 추가
+                enhanced_prompt = await build_query_prompt(prompt + DEFAULT_QUERY_TIMESTAMP_SUFFIX)
                 
                 # query_video 파라미터 준비 (기본값 사용)
                 query_params = build_query_video_params(
                     video_id=video_id,
                     model=model,
                     query=enhanced_prompt,
-                    chunk_size=chunk_duration  # 요약에 사용한 chunk_duration과 동일하게
+                    chunk_size=chunk_duration,  # 요약에 사용한 chunk_duration과 동일하게
+                    temperature=0
                 )
                 
                 # VIA 서버로 질문 전달
@@ -1132,6 +1354,31 @@ async def vss_query(
         result = await vss_client.query_video(*query_params)
 
         return {"summary": result, "video_id": video_id}
+
+# ==================== VIA 파일 목록 조회 API ====================
+@app.get("/via-files")
+async def list_via_files(
+    purpose: str = Query(default="vision", description="파일 목적 (기본값: vision)")
+):
+    """
+    VIA 서버에 업로드된 파일 목록 조회
+    
+    Args:
+        purpose: 파일 목적 (기본값: "vision")
+    
+    Returns:
+        파일 목록 (VIA 서버의 ListFilesResponse 형식)
+    """
+    try:
+        await ensure_vss_client()
+        result = await vss_client.list_files(purpose=purpose)
+        print(result)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"VIA 파일 목록 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"VIA 파일 목록 조회 중 오류가 발생했습니다: {str(e)}")
 
 # 로그인용 모델
 class LoginRequest(BaseModel):
@@ -2093,6 +2340,108 @@ def extract_video_metadata(file_path: str, video_id: int, filename: str):
     except Exception as e:
         logger.warning(f"동영상 메타데이터 추출 실패: {e}")
 
+# 동영상 변환 함수 (AVI, MKV, FLV, WMV -> MP4)
+def convert_video_to_mp4(input_path: str, output_path: str):
+    """동영상을 MP4 형식으로 변환"""
+    try:
+        video = VideoFileClip(str(input_path))
+        # MP4로 변환 (H.264 코덱 사용)
+        video.write_videofile(
+            str(output_path),
+            codec='libx264',
+            audio_codec='aac',
+            temp_audiofile='temp-audio.m4a',
+            remove_temp=True,
+            verbose=False,
+            logger=None
+        )
+        video.close()
+        logger.info(f"동영상 변환 완료: {input_path} -> {output_path}")
+        return True
+    except Exception as e:
+        logger.error(f"동영상 변환 실패: {e}")
+        if 'video' in locals():
+            try:
+                video.close()
+            except:
+                pass
+        return False
+
+# 지원하지 않는 형식 목록
+UNSUPPORTED_VIDEO_FORMATS = {'.avi', '.mkv', '.flv', '.wmv'}
+
+@app.get("/convert-video/{video_id}")
+async def convert_video(
+    video_id: int,
+    user_id: str = Query(..., description="사용자 ID")
+):
+    """동영상을 MP4 형식으로 변환하여 반환"""
+    try:
+        verify_user_exists(user_id)
+        
+        ensure_db_connection()
+        
+        # 동영상 정보 조회
+        cursor.execute(
+            "SELECT FILE_PATH, FILE_NAME, FILE_URL FROM vss_videos WHERE ID = ? AND USER_ID = ?",
+            (video_id, user_id)
+        )
+        row = cursor.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="동영상을 찾을 수 없거나 권한이 없습니다.")
+        
+        file_path = Path(row[0])
+        file_name = row[1]
+        file_url = row[2]
+        
+        # 파일이 존재하는지 확인
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="동영상 파일을 찾을 수 없습니다.")
+        
+        # 파일 확장자 확인
+        file_ext = file_path.suffix.lower()
+        if file_ext not in UNSUPPORTED_VIDEO_FORMATS:
+            # 이미 지원하는 형식이면 원본 URL 반환
+            return {
+                "success": True,
+                "converted_url": build_file_url(file_url),
+                "message": "이미 지원하는 형식입니다."
+            }
+        
+        # 변환된 파일 경로 생성
+        base_name = file_path.stem
+        converted_filename = f"{base_name}_converted.mp4"
+        converted_path = converted_videos_dir / converted_filename
+        converted_url = f"/converted-videos/{converted_filename}"
+        
+        # 이미 변환된 파일이 있으면 그대로 반환
+        if converted_path.exists():
+            logger.info(f"변환된 파일이 이미 존재함: {converted_path}")
+            return {
+                "success": True,
+                "converted_url": build_file_url(converted_url),
+                "message": "변환된 동영상이 준비되었습니다."
+            }
+        
+        # 동영상 변환 실행
+        logger.info(f"동영상 변환 시작: {file_path} -> {converted_path}")
+        success = convert_video_to_mp4(str(file_path), str(converted_path))
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="동영상 변환에 실패했습니다.")
+        
+        return {
+            "success": True,
+            "converted_url": build_file_url(converted_url),
+            "message": "동영상이 MP4로 변환되었습니다."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"동영상 변환 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"동영상 변환 중 오류가 발생했습니다: {str(e)}")
+
 # 동영상 업로드 및 조회 API
 @app.post("/upload-video")
 async def upload_video_to_db(
@@ -2298,24 +2647,33 @@ async def delete_video(video_id: int, user_id: str = Query(...)):
         clips_dir = Path("./clips")
         if clips_dir.exists():
             try:
-                # 동영상 파일명에서 확장자 제거하여 base_name 추출
-                if file_path:
-                    base_name = file_path.stem  # 확장자 제거
+                # 동영상 파일명 추출 (확장자 포함)
+                video_filename = None
+                if file_path and file_path.exists():
+                    video_filename = file_path.name
                 elif file_url:
-                    # FILE_URL에서 파일명 추출 후 확장자 제거
-                    filename = file_url.replace("/video-files/", "").lstrip("/")
-                    if filename:
-                        base_name = Path(filename).stem
-                    else:
-                        base_name = None
-                else:
-                    base_name = None
+                    # FILE_URL에서 파일명 추출 (예: /video-files/filename.ext -> filename.ext)
+                    video_filename = file_url.replace("/video-files/", "").lstrip("/")
+                elif db_file_path:
+                    # DB의 FILE_PATH에서 파일명 추출
+                    video_filename = Path(db_file_path).name
                 
-                if base_name:
+                if video_filename:
+                    # 파일명에서 확장자 제거하여 base_name 추출
+                    base_name = Path(video_filename).stem
+                    # 클립 파일명 패턴: clip_{base_name}_ 또는 clip_{full_path}_{base_name}_
+                    # 경로가 포함된 경우와 파일명만 있는 경우 모두 처리
                     deleted_clips = 0
                     # clips 디렉토리의 모든 파일 확인
                     for clip_file in clips_dir.iterdir():
-                        if clip_file.is_file() and clip_file.name.startswith(f"clip_{base_name}_"):
+                        if not clip_file.is_file():
+                            continue
+                        
+                        clip_name = clip_file.name
+                        # 패턴 1: clip_{base_name}_로 시작하는 경우 (파일명만 사용)
+                        # 패턴 2: clip_{full_path}_{base_name}_로 시작하는 경우 (경로 포함)
+                        # 두 패턴 모두 매칭되도록 base_name이 포함되어 있는지 확인
+                        if clip_name.startswith("clip_") and f"_{base_name}_" in clip_name:
                             try:
                                 clip_file.unlink()
                                 deleted_clips += 1
@@ -2326,7 +2684,9 @@ async def delete_video(video_id: int, user_id: str = Query(...)):
                     if deleted_clips > 0:
                         logger.info(f"총 {deleted_clips}개의 클립 파일이 삭제되었습니다.")
                     else:
-                        logger.info(f"삭제할 클립 파일이 없습니다. (base_name: {base_name})")
+                        logger.info(f"삭제할 클립 파일이 없습니다. (base_name: {base_name}, video_filename: {video_filename})")
+                else:
+                    logger.warning("동영상 파일명을 추출할 수 없어 클립 삭제를 건너뜁니다.")
             except Exception as e:
                 logger.warning(f"클립 삭제 중 오류 발생: {e}")
         
@@ -2571,6 +2931,276 @@ async def delete_summaries(request: DeleteSummaryRequest):
     except Exception as e:
         logger.error(f"요약 결과 삭제 실패: {e}")
         raise HTTPException(status_code=500, detail=f"요약 결과 삭제 중 오류가 발생했습니다: {str(e)}")
+
+# ============================================================================
+# 보고서 관련 API 엔드포인트
+# ============================================================================
+
+# 보고서 생성 요청 모델
+class CreateReportRequest(BaseModel):
+    user_id: str
+    title: str
+    description: Optional[str] = None
+    content: str
+    word_count: int = 0
+    video_ids: Optional[List[int]] = None
+    video_titles: Optional[List[str]] = None
+
+# 보고서 생성 응답 모델
+class CreateReportResponse(BaseModel):
+    success: bool
+    report_id: Optional[int] = None
+    message: str
+
+@app.post("/reports", response_model=CreateReportResponse)
+async def create_report(request: CreateReportRequest):
+    """보고서 생성"""
+    try:
+        user_id = request.user_id
+        title = request.title
+        description = request.description or ""
+        content = request.content
+        word_count = request.word_count or 0
+        video_ids = request.video_ids or []
+        video_titles = request.video_titles or []
+        
+        if not user_id:
+            raise HTTPException(status_code=400, detail="사용자 ID가 필요합니다.")
+        if not title:
+            raise HTTPException(status_code=400, detail="보고서 제목이 필요합니다.")
+        if not content:
+            raise HTTPException(status_code=400, detail="보고서 내용이 필요합니다.")
+        
+        verify_user_exists(user_id)
+        
+        ensure_db_connection()
+        
+        # vss_reports 테이블이 없으면 생성
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS vss_reports (
+                    ID INT AUTO_INCREMENT PRIMARY KEY,
+                    USER_ID VARCHAR(255) NOT NULL,
+                    TITLE VARCHAR(500) NOT NULL,
+                    DESCRIPTION TEXT,
+                    CONTENT LONGTEXT NOT NULL,
+                    WORD_COUNT INT DEFAULT 0,
+                    VIDEO_IDS TEXT,
+                    VIDEO_TITLES TEXT,
+                    CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UPDATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_user_id (USER_ID),
+                    INDEX idx_created_at (CREATED_AT)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            """)
+            conn.commit()
+            logger.info("vss_reports 테이블 생성 완료 또는 이미 존재함")
+        except Exception as e:
+            logger.warning(f"vss_reports 테이블 생성/확인 중 오류 (무시됨): {e}")
+        
+        # 보고서 저장
+        video_ids_json = json.dumps(video_ids) if video_ids else None
+        video_titles_json = json.dumps(video_titles) if video_titles else None
+        
+        cursor.execute("""
+            INSERT INTO vss_reports (USER_ID, TITLE, DESCRIPTION, CONTENT, WORD_COUNT, VIDEO_IDS, VIDEO_TITLES)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, title, description, content, word_count, video_ids_json, video_titles_json))
+        conn.commit()
+        
+        report_id = cursor.lastrowid
+        
+        logger.info(f"보고서 생성 완료: USER_ID={user_id}, REPORT_ID={report_id}, TITLE={title}")
+        
+        return {
+            "success": True,
+            "report_id": report_id,
+            "message": "보고서가 성공적으로 생성되었습니다."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"보고서 생성 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"보고서 생성 중 오류가 발생했습니다: {str(e)}")
+
+@app.get("/reports")
+async def get_reports(
+    user_id: str = Query(..., description="사용자 ID"),
+    page: int = Query(1, ge=1, description="페이지 번호"),
+    page_size: int = Query(10, ge=1, le=100, description="페이지당 항목 수")
+):
+    """보고서 목록 조회 (페이지네이션 지원)"""
+    try:
+        if not user_id:
+            raise HTTPException(status_code=400, detail="사용자 ID가 필요합니다.")
+        
+        verify_user_exists(user_id)
+        
+        ensure_db_connection()
+        
+        # vss_reports 테이블이 없으면 빈 목록 반환
+        try:
+            cursor.execute("SELECT COUNT(*) FROM vss_reports WHERE USER_ID = ?", (user_id,))
+        except Exception as e:
+            # 테이블이 없으면 빈 목록 반환
+            logger.warning(f"vss_reports 테이블이 없습니다: {e}")
+            return {
+                "success": True,
+                "reports": [],
+                "total": 0,
+                "page": page,
+                "page_size": page_size,
+                "pages": 0
+            }
+        
+        # 전체 개수 조회
+        cursor.execute("SELECT COUNT(*) FROM vss_reports WHERE USER_ID = ?", (user_id,))
+        total = cursor.fetchone()[0]
+        
+        # 페이지네이션 계산
+        offset = (page - 1) * page_size
+        pages = max(1, (total + page_size - 1) // page_size)
+        
+        # 보고서 목록 조회 (최신순)
+        cursor.execute("""
+            SELECT ID, TITLE, DESCRIPTION, CONTENT, WORD_COUNT, VIDEO_IDS, VIDEO_TITLES, CREATED_AT, UPDATED_AT
+            FROM vss_reports
+            WHERE USER_ID = ?
+            ORDER BY CREATED_AT DESC
+            LIMIT ? OFFSET ?
+        """, (user_id, page_size, offset))
+        
+        rows = cursor.fetchall()
+        
+        reports = []
+        for row in rows:
+            report_id, title, description, content, word_count, video_ids_json, video_titles_json, created_at, updated_at = row
+            
+            # JSON 문자열 파싱
+            video_ids = json.loads(video_ids_json) if video_ids_json else []
+            video_titles = json.loads(video_titles_json) if video_titles_json else []
+            
+            reports.append({
+                "id": report_id,
+                "report_id": report_id,
+                "title": title,
+                "description": description or "",
+                "content": content or "",
+                "word_count": word_count or 0,
+                "video_ids": video_ids,
+                "video_titles": video_titles,
+                "created_at": created_at.isoformat() if created_at else None,
+                "createdAt": created_at.isoformat() if created_at else None,
+                "updated_at": updated_at.isoformat() if updated_at else None
+            })
+        
+        logger.info(f"보고서 목록 조회 완료: USER_ID={user_id}, 총 {total}개, 페이지 {page}/{pages}")
+        
+        return {
+            "success": True,
+            "reports": reports,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "pages": pages
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"보고서 목록 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"보고서 목록 조회 중 오류가 발생했습니다: {str(e)}")
+
+@app.get("/reports/{report_id}")
+async def get_report(
+    report_id: int,
+    user_id: str = Query(..., description="사용자 ID")
+):
+    """보고서 상세 조회"""
+    try:
+        if not user_id:
+            raise HTTPException(status_code=400, detail="사용자 ID가 필요합니다.")
+        
+        verify_user_exists(user_id)
+        
+        ensure_db_connection()
+        
+        # 보고서 조회
+        cursor.execute("""
+            SELECT ID, TITLE, DESCRIPTION, CONTENT, WORD_COUNT, VIDEO_IDS, VIDEO_TITLES, CREATED_AT, UPDATED_AT
+            FROM vss_reports
+            WHERE ID = ? AND USER_ID = ?
+        """, (report_id, user_id))
+        
+        row = cursor.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="보고서를 찾을 수 없습니다.")
+        
+        report_id_db, title, description, content, word_count, video_ids_json, video_titles_json, created_at, updated_at = row
+        
+        # JSON 문자열 파싱
+        video_ids = json.loads(video_ids_json) if video_ids_json else []
+        video_titles = json.loads(video_titles_json) if video_titles_json else []
+        
+        return {
+            "success": True,
+            "report": {
+                "id": report_id_db,
+                "report_id": report_id_db,
+                "title": title,
+                "description": description or "",
+                "content": content or "",
+                "word_count": word_count or 0,
+                "video_ids": video_ids,
+                "video_titles": video_titles,
+                "created_at": created_at.isoformat() if created_at else None,
+                "createdAt": created_at.isoformat() if created_at else None,
+                "updated_at": updated_at.isoformat() if updated_at else None
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"보고서 상세 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"보고서 상세 조회 중 오류가 발생했습니다: {str(e)}")
+
+@app.delete("/reports/{report_id}")
+async def delete_report(
+    report_id: int,
+    user_id: str = Query(..., description="사용자 ID")
+):
+    """보고서 삭제"""
+    try:
+        if not user_id:
+            raise HTTPException(status_code=400, detail="사용자 ID가 필요합니다.")
+        
+        verify_user_exists(user_id)
+        
+        ensure_db_connection()
+        
+        # 보고서 소유권 확인 및 삭제
+        cursor.execute("""
+            DELETE FROM vss_reports
+            WHERE ID = ? AND USER_ID = ?
+        """, (report_id, user_id))
+        conn.commit()
+        
+        deleted_count = cursor.rowcount
+        
+        if deleted_count == 0:
+            raise HTTPException(status_code=404, detail="보고서를 찾을 수 없거나 권한이 없습니다.")
+        
+        logger.info(f"보고서 삭제 완료: USER_ID={user_id}, REPORT_ID={report_id}")
+        
+        return {
+            "success": True,
+            "message": "보고서가 성공적으로 삭제되었습니다."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"보고서 삭제 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"보고서 삭제 중 오류가 발생했습니다: {str(e)}")
 
 # CORS 설정 (Vue와 통신 가능하게)
 app.add_middleware(

@@ -1,5 +1,5 @@
 <template>
-  <div class="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300 via-gray-100 dark:from-gray-950 dark:to-gray-900 dark:via-gray-950 p-10">
+  <div class="w-full min-h-screen bg-gradient-to-br from-gray-200 to-gray-300 via-gray-100 dark:from-gray-950 dark:to-gray-900 dark:via-gray-950 p-10">
     <div class="grid lg:grid-cols-2 gap-6">
       <!-- 좌측: 비디오/업로드 -->
       <section
@@ -57,7 +57,23 @@
             <template v-else-if="videoFiles.length === 1">
               <div class="relative w-full h-full" @mouseenter="singleVideo && (hoveredVideoId = singleVideo.id)"
                 @mouseleave="hoveredVideoId = null">
-                <video v-if="singleVideo" :src="singleVideo.displayUrl"
+                <!-- 지원하지 않는 형식이고 변환 중이거나 변환되지 않은 경우 -->
+                <div v-if="singleVideo && isUnsupportedFormat(singleVideo.name || singleVideo.title || '') && (singleVideo._isConverting || !singleVideo.displayUrl?.includes('converted-videos'))" 
+                  class="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700 rounded-xl">
+                  <div v-if="singleVideo._isConverting" class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600 dark:border-gray-400 mb-2"></div>
+                  <svg v-else class="w-12 h-12 text-gray-400 dark:text-gray-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <span class="text-xs text-gray-500 dark:text-gray-400 text-center px-2">
+                    {{ singleVideo._isConverting 
+                      ? (settingStore.language === 'ko' ? '변환 중...' : 'Converting...')
+                      : (settingStore.language === 'ko' ? '변환 대기 중...' : 'Waiting for conversion...')
+                    }}
+                  </span>
+                </div>
+                <!-- 비디오 엘리먼트 표시 (변환된 MP4 또는 지원하는 형식) -->
+                <video v-else-if="singleVideo && singleVideo.displayUrl && (!isUnsupportedFormat(singleVideo.name || singleVideo.title || '') || singleVideo.displayUrl?.includes('converted-videos'))"
+                  :src="singleVideo.displayUrl"
                   class="w-full h-full rounded-xl object-cover transition-opacity duration-300" preload="metadata"
                   :ref="el => { if (el && singleVideo) videoRefs[singleVideo.id] = el }"
                   @timeupdate="updateProgress(singleVideo.id, $event)"
@@ -134,17 +150,33 @@
                         @mouseenter="hoveredVideoId = video.id" @mouseleave="hoveredVideoId = null">
                         <input type="checkbox" class="absolute top-1 left-1 z-10" v-model="selectedIndexes"
                           :value="video.id" />
-                        <video v-if="video.displayUrl" :src="video.displayUrl"
+                        <!-- 지원하지 않는 형식이고 변환 중이거나 변환되지 않은 경우 -->
+                        <div v-if="isUnsupportedFormat(video.name || video.title || '') && (video._isConverting || !video.displayUrl?.includes('converted-videos'))" 
+                          class="w-full h-full flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700 rounded-xl">
+                          <div v-if="video._isConverting" class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600 dark:border-gray-400 mb-2"></div>
+                          <svg v-else class="w-12 h-12 text-gray-400 dark:text-gray-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                          <span class="text-xs text-gray-500 dark:text-gray-400 text-center px-2">
+                            {{ video._isConverting 
+                              ? (settingStore.language === 'ko' ? '변환 중...' : 'Converting...')
+                              : (settingStore.language === 'ko' ? '변환 대기 중...' : 'Waiting for conversion...')
+                            }}
+                          </span>
+                        </div>
+                        <!-- 비디오 엘리먼트 표시 (변환된 MP4 또는 지원하는 형식) -->
+                        <video v-else-if="video.displayUrl && (!isUnsupportedFormat(video.name || video.title || '') || video.displayUrl?.includes('converted-videos'))"
+                          :src="video.displayUrl"
                           class="object-cover rounded-xl transition-opacity duration-300" preload="metadata"
                           :ref="el => (videoRefs[video.id] = el)" @ended="onVideoEnded(video.id)"
                           @timeupdate="updateProgress(video.id, $event)"
                           @loadedmetadata="onVideoMetadataLoaded(video.id, $event)"
                           :class="{ 'brightness-75': !playingVideoIds.includes(video.id) }"></video>
-                        <div v-if="video.displayUrl"
+                        <div v-if="video.displayUrl && (!isUnsupportedFormat(video.name || video.title || '') || video.displayUrl?.includes('converted-videos'))"
                           class="absolute inset-0 pointer-events-none transition-colors duration-300"
                           :class="playingVideoIds.includes(video.id) ? 'bg-transparent' : 'bg-black/20'">
                         </div>
-                        <span v-else class="text-gray-400 dark:text-gray-500">{{ tSummarize.noThumbnail }}</span>
+                        <span v-else-if="!isUnsupportedFormat(video.name || video.title || '')" class="text-gray-400 dark:text-gray-500">{{ tSummarize.noThumbnail }}</span>
                         <!-- 재생하지 않은 동영상의 영상 길이 표시 (우측 하단) -->
                         <div v-if="video.displayUrl && !playingVideoIds.includes(video.id) && durationMap[video.id]"
                           class="absolute bottom-2 right-2 px-2 py-1 bg-black/70 backdrop-blur-sm text-white text-xs font-medium rounded pointer-events-none">
@@ -233,7 +265,23 @@
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
-                  <video v-if="videoFiles[zoomedIndex]" :src="videoFiles[zoomedIndex].displayUrl"
+                  <!-- 지원하지 않는 형식이고 변환 중이거나 변환되지 않은 경우 -->
+                  <div v-if="videoFiles[zoomedIndex] && isUnsupportedFormat(videoFiles[zoomedIndex].name || videoFiles[zoomedIndex].title || '') && (videoFiles[zoomedIndex]._isConverting || !videoFiles[zoomedIndex].displayUrl?.includes('converted-videos'))" 
+                    class="w-full h-[100%] flex flex-col items-center justify-center bg-gray-200 dark:bg-gray-700 rounded-xl">
+                    <div v-if="videoFiles[zoomedIndex]._isConverting" class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600 dark:border-gray-400 mb-2"></div>
+                    <svg v-else class="w-12 h-12 text-gray-400 dark:text-gray-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 text-center px-2">
+                      {{ videoFiles[zoomedIndex]._isConverting 
+                        ? (settingStore.language === 'ko' ? '변환 중...' : 'Converting...')
+                        : (settingStore.language === 'ko' ? '변환 대기 중...' : 'Waiting for conversion...')
+                      }}
+                    </span>
+                  </div>
+                  <!-- 비디오 엘리먼트 표시 (변환된 MP4 또는 지원하는 형식) -->
+                  <video v-else-if="videoFiles[zoomedIndex] && videoFiles[zoomedIndex].displayUrl && (!isUnsupportedFormat(videoFiles[zoomedIndex].name || videoFiles[zoomedIndex].title || '') || videoFiles[zoomedIndex].displayUrl?.includes('converted-videos'))"
+                    :src="videoFiles[zoomedIndex].displayUrl"
                     class="w-full h-[100%] rounded-xl object-cover transition-all duration-300" preload="metadata"
                     :ref="el => { if (el && videoFiles[zoomedIndex]) videoRefs[videoFiles[zoomedIndex].id] = el }"
                     @timeupdate="updateProgress(videoFiles[zoomedIndex].id, $event)"
@@ -509,7 +557,82 @@ import Setting from '@/components/Setting.vue';
 import settingIcon from '@/assets/icons/setting.png';
 
 // ==================== 상수 정의 ====================
-const API_BASE_URL = 'http://localhost:8001';
+const API_BASE_URL = 'http://172.16.15.69:8001';
+
+// VIA 파일 목록 조회 함수
+async function loadViaFiles() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/via-files?purpose=vision`);
+    if (!response.ok) {
+      console.warn('VIA 파일 목록 조회 실패:', response.status);
+      return null;
+    }
+    const data = await response.json();
+    if (data && data.data) {
+      console.log('VIA 서버 파일 목록:', data.data);
+      return data.data;
+    }
+    return null;
+  } catch (error) {
+    console.error('VIA 파일 목록 조회 중 오류:', error);
+    return null;
+  }
+}
+
+// 지원하지 않는 형식 목록
+const UNSUPPORTED_VIDEO_FORMATS = ['avi', 'mkv', 'flv', 'wmv']; // 브라우저가 직접 재생하지 못하는 형식
+
+// 동영상 파일 확장자 추출 함수
+function getVideoFileExtension(filename) {
+  return filename.toLowerCase().split('.').pop();
+}
+
+// 지원하지 않는 형식인지 확인하는 함수
+function isUnsupportedFormat(filename) {
+  return UNSUPPORTED_VIDEO_FORMATS.includes(getVideoFileExtension(filename));
+}
+
+// 동영상을 MP4로 변환하는 함수
+async function convertVideoToMp4(videoId, userId, videoObject) {
+  // 변환 중 상태 표시
+  if (videoObject) {
+    videoObject._isConverting = true;
+  }
+  
+  try {
+    const response = await fetch(`${API_BASE_URL}/convert-video/${videoId}?user_id=${userId}`);
+    if (!response.ok) {
+      console.warn('동영상 변환 요청 실패:', response.status);
+      if (videoObject) {
+        videoObject._isConverting = false;
+      }
+      return null;
+    }
+    const data = await response.json();
+    if (data.success && data.converted_url) {
+      // 변환된 MP4 URL을 displayUrl로 업데이트
+      videoObject.displayUrl = data.converted_url;
+      videoObject.originUrl = data.converted_url;
+      videoObject._isConverting = false;
+      console.log('동영상 변환 완료:', {
+        title: videoObject.name || videoObject.title,
+        convertedUrl: data.converted_url
+      });
+      return data.converted_url;
+    }
+    if (videoObject) {
+      videoObject._isConverting = false;
+    }
+    return null;
+  } catch (error) {
+    console.error('동영상 변환 중 오류:', error);
+    if (videoObject) {
+      videoObject._isConverting = false;
+    }
+    return null;
+  }
+}
+
 const METADATA_TIMEOUT = 5000; // 동영상 메타데이터 로드 타임아웃 (ms)
 const CHUNK_SIZE_UPDATE_DELAY = 1000; // chunk_size 업데이트 지연 시간 (ms)
 const UPLOAD_PROCESSING_DELAY = 500; // 업로드 후 처리 지연 시간 (ms)
@@ -727,7 +850,8 @@ function createVideoObject(videoData, file = null) {
     date: videoData.date || new Date().toISOString().slice(0, 10),
     summary: videoData.summary || '',
     file: hasFile ? file : null,
-    dbId: videoData.dbId || videoData.id || videoData.video_id
+    dbId: videoData.dbId || videoData.id || videoData.video_id,
+    _isConverting: false // 변환 중 상태 추적
   };
 }
 
@@ -961,7 +1085,7 @@ async function loadVideosFromStore() {
         }
 
         // Summarize 전용 표시 URL을 분리하여 Video Storage 원본 URL(ObjectURL)과 독립
-        videoFiles.value = filteredVideos.map(v => {
+        videoFiles.value = await Promise.all(filteredVideos.map(async v => {
           const hasFile = v.file instanceof File;
           // File 객체가 있으면 새로운 ObjectURL 생성, 없으면 기존 displayUrl 또는 originUrl 사용
           const summaryObjectUrl = hasFile ? URL.createObjectURL(v.file) : null;
@@ -969,7 +1093,7 @@ async function loadVideosFromStore() {
           const displayUrl = summaryObjectUrl || v.displayUrl || v.originUrl || v.url || '';
           const originUrl = v.originUrl || v.url || displayUrl;
           
-          return {
+          const videoObj = {
             id: v.id,
             name: v.name ?? v.title,
             originUrl, // Video Storage에서 넘어온 원본 URL (삭제 시 revoke 금지)
@@ -978,9 +1102,17 @@ async function loadVideosFromStore() {
             date: v.date ?? '',
             summary: v.summary ?? '',
             file: hasFile ? v.file : null,
-            dbId: v.dbId || v.id // DB ID 저장
+            dbId: v.dbId || v.id, // DB ID 저장
+            _isConverting: false // 변환 중 상태 추적
           };
-        });
+          
+          // 지원하지 않는 형식인 경우 MP4로 변환 요청
+          if (isUnsupportedFormat(v.name || v.title || '')) {
+            await convertVideoToMp4(videoObj.dbId, userId, videoObj);
+          }
+          
+          return videoObj;
+        }));
         selectedIndexes.value = videoFiles.value.map(v => v.id);
         zoomedIndex.value = videoFiles.value.length > 0 ? 0 : null;
         // 동영상이 있으면 streaming을 true로 설정
@@ -999,6 +1131,9 @@ async function loadVideosFromStore() {
         
         // DB에서 저장된 요약 결과 로드
         await loadSummariesFromDB();
+        
+        // VIA 서버 파일 목록 조회 (동기화 확인용)
+        await loadViaFiles();
         
         // 채팅 스크롤 처리
         nextTick(() => {
@@ -1711,6 +1846,28 @@ async function onDrop(e) {
       // 업로드 완료된 동영상을 즉시 목록에 추가
       videoFiles.value.push(newVideo);
       
+      // 지원하지 않는 형식인 경우 MP4로 변환 요청 (비동기로 실행)
+      if (isUnsupportedFormat(file.name)) {
+        convertVideoToMp4(data.video_id, userId, newVideo).then(convertedUrl => {
+          if (convertedUrl) {
+            console.log('동영상 변환 완료, 미리보기 업데이트:', file.name);
+          }
+        }).catch(error => {
+          console.error('동영상 변환 실패:', error);
+        });
+      }
+      
+      // 지원하지 않는 형식인 경우 MP4로 변환 요청 (비동기로 실행)
+      if (isUnsupportedFormat(file.name)) {
+        convertVideoToMp4(data.video_id, userId, newVideo).then(convertedUrl => {
+          if (convertedUrl) {
+            console.log('동영상 변환 완료, 미리보기 업데이트:', file.name);
+          }
+        }).catch(error => {
+          console.error('동영상 변환 실패:', error);
+        });
+      }
+      
       // 프로그레스 바를 100%로 업데이트 (리스트에 추가된 후)
       const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
       if (uploadItem) {
@@ -1909,6 +2066,17 @@ async function onUpload(e) {
 
       // 업로드 완료된 동영상을 즉시 목록에 추가
       videoFiles.value.unshift(newVideo);
+      
+      // 지원하지 않는 형식인 경우 MP4로 변환 요청 (비동기로 실행)
+      if (isUnsupportedFormat(file.name)) {
+        convertVideoToMp4(data.video_id, userId, newVideo).then(convertedUrl => {
+          if (convertedUrl) {
+            console.log('동영상 변환 완료, 미리보기 업데이트:', file.name);
+          }
+        }).catch(error => {
+          console.error('동영상 변환 실패:', error);
+        });
+      }
       
       // 프로그레스 바를 100%로 업데이트 (리스트에 추가된 후)
       const uploadItem = uploadProgress.value.find(u => u.id === uploadId);
@@ -2191,7 +2359,7 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
           chatMessages.value[loadingIdx].content = `⏳ [${idx + 1}/${totalCount}] '${videoObj.name}' 요약 요청 중... (경과 시간: ${elapsed}s)`;
         }
       }
-    }, 1000); // 1초마다 업데이트 (성능 최적화)
+    }, 100); // 0.1초마다 업데이트 (소수점 실시간 표시)
     
     // 타이머 저장 (페이지가 활성화된 경우에만)
     if (document.visibilityState === 'visible') {
@@ -2251,6 +2419,15 @@ async function continueInferenceFromIndex(taskId, targetVideos, startIndex, tota
       const summaryText = data.summary || '';
       summarizedVideoMap.value[videoObj.id] = serverVideoId;
       summarizedVideoId.value = serverVideoId;
+      
+      // 요약 결과를 동영상 객체에 저장 (videoFiles.value에서 찾아서 업데이트)
+      const videoInFiles = videoFiles.value.find(v => v.id === videoObj.id);
+      if (videoInFiles) {
+        videoInFiles.summary = summaryText;
+      }
+      // videoObj에도 저장 (참조가 같은 경우를 대비)
+      videoObj.summary = summaryText;
+      
       const markedsummary = marked.parse(summaryText);
       const summaryHtml = `<div class='font-semibold'>✅ [${idx + 1}/${totalCount}] '${videoObj.name}' 요약 완료</div><br>${markedsummary}<br><div class='text-xs text-gray-500'>시간: ${elapsed}s | 서버 ID: ${serverVideoId}</div>`;
       response.value = summaryHtml;
@@ -2877,14 +3054,223 @@ function uploadVideoWithProgress(file, userId, uploadId) {
   });
 }
 
-function saveResult() {
+async function saveResult() {
   // 상태를 localStorage에 저장
   saveStateToLocalStorage();
+  
+  // 요약 결과 수집: videoFiles의 summary 속성과 chatMessages에서 추출
+  const videosWithSummary = [];
+  
+  // 1. videoFiles에서 summary 속성이 있는 동영상 수집
+  for (const video of videoFiles.value) {
+    if (video.summary && video.summary.trim()) {
+      videosWithSummary.push({
+        ...video,
+        summaryText: video.summary
+      });
+    }
+  }
+  
+  // 2. chatMessages에서 요약 결과 추출 (videoFiles에 summary가 없는 경우)
+  if (videosWithSummary.length === 0) {
+    // chatMessages에서 assistant 메시지의 요약 결과 추출
+    const summaryMessages = chatMessages.value.filter(m => 
+      m.role === 'assistant' && 
+      m.content && 
+      (m.content.includes('요약 완료') || m.content.includes('요약 (저장된 결과)'))
+    );
+    
+    if (summaryMessages.length > 0) {
+      // chatMessages에서 동영상 이름과 요약 내용 추출
+      for (const msg of summaryMessages) {
+        // HTML에서 텍스트 추출 (marked로 파싱된 HTML에서 원본 텍스트 추출)
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = msg.content;
+        const textContent = tempDiv.textContent || tempDiv.innerText || '';
+        
+        // 동영상 이름 추출 (예: '동영상명' 요약 완료)
+        const videoNameMatch = textContent.match(/'([^']+)'/);
+        if (videoNameMatch) {
+          const videoName = videoNameMatch[1];
+          const video = videoFiles.value.find(v => 
+            (v.name && v.name.includes(videoName)) || 
+            (v.title && v.title.includes(videoName))
+          );
+          
+          if (video) {
+            // HTML에서 요약 텍스트 추출 (marked HTML 제거)
+            const summaryText = extractSummaryFromHtml(msg.content);
+            if (summaryText && summaryText.trim()) {
+              video.summary = summaryText;
+              if (!videosWithSummary.find(v => v.id === video.id)) {
+                videosWithSummary.push({
+                  ...video,
+                  summaryText: summaryText
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  // 3. 전역 작업 결과에서 요약 결과 추출
+  if (videosWithSummary.length === 0 && window.__vssTaskResults) {
+    for (const [resultKey, result] of window.__vssTaskResults.entries()) {
+      if (result.summaryText && result.videoId) {
+        const video = videoFiles.value.find(v => v.id === result.videoId);
+        if (video && !videosWithSummary.find(v => v.id === video.id)) {
+          video.summary = result.summaryText;
+          videosWithSummary.push({
+            ...video,
+            summaryText: result.summaryText
+          });
+        }
+      }
+    }
+  }
+  
+  if (videosWithSummary.length === 0) {
   addChatMessage({
     id: Date.now() + Math.random(),
     role: 'system',
-    content: '💾 결과가 저장되었습니다. 다른 페이지로 이동해도 정보가 유지됩니다.'
+      content: '⚠️ 저장할 요약 결과가 없습니다. 먼저 요약을 실행해주세요.'
+    });
+    return;
+  }
+  
+  // 보고서 내용 생성
+  const reportContent = generateReportContent(videosWithSummary);
+  
+  // 보고서 제목 생성 (날짜 기반)
+  const now = new Date();
+  const dateStr = now.toLocaleDateString(settingStore.language === 'ko' ? 'ko-KR' : 'en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
   });
+  const reportTitle = settingStore.language === 'ko' 
+    ? `요약 보고서 - ${dateStr}`
+    : `Summary Report - ${dateStr}`;
+  
+  // 단어 수 계산
+  const wordCount = reportContent.split(/\s+/).filter(word => word.length > 0).length;
+  
+  // 보고서 객체 생성
+  const report = {
+    id: Date.now(),
+    title: reportTitle,
+    description: settingStore.language === 'ko' 
+      ? `${videosWithSummary.length}개의 동영상 요약 결과`
+      : `Summary results for ${videosWithSummary.length} videos`,
+    content: reportContent,
+    createdAt: now.toISOString(),
+    wordCount: wordCount,
+    videoIds: videosWithSummary.map(v => v.id),
+    videoTitles: videosWithSummary.map(v => v.name || v.title || 'Unknown')
+  };
+  
+  // 보고서 저장 (API 또는 localStorage)
+  const userId = localStorage.getItem("vss_user_id");
+  if (userId) {
+    try {
+      // API로 보고서 저장 시도
+      const response = await fetch(`${API_BASE_URL}/reports`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          title: report.title,
+          description: report.description,
+          content: report.content,
+          word_count: report.wordCount,
+          video_ids: report.videoIds,
+          video_titles: report.videoTitles
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.report_id) {
+          report.id = data.report_id;
+          addChatMessage({
+            id: Date.now() + Math.random(),
+            role: 'system',
+            content: '💾 보고서가 성공적으로 생성되었습니다. 리포트 메뉴에서 확인할 수 있습니다.'
+          });
+          return;
+        }
+      }
+    } catch (error) {
+      console.warn('보고서 API 저장 실패, localStorage에 저장:', error);
+    }
+  }
+  
+  // API 저장 실패 시 localStorage에 저장
+  const reportsKey = `vss_reports_${userId || 'guest'}`;
+  const existingReports = JSON.parse(localStorage.getItem(reportsKey) || '[]');
+  existingReports.unshift(report); // 최신 보고서를 맨 앞에 추가
+  localStorage.setItem(reportsKey, JSON.stringify(existingReports));
+  
+  addChatMessage({
+    id: Date.now() + Math.random(),
+    role: 'system',
+    content: '💾 보고서가 생성되었습니다. 리포트 메뉴에서 확인할 수 있습니다.'
+  });
+}
+
+// HTML에서 순수 텍스트 요약 추출 함수
+function extractSummaryFromHtml(htmlContent) {
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = htmlContent;
+  
+  // '요약 완료' 또는 '요약 (저장된 결과)' 텍스트 제거
+  const textContent = tempDiv.textContent || tempDiv.innerText || '';
+  
+  // 동영상 이름과 "요약 완료" 텍스트 제거
+  let summaryText = textContent
+    .replace(/✅\s*\[?\d+\/?\d*\]?\s*'[^']+'\s*요약\s*(완료|\(저장된 결과\))/g, '')
+    .replace(/시간:\s*\d+\.\d+s/g, '')
+    .replace(/서버\s*ID:\s*\d+/g, '')
+    .trim();
+  
+  // 빈 줄 정리
+  summaryText = summaryText.replace(/\n{3,}/g, '\n\n');
+  
+  return summaryText;
+}
+
+// 보고서 내용 생성 함수
+function generateReportContent(videos) {
+  const lines = [];
+  
+  // 헤더
+  lines.push('# 요약 보고서\n');
+  lines.push(`생성일: ${new Date().toLocaleDateString(settingStore.language === 'ko' ? 'ko-KR' : 'en-US')}\n`);
+  lines.push(`동영상 수: ${videos.length}개\n`);
+  lines.push('---\n');
+  
+  // 각 동영상별 요약
+  videos.forEach((video, index) => {
+    const videoName = video.name || video.title || `동영상 ${index + 1}`;
+    const summaryText = video.summaryText || video.summary || '';
+    
+    if (!summaryText.trim()) return; // 요약이 없으면 건너뛰기
+    
+    lines.push(`\n## ${index + 1}. ${videoName}\n`);
+    if (video.date) {
+      lines.push(`**날짜:** ${video.date}\n`);
+    }
+    lines.push('\n');
+    lines.push(summaryText);
+    lines.push('\n');
+    lines.push('---\n');
+  });
+  
+  return lines.join('\n');
 }
 </script>
 

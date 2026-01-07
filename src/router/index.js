@@ -7,6 +7,7 @@ import Summarize from "@/components/Summarize.vue";
 import search from "@/components/Search.vue"; // 파일명 유지, 변수명/라우트명 카멜/파스칼 통일
 import Report from "@/components/Report.vue";
 import Setting from "@/components/Setting.vue";
+import Help from "@/components/Help.vue";
 import Login from "@/components/Login.vue";
 import Register from "@/components/Register.vue";
 import ResetPassword from "@/components/ResetPassword.vue";
@@ -17,6 +18,7 @@ const routes = [
   { path: "/search", name: "search", component: search },
   { path: "/report", name: "Report", component: Report },
   { path: "/setting", name: "Setting", component: Setting },
+  { path: "/help", name: "Help", component: Help },
   { path: "/login", name: "Login", component: Login },
   { path: "/register", name: "Register", component: Register },
   { path: "/reset-password", name: "ResetPassword", component: ResetPassword }
