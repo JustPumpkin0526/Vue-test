@@ -1,0 +1,27 @@
+# VSS API Server Requirements
+# Python 3.8+ required
+
+# Web Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Video Processing
+moviepy>=1.0.3
+
+# HTTP Client
+aiohttp>=3.9.0
+
+# Database
+mariadb>=1.1.0
+# 또는 MySQL 사용 시:
+# mysql-connector-python>=8.2.0
+
+# Security
+bcrypt>=4.0.0
+
+# Environment Variables (선택사항이지만 권장)
+python-dotenv>=1.0.0
+
+# Data Validation
+pydantic>=2.0.0
+
