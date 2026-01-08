@@ -20,6 +20,75 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
+import asyncio
+import aiofiles
+import logging
+from logging.handlers import TimedRotatingFileHandler
+
+# ==================== 로깅 설정 ====================
+# 로그 디렉토리 생성
+log_dir = Path("./logs")
+log_dir.mkdir(exist_ok=True)
+
+# 오늘 날짜를 파일명에 포함
+today = datetime.now().strftime('%Y-%m-%d')
+log_file = log_dir / f"vss-api-{today}.log"
+uvicorn_log_file = log_dir / f"uvicorn-{today}.log"
+uvicorn_access_log_file = log_dir / f"uvicorn-access-{today}.log"
+
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        # 콘솔 출력
+        logging.StreamHandler(),
+        # 파일 출력 (매일 자정에 새 파일 생성, 30일 보관)
+        TimedRotatingFileHandler(
+            filename=str(log_file),
+            when='midnight',  # 매일 자정
+            interval=1,  # 1일마다
+            backupCount=30,  # 30일치 보관
+            encoding='utf-8',
+            delay=False
+        )
+    ]
+)
+
+# FastAPI와 uvicorn 로거 설정
+uvicorn_logger = logging.getLogger("uvicorn")
+uvicorn_access_logger = logging.getLogger("uvicorn.access")
+uvicorn_error_logger = logging.getLogger("uvicorn.error")
+
+# uvicorn 로그도 파일에 기록
+uvicorn_file_handler = TimedRotatingFileHandler(
+    filename=str(uvicorn_log_file),
+    when='midnight',
+    interval=1,
+    backupCount=30,
+    encoding='utf-8',
+    delay=False
+)
+uvicorn_file_handler.setFormatter(
+    logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+)
+
+uvicorn_access_file_handler = TimedRotatingFileHandler(
+    filename=str(uvicorn_access_log_file),
+    when='midnight',
+    interval=1,
+    backupCount=30,
+    encoding='utf-8',
+    delay=False
+)
+uvicorn_access_file_handler.setFormatter(
+    logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+)
+
+uvicorn_logger.addHandler(uvicorn_file_handler)
+uvicorn_access_logger.addHandler(uvicorn_access_file_handler)
+uvicorn_error_logger.addHandler(uvicorn_file_handler)
 
 # .env 파일 지원 (python-dotenv가 설치되어 있는 경우)
 try:
@@ -93,14 +162,16 @@ VIA_UPLOAD_TIMEOUT_MAX = 600  # 최대 업로드 타임아웃 (초)
 VIA_UPLOAD_TIMEOUT_PER_MB = 10  # 1MB당 타임아웃 (초)
 
 # Ollama 설정
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://172.16.15.69:11434")
+# 같은 서버에서 실행 중이면 localhost 사용, 다른 서버면 해당 IP 주소 사용
+# 기본 포트는 11434입니다 (Ollama 기본 포트)
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
 OLLAMA_TIMEOUT = 60  # Ollama API 타임아웃 (초)
 
 # 파일 설정
 ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv'}
 ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
-FILE_BUFFER_SIZE = 8 * 1024 * 1024  # 8MB
+FILE_BUFFER_SIZE = 16 * 1024 * 1024  # 16MB (업로드 성능 최적화)
 CLIP_CLEANUP_AGE = 86400  # 클립 파일 정리 기준 시간 (24시간, 초)
 
 # 타임아웃 설정
@@ -115,7 +186,7 @@ IP_PATTERN = r'^(\d{1,3}\.){3}\d{1,3}$'
 EMAIL_CODE_EXPIRY_MINUTES = 10
 
 # VIA 서버 요약 기본 설정 (generate-clips용)
-DEFAULT_SUMMARIZE_PROMPT = "You are a video monitoring and incident analysis system. Describe the events in this video and look for any anomalies. Start each sentence with the start and end timestamp of the event."
+DEFAULT_SUMMARIZE_PROMPT = "You are a video monitoring system. Describe the events in this video and look for any anomalies. Start each sentence with the start and end timestamp of the event."
 DEFAULT_CAPTION_SUMMARIZATION_PROMPT = "You will be given captions from sequential clips of a video. Aggregate captions in the format start_time:end_time:caption based on whether captions are related to one another or create a continuous scene."
 DEFAULT_SUMMARY_AGGREGATION_PROMPT = "Based on the available information, generate a summary that captures the important events in the video. The summary should be organized chronologically and in logical sections. This should be a concise, yet descriptive summary of all the important events. The format should be intuitive and easy for a user to read and understand what happened. Format the output in Markdown so it can be displayed nicely. Timestamps are in seconds so please format them as SS.SSS"
 
@@ -219,13 +290,12 @@ async def create_summarize_prompt(user_prompt: str) -> str:
         ollama_prompt = f""" 사용자 질문: {user_prompt}
         사용자 질문을 아래 조건에 맞는 프롬프트로 수정해주세요.
 
-        아래는 예시 프롬프트입니다. 해당 프롬프트의 형태를 참고하여 사용자 질문을 프롬프트로 수정해주세요.
-        {DEFAULT_SUMMARIZE_PROMPT}
+        기본 프롬프트: {DEFAULT_SUMMARIZE_PROMPT}
+        위 기본 프롬프트의 형태를 참고하여 사용자 질문을 기본 프롬프트의 형태처럼 변형시켜주세요.
 
-        조건:
-        1. 목적을 정확히 명시해주세요.
-        2. 시작 시간 - 종료 시간 형식의 타임스탬프를 출력하게 해주세요.
-        3. 출력 결과는 영어여야 하며 문장의 형태로 출력해주세요.
+        아래 조건에 맞는 형태를 유지해주세요.
+        1. 시작 시간 - 종료 시간 형태의 타임스탬프를 출력하게 해주세요.
+        2. 출력 결과는 영어여야 하며 문장의 형태로 출력해주세요.
         """
         
         # Ollama API 호출 (aiohttp 사용)
@@ -239,7 +309,7 @@ async def create_summarize_prompt(user_prompt: str) -> str:
                     "content": """You are a text generator.
                                 Return ONLY the final prompt text.
                                 Do NOT add any preface, explanation, or quotes.
-                                Do NOT say things like "Here is ..." or "Sure". """
+                                Do NOT say things like "Here is ..." or "Sure"."""
                 },
                 {
                     "role": "user",
@@ -248,7 +318,7 @@ async def create_summarize_prompt(user_prompt: str) -> str:
             ],
             "stream": False,
             "options": {
-                "temperature": 0.0,  # 창의성과 일관성의 균형
+                "temperature": 0.6,  # 창의성과 일관성의 균형
                 "num_predict": 1000  # 충분한 길이의 프롬프트 생성
             }
         }
@@ -1124,10 +1194,20 @@ async def generate_clips(
                             error_text = await ollama_response.text()
                             print(f"Ollama API 호출 실패 (HTTP {ollama_response.status}): {error_text}")
                 except aiohttp.ClientConnectorError as e:
-                    print(f"Ollama 서버에 연결할 수 없습니다: {e}")
-                    print("Ollama가 실행 중인지 확인하세요: ollama serve")
+                    logger.error(f"Ollama 서버에 연결할 수 없습니다: {e}")
+                    logger.error(f"Ollama 서버 주소: {OLLAMA_BASE_URL}")
+                    logger.warning("Ollama 연결 실패로 타임스탬프 추출을 건너뜁니다. VIA 서버 응답만 사용합니다.")
+                    logger.info("Ollama 서버 확인 방법:")
+                    logger.info("  1. Ollama 서버가 실행 중인지 확인: ollama serve")
+                    logger.info("  2. 네트워크 연결 확인: ping 172.16.15.69")
+                    logger.info("  3. 포트 확인: telnet 172.16.15.69 11434")
+                    logger.info("  4. 환경 변수 확인: OLLAMA_BASE_URL 설정 확인")
+                except asyncio.TimeoutError as e:
+                    logger.error(f"Ollama 서버 응답 시간 초과: {e}")
+                    logger.warning("Ollama 연결 타임아웃으로 타임스탬프 추출을 건너뜁니다.")
                 except Exception as e:
-                    print(f"Ollama를 사용한 타임스탬프 추출 중 오류 발생: {e}")
+                    logger.error(f"Ollama를 사용한 타임스탬프 추출 중 오류 발생: {e}")
+                    logger.warning("Ollama 오류로 타임스탬프 추출을 건너뜁니다.")
                 
                 print(f"VIA 서버 답변: {query_result}")
                 
@@ -1445,10 +1525,10 @@ class ConnectionPool:
         # MariaDB 연결 시도
         try:
             conn = mariadb.connect(**connection_params)
-            logger.info(f"✓ DB 연결 성공: {connection_params.get('host', 'N/A')}")
+            logger.info(f"DB 연결 성공: {connection_params.get('host', 'N/A')}")
             return conn
         except Exception as e:
-            logger.error(f"❌ DB 연결 실패: host={connection_params.get('host', 'N/A')}, error={e}")
+            logger.error(f"DB 연결 실패: host={connection_params.get('host', 'N/A')}, error={e}")
             raise
     
     def get_connection(self, timeout=5):
@@ -1488,19 +1568,25 @@ class ConnectionPool:
 # ============================================================================
 # 데이터베이스 연결 풀 초기화
 # ============================================================================
-# 데이터베이스 연결 정보 (고정값 사용 - 환경 변수 없이)
-DB_HOST = "172.16.15.69"
-DB_USER = "root"
-DB_PASSWORD = "pass0001!"  # 고정 비밀번호
-DB_PORT = 3306
-DB_NAME = "vss"
+# 데이터베이스 연결 정보 (환경 변수에서 로드, 없으면 기본값 사용)
+# 환경 변수 설정: .env 파일에 DB_HOST, DB_USER, DB_PASSWORD, DB_PORT, DB_NAME 추가
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_USER = os.getenv("DB_USER", "root")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")  # 환경 변수에서 로드 (필수)
+DB_PORT = int(os.getenv("DB_PORT", "3306"))
+DB_NAME = os.getenv("DB_NAME", "vss")
+
+# DB_PASSWORD가 설정되지 않았으면 경고
+if not DB_PASSWORD:
+    logger.warning("DB_PASSWORD가 설정되지 않았습니다!")
+    logger.warning("   .env 파일에 DB_PASSWORD를 설정하거나 환경 변수로 설정하세요.")
 
 # ConnectionPool에 명시적으로 host를 IP 주소로 전달
 # host.docker.internal 변환을 방지하기 위해 IP 주소를 문자열로 명시
 # IP 주소 형식 검증
 if not re.match(IP_PATTERN, str(DB_HOST)):
-    logger.warning(f"⚠️ DB_HOST가 IP 주소 형식이 아닙니다: {DB_HOST}")
-    logger.warning("⚠️ IP 주소 형식(예: 172.16.15.69)을 사용하는 것을 권장합니다.")
+    logger.warning(f"DB_HOST가 IP 주소 형식이 아닙니다: {DB_HOST}")
+    logger.warning("IP 주소 형식(예: 172.16.15.69)을 사용하는 것을 권장합니다.")
 
 # IP 주소를 명시적으로 문자열로 변환 (호스트명 변환 방지)
 db_host_str = str(DB_HOST).strip()
@@ -1525,10 +1611,10 @@ try:
     conn = db_pool.get_connection()
     conn.autocommit = True  # 자동 커밋 활성화
     cursor = conn.cursor()
-    logger.info("✓ 데이터베이스 연결 성공 (전역 연결)")
+    logger.info("데이터베이스 연결 성공 (전역 연결)")
 except Exception as e:
-    logger.warning(f"⚠️ 전역 데이터베이스 연결 실패 (시작 시점): {e}")
-    logger.warning("⚠️ 첫 요청 시 연결을 다시 시도합니다.")
+    logger.warning(f"전역 데이터베이스 연결 실패 (시작 시점): {e}")
+    logger.warning("첫 요청 시 연결을 다시 시도합니다.")
     conn = None
     cursor = None
 
@@ -1540,9 +1626,9 @@ def ensure_db_connection():
             conn = db_pool.get_connection()
             conn.autocommit = True
             cursor = conn.cursor()
-            logger.info("✓ 데이터베이스 연결 성공 (재연결)")
+            logger.info("데이터베이스 연결 성공 (재연결)")
         except Exception as e:
-            logger.error(f"❌ 데이터베이스 연결 실패: {e}")
+            logger.error(f"데이터베이스 연결 실패: {e}")
             raise HTTPException(status_code=500, detail=f"데이터베이스 연결에 실패했습니다: {str(e)}")
 
 def verify_user_exists(user_id: str):
@@ -1645,7 +1731,7 @@ SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", SMTP_USER)
 if SMTP_USER and SMTP_PASSWORD:
     logger.info(f"SMTP 설정 로드 완료: SERVER={SMTP_SERVER}, PORT={SMTP_PORT}, USER={SMTP_USER[:3]}***")
 else:
-    logger.warning("⚠️ SMTP 설정이 로드되지 않았습니다!")
+    logger.warning("SMTP 설정이 로드되지 않았습니다!")
     logger.warning(f"   SMTP_USER: {'설정됨' if SMTP_USER else '비어있음'}")
     logger.warning(f"   SMTP_PASSWORD: {'설정됨' if SMTP_PASSWORD else '비어있음'}")
     logger.warning("   .env 파일을 확인하거나 setup_smtp.py를 실행하여 설정하세요.")
@@ -2317,6 +2403,31 @@ async def upload_profile_image(user_id: str, file: UploadFile = File(...)):
         logger.error(f"프로필 이미지 업로드 실패: {e}")
         raise HTTPException(status_code=500, detail=f"프로필 이미지 업로드 중 오류가 발생했습니다: {str(e)}")
 
+# VIA 서버 업로드 함수 (백그라운드 작업 - 비동기)
+async def upload_to_via_server_background(file_path: str, video_id: int, user_id: str):
+    """VIA 서버에 동영상을 업로드하고 DB에 VIDEO_ID 업데이트 (백그라운드 작업)"""
+    try:
+        # 파일이 존재하는지 확인
+        if not Path(file_path).exists():
+            logger.error(f"파일이 존재하지 않습니다: {file_path}")
+            return
+        
+        await ensure_vss_client()
+        via_video_id = await vss_client.upload_video(str(file_path))
+        logger.info(f"VIA 서버 업로드 성공: video_id={via_video_id}, db_video_id={video_id}")
+        
+        # DB에 VIDEO_ID 업데이트
+        ensure_db_connection()
+        cursor.execute(
+            "UPDATE vss_videos SET VIDEO_ID = ? WHERE ID = ? AND USER_ID = ?",
+            (via_video_id, video_id, user_id)
+        )
+        conn.commit()
+        logger.info(f"VIDEO_ID 업데이트 완료: video_id={video_id}, via_video_id={via_video_id}")
+    except Exception as e:
+        logger.warning(f"VIA 서버 업로드 실패 (video_id={video_id}): {e}")
+        # VIA 업로드 실패해도 계속 진행 (나중에 재시도 가능)
+
 # 동영상 메타데이터 추출 함수 (백그라운드 작업)
 def extract_video_metadata(file_path: str, video_id: int, filename: str):
     """동영상 메타데이터를 추출하여 DB에 업데이트"""
@@ -2461,16 +2572,16 @@ async def upload_video_to_db(
         if file_ext not in ALLOWED_VIDEO_EXTENSIONS:
             raise HTTPException(status_code=400, detail=f"지원하지 않는 파일 형식입니다: {file_ext}")
         
-        # 2. DB 쿼리 최적화: 사용자 검증과 중복 체크를 하나의 쿼리로 통합
+        # 2. DB 쿼리 최적화: EXISTS 사용으로 성능 개선 (COUNT보다 빠름)
         ensure_db_connection()
         cursor.execute(
             """SELECT 
-                   (SELECT COUNT(*) FROM vss_user WHERE ID = ?) as user_exists,
-                   (SELECT COUNT(*) FROM vss_videos WHERE USER_ID = ? AND FILE_NAME = ?) as duplicate_exists""",
+                   EXISTS(SELECT 1 FROM vss_user WHERE ID = ?) as user_exists,
+                   EXISTS(SELECT 1 FROM vss_videos WHERE USER_ID = ? AND FILE_NAME = ?) as duplicate_exists""",
             (user_id, user_id, file.filename)
         )
         result = cursor.fetchone()
-        user_exists, duplicate_exists = result[0], result[1]
+        user_exists, duplicate_exists = bool(result[0]), bool(result[1])
         
         if not user_exists:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
@@ -2485,35 +2596,37 @@ async def upload_video_to_db(
         file_path = videos_dir / unique_filename
         file_url = f"/video-files/{unique_filename}"
         
-        # 4. 파일 저장
+        # 4. 파일 저장 (비동기 I/O로 최적화 - aiofiles 사용)
         file_size = 0
-        with open(file_path, "wb", buffering=FILE_BUFFER_SIZE) as buffer:
-            shutil.copyfileobj(file.file, buffer, length=FILE_BUFFER_SIZE)
-            file_size = buffer.tell()
+        async with aiofiles.open(file_path, "wb") as buffer:
+            # 파일을 청크 단위로 읽어서 저장 (비동기 방식으로 더 빠름)
+            while True:
+                chunk = await file.read(FILE_BUFFER_SIZE)
+                if not chunk:
+                    break
+                await buffer.write(chunk)
+                file_size += len(chunk)
         
-        # 5. VIA 서버에 업로드하여 video_id 얻기
-        await ensure_vss_client()
-        
-        via_video_id = None
-        try:
-            via_video_id = await vss_client.upload_video(str(file_path))
-            logger.info(f"VIA 서버 업로드 성공: video_id={via_video_id}")
-        except Exception as e:
-            logger.warning(f"VIA 서버 업로드 실패: {e}")
-            # VIA 업로드 실패 시에도 DB에는 저장하되 VIDEO_ID는 None으로 저장
-            # 나중에 재시도할 수 있도록
-        
-        # 6. DB 저장 (VIA 서버의 video_id 포함)
+        # 5. DB 저장
         cursor.execute(
             """INSERT INTO vss_videos 
                (USER_ID, FILE_NAME, FILE_PATH, FILE_SIZE, FILE_URL, WIDTH, HEIGHT, DURATION, VIDEO_ID) 
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (user_id, file.filename, str(file_path), file_size, file_url, None, None, None, via_video_id)
+            (user_id, file.filename, str(file_path), file_size, file_url, None, None, None, None)
         )
         # autocommit이 활성화되어 있으므로 명시적 커밋 불필요
         video_id = cursor.lastrowid
         
-        # 7. 백그라운드 작업 설정 (메타데이터 추출)
+        # 6. VIA 서버 업로드 (동기적으로 실행 - 완료될 때까지 대기)
+        try:
+            await upload_to_via_server_background(str(file_path), video_id, user_id)
+            logger.info(f"VIA 서버 업로드 완료: video_id={video_id}")
+        except Exception as e:
+            logger.error(f"VIA 서버 업로드 실패 (video_id={video_id}): {e}")
+            # VIA 업로드 실패해도 업로드는 성공으로 처리 (나중에 재시도 가능)
+            # 하지만 사용자에게 경고 메시지 포함
+        
+        # 7. 메타데이터 추출은 백그라운드로 실행 (VIA 업로드 완료 후)
         background_tasks.add_task(extract_video_metadata, str(file_path), video_id, file.filename)
         
         return {
@@ -2535,7 +2648,7 @@ async def upload_video_to_db(
         raise HTTPException(status_code=500, detail=f"동영상 업로드 중 오류가 발생했습니다: {str(e)}")
 
 @app.get("/videos")
-async def get_videos(user_id: str):
+async def get_videos(user_id: str = Query(...)):
     """사용자의 동영상 목록 조회"""
     try:
         ensure_db_connection()
@@ -3223,12 +3336,12 @@ async def startup_event():
             conn = db_pool.get_connection()
             conn.autocommit = True
             cursor = conn.cursor()
-            logger.info("✓ 데이터베이스 연결 성공 (startup)")
+            logger.info("데이터베이스 연결 성공 (startup)")
         except Exception as e:
-            logger.warning(f"⚠️ 데이터베이스 연결 실패 (startup): {e}")
-            logger.warning("⚠️ 첫 요청 시 연결을 다시 시도합니다.")
+            logger.warning(f"데이터베이스 연결 실패 (startup): {e}")
+            logger.warning("첫 요청 시 연결을 다시 시도합니다.")
     
-    logger.info("✓ 애플리케이션이 시작되었습니다. VIA 서버의 query_video를 사용합니다.")
+    logger.info("애플리케이션이 시작되었습니다. VIA 서버의 query_video를 사용합니다.")
 
 @app.on_event("shutdown")
 async def shutdown_event():

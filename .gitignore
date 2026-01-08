@@ -26,3 +26,29 @@ dist-ssr
 *.avi
 .env
 *.png
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Database
+*.db
+*.sqlite
+
+# IDE
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+
+# 환경 변수 (예시 파일은 커밋 가능)
+# .env.example은 커밋 가능
