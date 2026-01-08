@@ -280,14 +280,13 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
-import api from "@/services/api";
 import { marked } from 'marked';
 import { useSettingStore } from '@/stores/settingStore';
 
 const settingStore = useSettingStore();
 
 // ==================== 상수 정의 ====================
-const API_BASE_URL = 'http://172.16.15.69:8001';
+const API_BASE_URL = 'http://localhost:8001';
 
 // ==================== 다국어 지원 ====================
 const reportTranslations = {

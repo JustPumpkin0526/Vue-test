@@ -140,7 +140,7 @@ async function login() {
   successMessage.value = "";
 
   try {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://172.16.15.69:8001';
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
     const res = await axios.post(`${API_BASE_URL}/login`, {
       username: id.value.trim(),
       password: pw.value

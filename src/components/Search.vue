@@ -472,7 +472,19 @@
                         <p class="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">{{ t.selectedVideos }}</p>
                         <div v-for="video in message.selectedVideos" :key="video.id"
                           class="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-xl">
-                          <video :src="video.displayUrl" class="w-32 h-20 object-cover rounded flex-shrink-0"></video>
+                          <video 
+                            v-if="video.displayUrl" 
+                            :src="video.displayUrl" 
+                            class="w-32 h-20 object-cover rounded flex-shrink-0"
+                            @error="(e) => handleChatVideoError(video, e)"
+                            crossorigin="anonymous"
+                            preload="metadata"
+                          ></video>
+                          <div v-else class="w-32 h-20 bg-gray-200 dark:bg-gray-600 rounded flex-shrink-0 flex items-center justify-center">
+                            <svg class="w-8 h-8 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </div>
                           <div class="flex-1 min-w-0">
                             <p class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{{ video.title }}</p>
                             <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ video.date }}</p>
@@ -610,12 +622,18 @@ import { useSummaryVideoStore } from '@/stores/summaryVideoStore';
 import { useSettingStore } from '@/stores/settingStore';
 
 // ==================== 상수 정의 ====================
-const API_BASE_URL = 'http://172.16.15.69:8001';
+const API_BASE_URL = 'http://localhost:8001';
 
 // VIA 파일 목록 조회 함수
 async function loadViaFiles() {
+  // AbortController 생성 및 추적
+  const abortController = new AbortController();
+  abortControllers.value.push(abortController);
+  
   try {
-    const response = await fetch(`${API_BASE_URL}/via-files?purpose=vision`);
+    const response = await fetch(`${API_BASE_URL}/via-files?purpose=vision`, {
+      signal: abortController.signal
+    });
     if (!response.ok) {
       console.warn('VIA 파일 목록 조회 실패:', response.status);
       return null;
@@ -627,8 +645,18 @@ async function loadViaFiles() {
     }
     return null;
   } catch (error) {
+    // AbortError는 정상적인 취소이므로 무시
+    if (error.name === 'AbortError') {
+      return null;
+    }
     console.error('VIA 파일 목록 조회 중 오류:', error);
     return null;
+  } finally {
+    // 완료된 AbortController 제거
+    const index = abortControllers.value.indexOf(abortController);
+    if (index > -1) {
+      abortControllers.value.splice(index, 1);
+    }
   }
 }
 
@@ -639,8 +667,14 @@ async function convertVideoToMp4(videoId, userId, videoObject) {
     videoObject._isConverting = true;
   }
   
+  // AbortController 생성 및 추적
+  const abortController = new AbortController();
+  abortControllers.value.push(abortController);
+  
   try {
-    const response = await fetch(`${API_BASE_URL}/convert-video/${videoId}?user_id=${userId}`);
+    const response = await fetch(`${API_BASE_URL}/convert-video/${videoId}?user_id=${userId}`, {
+      signal: abortController.signal
+    });
     if (!response.ok) {
       console.warn('동영상 변환 요청 실패:', response.status);
       if (videoObject) {
@@ -665,11 +699,24 @@ async function convertVideoToMp4(videoId, userId, videoObject) {
     }
     return null;
   } catch (error) {
+    // AbortError는 정상적인 취소이므로 무시
+    if (error.name === 'AbortError') {
+      if (videoObject) {
+        videoObject._isConverting = false;
+      }
+      return null;
+    }
     console.error('동영상 변환 중 오류:', error);
     if (videoObject) {
       videoObject._isConverting = false;
     }
     return null;
+  } finally {
+    // 완료된 AbortController 제거
+    const index = abortControllers.value.indexOf(abortController);
+    if (index > -1) {
+      abortControllers.value.splice(index, 1);
+    }
   }
 }
 const UNSUPPORTED_VIDEO_FORMATS = ['avi', 'mkv', 'flv', 'wmv']; // 브라우저가 직접 재생하지 못하는 형식
@@ -781,6 +828,9 @@ const chatNameInput = ref(null);
 const showUploadModal = ref(false);
 const uploadProgress = ref([]); // { id, fileName, progress, status, uploaded, total }
 const activeUploads = ref({}); // { uploadId: XMLHttpRequest } - 진행 중인 업로드 추적
+
+// 진행 중인 fetch 요청을 취소하기 위한 AbortController
+const abortControllers = ref([]); // 진행 중인 fetch 요청 추적
 
 // 시간 표시용 맵 (Summary.vue 스타일 이식)
 const currentTimeMap = ref({});
@@ -953,6 +1003,10 @@ async function contextRemoveSummary() {
     return;
   }
   
+  // AbortController 생성 및 추적
+  const abortController = new AbortController();
+  abortControllers.value.push(abortController);
+  
   try {
     const response = await fetch(`${API_BASE_URL}/summaries`, {
       method: 'DELETE',
@@ -962,7 +1016,8 @@ async function contextRemoveSummary() {
       body: JSON.stringify({
         video_ids: videosToRemoveSummary,
         user_id: userId
-      })
+      }),
+      signal: abortController.signal
     });
     
     if (!response.ok) {
@@ -980,8 +1035,18 @@ async function contextRemoveSummary() {
       alert('요약 결과 제거에 실패했습니다.');
     }
   } catch (error) {
+    // AbortError는 정상적인 취소이므로 무시
+    if (error.name === 'AbortError') {
+      return;
+    }
     console.error('요약 결과 제거 중 오류:', error);
     alert(`요약 결과 제거 중 오류가 발생했습니다: ${error.message}`);
+  } finally {
+    // 완료된 AbortController 제거
+    const index = abortControllers.value.indexOf(abortController);
+    if (index > -1) {
+      abortControllers.value.splice(index, 1);
+    }
   }
 }
 
@@ -1024,7 +1089,42 @@ const selectedVideos = computed(() => items.value.filter(v => selectedIds.value.
 
 const currentChatMessages = computed(() => {
   if (chatSessions.value.length === 0) return [];
-  return chatSessions.value[currentChatIndex.value]?.messages || [];
+  const messages = chatSessions.value[currentChatIndex.value]?.messages || [];
+  
+  // selectedVideos의 displayUrl을 최신 정보로 업데이트
+  return messages.map(message => {
+    if (message.isInitial && message.selectedVideos) {
+      const updatedVideos = message.selectedVideos.map(savedVideo => {
+        // items.value에서 최신 동영상 정보 찾기
+        const currentVideo = items.value.find(v => 
+          v.id === savedVideo.id || v.dbId === savedVideo.dbId || v.id === savedVideo.dbId
+        );
+        
+        if (currentVideo) {
+          // 최신 정보로 업데이트
+          return {
+            id: savedVideo.id,
+            dbId: savedVideo.dbId || savedVideo.id,
+            title: currentVideo.title || savedVideo.title,
+            displayUrl: currentVideo.displayUrl || currentVideo.originUrl || '',
+            date: currentVideo.date || savedVideo.date
+          };
+        } else {
+          // items.value에 없으면 저장된 정보 유지 (서버에서 조회 필요)
+          return {
+            ...savedVideo,
+            displayUrl: savedVideo.displayUrl || ''
+          };
+        }
+      });
+      
+      return {
+        ...message,
+        selectedVideos: updatedVideos
+      };
+    }
+    return message;
+  });
 });
 
 const allUploadsComplete = computed(() => {
@@ -1111,6 +1211,10 @@ function restoreSearchStateFromLocalStorage() {
     if (showSearchSidebar.value) {
       nextTick(() => {
         scrollToBottom();
+        // 동영상 목록이 로드된 후 채팅 메시지의 selectedVideos 업데이트
+        if (items.value.length > 0) {
+          updateChatVideoUrls(chatSessions.value);
+        }
       });
     }
     
@@ -1131,9 +1235,21 @@ function autoSaveSearchState() {
 }
 
 onMounted(() => {
-  loadVideosFromStorage();
+  loadVideosFromStorage().then(() => {
+    // 동영상 목록 로드 후 채팅 메시지의 selectedVideos 업데이트
+    if (items.value.length > 0 && chatSessions.value.length > 0) {
+      updateChatVideoUrls(chatSessions.value);
+    }
+  });
   // Summarize.vue에서 동영상이 추가되었을 때 이벤트 리스너
-  window.addEventListener('search-videos-updated', loadVideosFromStorage);
+  window.addEventListener('search-videos-updated', () => {
+    loadVideosFromStorage().then(() => {
+      // 동영상 목록 업데이트 후 채팅 메시지의 selectedVideos 업데이트
+      if (items.value.length > 0 && chatSessions.value.length > 0) {
+        updateChatVideoUrls(chatSessions.value);
+      }
+    });
+  });
   // 다른 메뉴가 열렸을 때 컨텍스트 메뉴 닫기
   window.addEventListener('profile-menu-opened', closeContextMenu);
   
@@ -1143,7 +1259,17 @@ onMounted(() => {
 
 onActivated(() => {
   if (items.value.length === 0) {
-    loadVideosFromStorage();
+    loadVideosFromStorage().then(() => {
+      // 동영상 목록 로드 후 채팅 메시지의 selectedVideos 업데이트
+      if (items.value.length > 0 && chatSessions.value.length > 0) {
+        updateChatVideoUrls(chatSessions.value);
+      }
+    });
+  } else {
+    // 동영상 목록이 이미 있으면 채팅 메시지의 selectedVideos 업데이트
+    if (chatSessions.value.length > 0) {
+      updateChatVideoUrls(chatSessions.value);
+    }
   }
   // 검색 상태 복원 (페이지 재활성화 시)
   restoreSearchStateFromLocalStorage();
@@ -1152,6 +1278,64 @@ onActivated(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('search-videos-updated', loadVideosFromStorage);
   window.removeEventListener('profile-menu-opened', closeContextMenu);
+  
+  // 진행 중인 모든 fetch 요청 취소
+  abortControllers.value.forEach(controller => {
+    try {
+      controller.abort();
+    } catch (e) {
+      // 이미 취소되었거나 에러가 발생해도 무시
+    }
+  });
+  abortControllers.value = [];
+  
+  // 진행 중인 모든 업로드 취소
+  Object.keys(activeUploads.value).forEach(uploadId => {
+    const xhr = activeUploads.value[uploadId];
+    if (xhr && xhr.readyState !== XMLHttpRequest.DONE) {
+      try {
+        xhr.abort();
+      } catch (e) {
+        // 이미 취소되었거나 에러가 발생해도 무시
+      }
+    }
+  });
+  activeUploads.value = {};
+  
+  // 모든 비디오 요소 일시정지 및 정리
+  Object.values(videoRefs.value).forEach(videoEl => {
+    if (videoEl && videoEl instanceof HTMLVideoElement) {
+      try {
+        videoEl.pause();
+        videoEl.src = '';
+        videoEl.load();
+      } catch (e) {
+        // 에러가 발생해도 무시
+      }
+    }
+  });
+  
+  // 확대 모달 비디오 정리
+  if (zoomVideoRef.value && zoomVideoRef.value instanceof HTMLVideoElement) {
+    try {
+      zoomVideoRef.value.pause();
+      zoomVideoRef.value.src = '';
+      zoomVideoRef.value.load();
+    } catch (e) {
+      // 에러가 발생해도 무시
+    }
+  }
+  
+  // 모든 ObjectURL 정리
+  items.value.forEach(video => {
+    if (video.objectUrl) {
+      try {
+        URL.revokeObjectURL(video.objectUrl);
+      } catch (e) {
+        // 에러가 발생해도 무시
+      }
+    }
+  });
   
   // 검색 상태 저장
   saveSearchStateToLocalStorage();
@@ -1171,60 +1355,144 @@ async function loadVideosFromStorage() {
     return;
   }
 
+  // AbortController 생성 및 추적
+  const abortController = new AbortController();
+  abortControllers.value.push(abortController);
+  
   try {
-    const response = await fetch(`${API_BASE_URL}/videos?user_id=${userId}`);
+    const response = await fetch(`${API_BASE_URL}/videos?user_id=${userId}`, {
+      signal: abortController.signal
+    });
     if (!response.ok) throw new Error('동영상 목록 조회 실패');
     
     const data = await response.json();
-    if (data.success && data.videos) {
-      items.value = await Promise.all(data.videos.map(async v => {
+    
+    // 응답 데이터 형식 검증
+    if (!data || typeof data !== 'object') {
+      console.error('서버 응답 형식이 올바르지 않습니다:', data);
+      loadFromLocalStorage();
+      return;
+    }
+    
+    if (!data.success) {
+      console.warn('서버에서 success=false를 반환했습니다:', data);
+      loadFromLocalStorage();
+      return;
+    }
+    
+    // videos가 배열인지 확인
+    if (!Array.isArray(data.videos)) {
+      console.error('서버 응답의 videos가 배열이 아닙니다:', data);
+      loadFromLocalStorage();
+      return;
+    }
+    
+    // 동영상이 없는 경우 (정상적인 상황)
+    if (data.videos.length === 0) {
+      items.value = [];
+      // localStorage에서 로드 시도 (이전 세션 데이터가 있을 수 있음)
+      loadFromLocalStorage();
+      return;
+    }
+    
+    // file_url이 유효한 동영상만 필터링
+    const validVideos = data.videos.filter(v => v && v.file_url && v.file_url.trim() !== '');
+    
+    if (validVideos.length > 0) {
+      const loadedItems = await Promise.all(validVideos.map(async v => {
         const videoObj = createVideoObject({
-        id: v.id,
-        title: v.title,
-        originUrl: v.file_url,
-        displayUrl: v.file_url,
-        date: v.date,
-        fileSize: v.fileSize,
-        width: v.width,
-        height: v.height,
-        dbId: v.id,
-        videoId: v.video_id
+          id: v.id,
+          title: v.title,
+          originUrl: v.file_url,
+          displayUrl: v.file_url,
+          date: v.date,
+          fileSize: v.fileSize,
+          width: v.width,
+          height: v.height,
+          dbId: v.id,
+          videoId: v.video_id
         });
         
-        // 지원하지 않는 형식인 경우 MP4로 변환 요청
+        // 지원하지 않는 형식인 경우 MP4로 변환 요청 (비동기로 실행, 완료를 기다리지 않음)
         if (isUnsupportedFormat(v.title || '')) {
-          await convertVideoToMp4(v.id, userId, videoObj);
+          convertVideoToMp4(v.id, userId, videoObj).catch(err => {
+            console.warn(`동영상 변환 실패 (${v.title}):`, err);
+          });
         }
         
         return videoObj;
       }));
+      
+      // Vue 반응성 업데이트를 보장하기 위해 nextTick 사용
+      await nextTick();
+      items.value = loadedItems;
+    } else {
+      // 모든 동영상의 file_url이 비어있는 경우
+      console.warn('모든 동영상의 file_url이 비어있습니다.');
+      items.value = [];
+      // localStorage에서 로드 시도
+      loadFromLocalStorage();
     }
     
-    // VIA 서버 파일 목록 조회 (동기화 확인용)
-    await loadViaFiles();
+    // VIA 서버 파일 목록 조회 (동기화 확인용, 비동기로 실행, 완료를 기다리지 않음)
+    loadViaFiles().catch(err => {
+      console.warn('VIA 파일 목록 조회 실패:', err);
+    });
   } catch (error) {
+    // AbortError는 정상적인 취소이므로 무시
+    if (error.name === 'AbortError') {
+      return;
+    }
     console.error('동영상 목록 로드 실패:', error);
     loadFromLocalStorage();
+  } finally {
+    // 완료된 AbortController 제거
+    const index = abortControllers.value.indexOf(abortController);
+    if (index > -1) {
+      abortControllers.value.splice(index, 1);
+    }
   }
 }
 
 function loadFromLocalStorage() {
-    const stored = localStorage.getItem("videoItems");
-  if (!stored) return;
+  const stored = localStorage.getItem("videoItems");
+  if (!stored) {
+    items.value = [];
+    return;
+  }
   
-      items.value = JSON.parse(stored).map(v => {
+  try {
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) {
+      console.warn('localStorage의 videoItems가 배열 형식이 아닙니다.');
+      items.value = [];
+      return;
+    }
+    
+    const loadedItems = parsed
+      .filter(v => v && (v.displayUrl || v.url || v.originUrl)) // URL이 있는 항목만 필터링
+      .map(v => {
         const displayUrl = v.displayUrl || v.url || v.originUrl || '';
-    return createVideoObject({
-      id: v.id,
-      title: v.title,
+        return createVideoObject({
+          id: v.id,
+          title: v.title,
           originUrl: v.originUrl || v.url || displayUrl,
-      displayUrl,
-      date: v.date,
-      fileSize: v.fileSize,
-      width: v.width,
-      height: v.height
-    });
+          displayUrl,
+          date: v.date,
+          fileSize: v.fileSize,
+          width: v.width,
+          height: v.height
+        });
       });
+    
+    // Vue 반응성 업데이트를 보장하기 위해 nextTick 사용
+    nextTick(() => {
+      items.value = loadedItems;
+    });
+  } catch (error) {
+    console.error('localStorage에서 동영상 목록 로드 실패:', error);
+    items.value = [];
+  }
 }
 
 function persistToStorage() {
@@ -1598,12 +1866,58 @@ function getSelectionSignature(videos) {
 }
 
 function snapshotVideosForChat(videos) {
+  // 동영상 ID만 저장 (서버에서 최신 정보를 가져오기 위해)
   return (videos || []).map(video => ({
     id: video.id,
+    dbId: video.dbId || video.id, // DB ID 저장 (서버에서 조회용)
     title: video.title,
-    displayUrl: video.displayUrl,
     date: video.date
+    // displayUrl은 저장하지 않음 - 표시할 때 items.value에서 최신 정보 가져오기
   }));
+}
+
+// 채팅 메시지의 selectedVideos에 최신 displayUrl 업데이트
+function updateChatVideoUrls(chatSessions) {
+  chatSessions.forEach(chat => {
+    if (chat.messages) {
+      chat.messages.forEach(message => {
+        if (message.isInitial && message.selectedVideos) {
+          message.selectedVideos = message.selectedVideos.map(savedVideo => {
+            // items.value에서 최신 동영상 정보 찾기
+            const currentVideo = items.value.find(v => 
+              v.id === savedVideo.id || v.dbId === savedVideo.dbId
+            );
+            
+            if (currentVideo) {
+              // 최신 정보로 업데이트
+              return {
+                id: savedVideo.id,
+                dbId: savedVideo.dbId || savedVideo.id,
+                title: currentVideo.title || savedVideo.title,
+                displayUrl: currentVideo.displayUrl || currentVideo.originUrl || '',
+                date: currentVideo.date || savedVideo.date
+              };
+            } else {
+              // items.value에 없으면 서버에서 조회 시도
+              // 일단 저장된 정보 유지 (서버 조회는 나중에)
+              return {
+                ...savedVideo,
+                displayUrl: savedVideo.displayUrl || ''
+              };
+            }
+          });
+        }
+      });
+    }
+  });
+}
+
+function handleChatVideoError(video, event) {
+  console.warn('채팅창 동영상 로드 실패:', video.title, video.displayUrl, event);
+  // 에러 발생 시 displayUrl을 null로 설정하여 대체 UI 표시
+  if (video) {
+    video.displayUrl = null;
+  }
 }
 
 function createNewChat(videos = selectedVideos.value, signature) {
@@ -1781,8 +2095,14 @@ async function ensureVideoFile(video) {
     return null;
   }
 
+  // AbortController 생성 및 추적
+  const abortController = new AbortController();
+  abortControllers.value.push(abortController);
+  
   try {
-    const response = await fetch(video.displayUrl);
+    const response = await fetch(video.displayUrl, {
+      signal: abortController.signal
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch video blob (${response.status})`);
     }
@@ -1792,8 +2112,18 @@ async function ensureVideoFile(video) {
     video.file = file;
     return file;
   } catch (error) {
+    // AbortError는 정상적인 취소이므로 무시
+    if (error.name === 'AbortError') {
+      return null;
+    }
     console.error('Failed to reconstruct File from video URL:', error);
     return null;
+  } finally {
+    // 완료된 AbortController 제거
+    const index = abortControllers.value.indexOf(abortController);
+    if (index > -1) {
+      abortControllers.value.splice(index, 1);
+    }
   }
 }
 
@@ -1862,9 +2192,14 @@ async function handleSearch() {
       formData.append('video_ids', JSON.stringify(videoIdMap));
     }
 
+    // AbortController 생성 및 추적
+    const abortController = new AbortController();
+    abortControllers.value.push(abortController);
+    
     const response = await fetch(`${API_BASE_URL}/generate-clips`, {
       method: 'POST',
-      body: formData
+      body: formData,
+      signal: abortController.signal
     });
 
     if (!response.ok) {
@@ -1919,6 +2254,11 @@ async function handleSearch() {
       timestamp: getCurrentTime()
     });
   } catch (error) {
+    // AbortError는 정상적인 취소이므로 무시
+    if (error.name === 'AbortError') {
+      isSearching.value = false;
+      return;
+    }
     console.error('Search request failed:', error);
     currentChat.messages.push({
       role: 'assistant',
@@ -1928,6 +2268,13 @@ async function handleSearch() {
   } finally {
     isSearching.value = false;
     scrollToBottom();
+    // 완료된 AbortController 제거
+    if (typeof abortController !== 'undefined') {
+      const index = abortControllers.value.indexOf(abortController);
+      if (index > -1) {
+        abortControllers.value.splice(index, 1);
+      }
+    }
   }
 }
 

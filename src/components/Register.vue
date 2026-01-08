@@ -299,7 +299,7 @@ async function sendVerificationCode() {
   successMessage.value = "";
 
   try {
-    const res = await axios.post("http://172.16.15.69:8001/send-verification-code", {
+    const res = await axios.post("http://localhost:8001/send-verification-code", {
       email: email.value.trim()
     });
     
@@ -340,7 +340,7 @@ async function verifyEmailCode() {
   successMessage.value = "";
 
   try {
-    const res = await axios.post("http://172.16.15.69:8001/verify-email-code", {
+    const res = await axios.post("http://localhost:8001/verify-email-code", {
       email: email.value.trim(),
       code: verificationCode.value.trim()
     });
@@ -386,7 +386,7 @@ async function register() {
   successMessage.value = "";
 
   try {
-      const res = await axios.post("http://172.16.15.69:8001/register", {
+      const res = await axios.post("http://localhost:8001/register", {
       username: id.value.trim(),
       password: pw.value,
       email: email.value.trim(),

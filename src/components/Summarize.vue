@@ -557,7 +557,7 @@ import Setting from '@/components/Setting.vue';
 import settingIcon from '@/assets/icons/setting.png';
 
 // ==================== 상수 정의 ====================
-const API_BASE_URL = 'http://172.16.15.69:8001';
+const API_BASE_URL = 'http://localhost:8001';
 
 // VIA 파일 목록 조회 함수
 async function loadViaFiles() {

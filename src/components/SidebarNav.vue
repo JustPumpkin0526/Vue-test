@@ -1,48 +1,57 @@
 <template>
-  <aside :class="[collapsed ? 'w-[105px]' : 'w-64', ' h-full shrink-0 border-r bg-gray-100 dark:bg-gray-950 border-gray-200 dark:border-gray-800 p-6 flex flex-col justify-between relative transition-all duration-200']">
+  <aside :class="[collapsed ? 'w-[112px]' : 'w-[240px]', ' h-full shrink-0 border-r bg-gray-100 dark:bg-gray-950 border-gray-200 dark:border-gray-800 p-6 flex flex-col justify-between relative transition-all duration-200']">
     <!-- 로고 -->
     <div class="flex items-center gap-3 cursor-pointer mb-6 overflow-hidden" @click="goToVideoList" :class="collapsed ? 'justify-center' : ''">
-      <img :src="logoUrl" alt="Intellivix Logo" class="h-8 w-auto object-contain flex-shrink-0" />
+      <img :src="logoUrl" alt="Intellivix Logo" class="h-12 w-auto object-contain flex-shrink-0" />
       <h1 v-if="!collapsed" class="text-2xl font-bold text-vix-primary dark:text-white whitespace-nowrap flex-shrink-0">Vix VSS</h1>
     </div>
 
-    <nav class="flex flex-col flex-1">
+    <nav class="flex flex-col flex-1 gap-2">
       <RouterLink
         to="/search"
-        class="flex items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white dark:hover:bg-gray-800 active:scale-[0.97]"
-        :class="isActive('/search')">
-        <svg viewBox="0 0 24 24" class="w-6 h-6 icon-base text-gray-700 dark:text-white">
+        :class="[
+          'flex items-center rounded-md py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white dark:hover:bg-gray-800 active:scale-[0.97]',
+          collapsed ? 'justify-center' : 'px-4',
+          isActive('/search')
+        ]">
+        <svg viewBox="0 0 24 24" :class="['w-6 h-6 icon-base text-gray-700 dark:text-white', collapsed ? '' : 'flex-shrink-0']">
           <circle cx="11" cy="11" r="7" stroke="currentColor" fill="none" />
           <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" />
         </svg>
-        <span v-if="!collapsed" class="transition-opacity duration-200 text-lg text-gray-700 dark:text-white overflow-hidden whitespace-nowrap">{{ tSidebar.search }}</span>
+        <span v-if="!collapsed" class="ml-3 transition-opacity duration-200 text-lg text-gray-700 dark:text-white overflow-hidden whitespace-nowrap">{{ tSidebar.search }}</span>
       </RouterLink>
       <RouterLink
         to="/summarize"
-        class="flex items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white dark:hover:bg-gray-800 active:scale-[0.97]"
-        :class="isActive('/summarize')">
-        <svg viewBox="0 0 24 24" class="w-6 h-6 icon-base text-gray-700 dark:text-white">
+        :class="[
+          'flex items-center rounded-md py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white dark:hover:bg-gray-800 active:scale-[0.97]',
+          collapsed ? 'justify-center' : 'px-4',
+          isActive('/summarize')
+        ]">
+        <svg viewBox="0 0 24 24" :class="['w-6 h-6 icon-base text-gray-700 dark:text-white', collapsed ? '' : 'flex-shrink-0']">
           <rect x="3" y="4" width="18" height="16" rx="2" ry="2" stroke="currentColor" fill="none" />
           <line x1="7" y1="8" x2="17" y2="8" stroke="currentColor" />
           <line x1="7" y1="12" x2="13" y2="12" stroke="currentColor" />
           <line x1="7" y1="16" x2="11" y2="16" stroke="currentColor" />
         </svg>
-        <span v-if="!collapsed" class="transition-opacity duration-200 text-lg text-gray-700 dark:text-white overflow-hidden whitespace-nowrap">{{ tSidebar.summarize }}</span>
+        <span v-if="!collapsed" class="ml-3 transition-opacity duration-200 text-lg text-gray-700 dark:text-white overflow-hidden whitespace-nowrap">{{ tSidebar.summarize }}</span>
       </RouterLink>
       <RouterLink
         to="/report"
-        class="flex items-center gap-3 rounded-md px-4 py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white dark:hover:bg-gray-800 active:scale-[0.97]"
-        :class="isActive('/report')">
-        <svg viewBox="0 0 24 24" class="w-6 h-6 icon-base text-gray-700 dark:text-white">
+        :class="[
+          'flex items-center rounded-md py-3 relative overflow-hidden transform transition-all duration-200 group hover:shadow hover:bg-white dark:hover:bg-gray-800 active:scale-[0.97]',
+          collapsed ? 'justify-center' : 'px-4',
+          isActive('/report')
+        ]">
+        <svg viewBox="0 0 24 24" :class="['w-6 h-6 icon-base text-gray-700 dark:text-white', collapsed ? '' : 'flex-shrink-0']">
           <path d="M4 19V5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" stroke="currentColor" fill="none" />
           <polyline points="14 3 14 8 19 8" stroke="currentColor" fill="none" />
           <line x1="8" y1="13" x2="16" y2="13" stroke="currentColor" />
           <line x1="8" y1="17" x2="12" y2="17" stroke="currentColor" />
         </svg>
-        <span v-if="!collapsed" class="transition-opacity duration-200 text-lg text-gray-700 dark:text-white overflow-hidden whitespace-nowrap">{{ tSidebar.report }}</span>
+        <span v-if="!collapsed" class="ml-3 transition-opacity duration-200 text-lg text-gray-700 dark:text-white overflow-hidden whitespace-nowrap">{{ tSidebar.report }}</span>
       </RouterLink>
 
-      <div class="absolute left-6 right-6 bottom-[1vh] flex flex-col items-start space-y-3">
+      <div :class="['absolute left-6 right-6 bottom-[1vh] flex flex-col space-y-3', collapsed ? 'items-center' : 'items-start']">
         <!-- Collapse button positioned with the bottom group -->
         <button
           :class="[
@@ -97,14 +106,14 @@
               >
                 <!-- 프로필 이미지 (이니셜 아바타) -->
                 <div 
-                  class="profile-avatar flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md hover:scale-110 transition-transform overflow-hidden"
+                  class="profile-avatar flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md hover:scale-110 transition-transform overflow-hidden aspect-square"
                   :class="profileImageUrl ? 'bg-white' : 'bg-gradient-to-br from-vix-primary to-blue-600'"
                 >
                   <img 
                     v-if="profileImageUrl" 
                     :src="profileImageUrl" 
                     :alt="userId"
-                    class="w-full h-full object-cover"
+                    class="w-full h-full object-cover aspect-square"
                   />
                   <span v-else>{{ getUserInitial(userId) }}</span>
                 </div>
@@ -117,7 +126,7 @@
             <!-- 프로필 (접힌 상태) -->
             <div v-else class="flex justify-center px-2 py-2">
               <div 
-                class="profile-avatar w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md cursor-pointer hover:scale-110 transition-transform overflow-hidden"
+                class="profile-avatar w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md cursor-pointer hover:scale-110 transition-transform overflow-hidden aspect-square"
                 :class="profileImageUrl ? 'bg-white' : 'bg-gradient-to-br from-vix-primary to-blue-600'"
                 @click="toggleProfileMenu"
                 ref="profileBlockRef"
@@ -126,7 +135,7 @@
                   v-if="profileImageUrl" 
                   :src="profileImageUrl" 
                   :alt="userId"
-                  class="w-full h-full object-cover"
+                  class="w-full h-full object-cover aspect-square"
                 />
                 <span v-else>{{ getUserInitial(userId) }}</span>
               </div>
@@ -203,7 +212,7 @@
                   <div class="flex flex-col items-center gap-4 mb-6">
                     <!-- 프로필 이미지 -->
                     <div 
-                      class="relative w-24 h-24 rounded-full flex items-center justify-center text-white font-bold text-4xl shadow-lg cursor-pointer hover:opacity-80 transition-opacity overflow-hidden"
+                      class="relative w-24 h-24 rounded-full flex items-center justify-center text-white font-bold text-4xl shadow-lg cursor-pointer hover:opacity-80 transition-opacity overflow-hidden aspect-square"
                       :class="profileImageUrl ? 'bg-white' : 'bg-gradient-to-br from-vix-primary to-blue-600'"
                       @click="triggerImageUpload"
                       :title="tSidebar.changeProfileImage"
@@ -212,7 +221,7 @@
                         v-if="profileImageUrl" 
                         :src="profileImageUrl" 
                         :alt="userId"
-                        class="w-full h-full object-cover"
+                        class="w-full h-full object-cover aspect-square"
                       />
                       <span v-else>{{ getUserInitial(userId) }}</span>
                       <!-- 업로드 오버레이 -->
@@ -697,7 +706,7 @@ function closeProfileSettings() {
 }
 
 // API 설정
-const API_BASE_URL = 'http://172.16.15.69:8001';
+const API_BASE_URL = 'http://localhost:8001';
 
 async function loadUserInfo() {
   if (!userId.value) return;
