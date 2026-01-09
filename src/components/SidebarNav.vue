@@ -706,7 +706,7 @@ function closeProfileSettings() {
 }
 
 // API 설정
-const API_BASE_URL = 'http://localhost:8001';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
 
 async function loadUserInfo() {
   if (!userId.value) return;

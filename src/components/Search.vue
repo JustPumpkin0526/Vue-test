@@ -622,7 +622,7 @@ import { useSummaryVideoStore } from '@/stores/summaryVideoStore';
 import { useSettingStore } from '@/stores/settingStore';
 
 // ==================== 상수 정의 ====================
-const API_BASE_URL = 'http://localhost:8001';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
 
 // VIA 파일 목록 조회 함수
 async function loadViaFiles() {
@@ -1789,7 +1789,26 @@ async function confirmDelete() {
 
 function goToSummary() {
   const selectedVideos = items.value.filter(v => selectedIds.value.includes(v.id));
-  summaryVideoStore.setVideos(selectedVideos); // Pinia 스토어에 선택된 동영상 저장
+  
+  // Summarize로 전달할 비디오 객체 준비 (objectUrl 제거, 서버 URL만 사용)
+  const videosForSummarize = selectedVideos.map(video => {
+    // objectUrl이 blob: URL인 경우 originUrl 사용 (서버 URL)
+    // objectUrl이 없거나 originUrl이 있는 경우 originUrl 우선 사용
+    const displayUrl = video.originUrl || (video.displayUrl?.startsWith('blob:') ? null : video.displayUrl) || video.url || '';
+    const originUrl = video.originUrl || video.url || displayUrl;
+    
+    return {
+      ...video,
+      // objectUrl은 제거 (Summarize에서 무효화될 수 있음)
+      objectUrl: null,
+      // 서버 URL만 사용 (blob: URL 제외)
+      displayUrl: displayUrl.startsWith('blob:') ? originUrl : displayUrl,
+      originUrl: originUrl,
+      url: originUrl || displayUrl
+    };
+  });
+  
+  summaryVideoStore.setVideos(videosForSummarize); // Pinia 스토어에 선택된 동영상 저장
   router.push({ name: 'Summarize' }); // Summarize 페이지로 이동
 }
 
@@ -2412,14 +2431,30 @@ function switchToObjectUrl(video, videoElement, currentUrl) {
   }
 }
 
-function handleVideoError(videoId, event, isZoom = false) {
+async function handleVideoError(videoId, event, isZoom = false) {
   const video = items.value.find(v => v.id === videoId);
   if (!video) return;
   
   initializeVideoErrorTracking(video);
   
+  // 에러 상세 정보 수집 (디버깅용)
+  const errorInfo = {
+    videoId,
+    title: video.title,
+    currentUrl: isZoom && zoomedVideo.value ? zoomedVideo.value.displayUrl : video.displayUrl,
+    originUrl: video.originUrl,
+    errorCount: video._errorRetryCount,
+    event: event?.type || 'unknown'
+  };
+  
   if (video._errorRetryCount >= MAX_ERROR_RETRIES) {
-    console.error(`비디오 로드 최종 실패 (최대 재시도 횟수 초과): ${video.title}`);
+    // 최종 실패 시 displayUrl을 null로 설정하여 썸네일 없음 상태로 표시
+    console.warn(`비디오 로드 최종 실패 (최대 재시도 횟수 초과): ${video.title}. 썸네일을 숨깁니다.`, errorInfo);
+    if (!isZoom) {
+      video.displayUrl = null;
+    } else if (zoomedVideo.value) {
+      zoomedVideo.value.displayUrl = null;
+    }
     return;
   }
   
@@ -2435,34 +2470,137 @@ function handleVideoError(videoId, event, isZoom = false) {
   // 지원하지 않는 형식인지 확인 (AVI, MKV, FLV, WMV)
   const isUnsupported = isUnsupportedFormat(video.title || video.name || '');
   
+  // 1. blob: URL 실패 시 서버 URL로 전환
   if (isBlobUrl && video.originUrl && !video.originUrl.startsWith('blob:')) {
     if (video._triedUrls.has(video.originUrl)) {
-      console.error(`비디오 로드 실패 (이미 모든 URL 시도함): ${video.title}`);
+      // 이미 서버 URL을 시도했으면 최종 실패
+      console.warn(`비디오 로드 실패 (모든 URL 시도 완료): ${video.title}`, errorInfo);
+      if (!isZoom) {
+        video.displayUrl = null;
+      } else if (zoomedVideo.value) {
+        zoomedVideo.value.displayUrl = null;
+      }
       return;
     }
-    console.warn(`비디오 로드 실패 (ObjectURL), 서버 URL로 전환: ${video.title}`);
+    console.warn(`비디오 로드 실패 (ObjectURL), 서버 URL로 전환: ${video.title}`, errorInfo);
     switchToServerUrl(video, videoElement);
     if (isZoom && zoomedVideo.value) {
       zoomedVideo.value.displayUrl = video.originUrl;
     }
-  } else if (!isBlobUrl && video.file && !isUnsupported) {
-    // 지원하지 않는 형식이 아닌 경우에만 ObjectURL로 재시도
+    return;
+  }
+  
+  // 2. 서버 URL 실패 시 ObjectURL로 재시도 (지원하는 형식만)
+  if (!isBlobUrl && video.file && !isUnsupported) {
     if (video.objectUrl && video._triedUrls.has(video.objectUrl)) {
-      console.error(`비디오 로드 실패 (이미 모든 URL 시도함): ${video.title}`);
+      // 이미 ObjectURL을 시도했으면 최종 실패
+      console.warn(`비디오 로드 실패 (모든 URL 시도 완료): ${video.title}`, errorInfo);
+      if (!isZoom) {
+        video.displayUrl = null;
+      } else if (zoomedVideo.value) {
+        zoomedVideo.value.displayUrl = null;
+      }
       return;
     }
-    console.warn(`비디오 로드 실패 (서버 URL), ObjectURL로 재시도: ${video.title}`);
+    console.warn(`비디오 로드 실패 (서버 URL), ObjectURL로 재시도: ${video.title}`, errorInfo);
     switchToObjectUrl(video, videoElement, currentUrl);
     if (isZoom && zoomedVideo.value) {
       zoomedVideo.value.displayUrl = video.displayUrl;
     }
-  } else {
-    // 지원하지 않는 형식이거나 file이 없는 경우 서버 URL만 사용
-    if (isUnsupported) {
-      console.warn(`비디오 로드 실패 (지원하지 않는 형식: ${getVideoFileExtension(video.title || video.name || '')}): ${video.title}. 서버 URL만 사용합니다.`);
-  } else {
-    console.error(`비디오 로드 최종 실패: ${video.title}`, event);
+    return;
+  }
+  
+  // 3. 지원하지 않는 형식이거나 file이 없는 경우
+  if (isUnsupported) {
+    // 변환된 MP4가 없으면 변환 요청
+    const userId = localStorage.getItem("vss_user_id");
+    if (userId && video.dbId && !video._isConverting) {
+      console.info(`지원하지 않는 형식, MP4 변환 요청: ${video.title}`, errorInfo);
+      convertVideoToMp4(video.dbId, userId, video).then(convertedUrl => {
+        if (convertedUrl && videoElement) {
+          videoElement.crossOrigin = 'anonymous';
+          videoElement.src = convertedUrl;
+          videoElement.load();
+        }
+      }).catch(err => {
+        console.warn(`동영상 변환 실패 (${video.title}):`, err);
+      });
     }
+    return;
+  }
+  
+  // 4. 서버 URL이지만 로드 실패한 경우 - 변환된 MP4 URL 확인 및 URL 접근성 확인
+  if (!isBlobUrl && !video.file && currentUrl && currentUrl.startsWith('http')) {
+    // 변환된 MP4 URL 확인 (converted-videos 경로) - 먼저 시도
+    if (currentUrl.includes('/video-files/') && !currentUrl.includes('/converted-videos/')) {
+      // 파일명에서 확장자 제거 후 .mp4 추가
+      const urlPath = new URL(currentUrl).pathname;
+      const filename = urlPath.split('/').pop() || '';
+      const baseName = filename.replace(/\.[^.]+$/, ''); // 확장자 제거
+      const convertedUrl = currentUrl.replace('/video-files/', '/converted-videos/').replace(filename, `${baseName}.mp4`);
+      
+      if (!video._triedUrls.has(convertedUrl)) {
+        console.info(`변환된 MP4 URL 시도: ${video.title}`, { 
+          originalUrl: currentUrl,
+          convertedUrl 
+        });
+        video._triedUrls.add(convertedUrl);
+        if (videoElement) {
+          videoElement.crossOrigin = 'anonymous';
+          videoElement.src = convertedUrl;
+          videoElement.load();
+        }
+        if (isZoom && zoomedVideo.value) {
+          zoomedVideo.value.displayUrl = convertedUrl;
+        }
+        return;
+      }
+    }
+    
+    // 변환된 MP4도 실패했거나 없으면 서버 URL 접근성 확인
+    try {
+      // HEAD 요청으로 파일 존재 여부 확인 (CORS 문제로 인해 실패할 수 있음)
+      const response = await fetch(currentUrl, { 
+        method: 'HEAD',
+        mode: 'cors',
+        cache: 'no-cache'
+      });
+      
+      if (!response.ok) {
+        console.warn(`비디오 로드 실패 (HTTP ${response.status}): ${video.title}`, {
+          ...errorInfo,
+          url: currentUrl,
+          httpStatus: response.status,
+          httpStatusText: response.statusText,
+          note: `서버에서 파일이 존재한다고 했지만 HTTP ${response.status} 에러가 발생했습니다.`
+        });
+      } else {
+        // HTTP 응답은 성공했지만 비디오 로드 실패 - 파일 형식 문제 가능성
+        console.warn(`비디오 로드 실패 (파일 형식 문제 가능성): ${video.title}`, {
+          ...errorInfo,
+          url: currentUrl,
+          httpStatus: response.status,
+          contentType: response.headers.get('content-type'),
+          note: 'HTTP 응답은 성공했지만 비디오 엘리먼트에서 로드 실패. 파일 형식이나 손상 가능성.'
+        });
+      }
+    } catch (fetchError) {
+      // CORS 문제 또는 네트워크 문제
+      console.warn(`비디오 URL 접근 확인 실패 (CORS/네트워크 문제 가능성): ${video.title}`, {
+        ...errorInfo,
+        url: currentUrl,
+        fetchError: fetchError.message,
+        note: 'CORS 문제이거나 네트워크 연결 문제일 수 있습니다.'
+      });
+    }
+  }
+  
+  // 5. 그 외의 경우 최종 실패
+  console.warn(`비디오 로드 실패: ${video.title}`, errorInfo);
+  if (!isZoom) {
+    video.displayUrl = null;
+  } else if (zoomedVideo.value) {
+    zoomedVideo.value.displayUrl = null;
   }
 }
 

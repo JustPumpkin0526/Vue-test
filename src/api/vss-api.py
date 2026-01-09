@@ -2649,7 +2649,7 @@ async def upload_video_to_db(
 
 @app.get("/videos")
 async def get_videos(user_id: str = Query(...)):
-    """사용자의 동영상 목록 조회"""
+    """사용자의 동영상 목록 조회 (파일 존재 여부 확인 및 유효한 URL 반환)"""
     try:
         ensure_db_connection()
         cursor.execute(
@@ -2663,16 +2663,58 @@ async def get_videos(user_id: str = Query(...)):
         
         videos = []
         for row in rows:
+            video_id = row[0]
+            file_name = row[1]
+            file_url = row[2]  # DB에 저장된 FILE_URL (예: /video-files/filename_timestamp.ext)
+            file_size = row[3]
+            width = row[4]
+            height = row[5]
+            duration = row[6]
+            created_at = row[7]
+            via_video_id = row[8]
+            
+            # 파일 존재 여부 확인 및 유효한 URL 결정
+            valid_file_url = ""
+            
+            # 1. 원본 파일 확인 (FILE_URL에서 파일명 추출)
+            if file_url:
+                # FILE_URL에서 파일명 추출 (예: /video-files/filename.ext -> filename.ext)
+                original_filename = file_url.replace("/video-files/", "").lstrip("/")
+                original_file_path = videos_dir / original_filename
+                
+                if original_file_path.exists():
+                    # 원본 파일이 존재하면 원본 URL 사용
+                    valid_file_url = build_file_url(file_url)
+                else:
+                    # 원본 파일이 없으면 변환된 MP4 확인
+                    # 변환된 파일명: filename_timestamp.mp4 (확장자를 .mp4로 변경)
+                    base_name = Path(original_filename).stem  # 확장자 제거
+                    converted_filename = f"{base_name}.mp4"
+                    converted_file_path = converted_videos_dir / converted_filename
+                    
+                    if converted_file_path.exists():
+                        # 변환된 MP4가 존재하면 변환된 URL 사용
+                        converted_url = f"/converted-videos/{converted_filename}"
+                        valid_file_url = build_file_url(converted_url)
+                        logger.info(f"원본 파일 없음, 변환된 MP4 사용: {file_name} -> {converted_filename}")
+                    else:
+                        # 둘 다 없으면 원본 URL 사용 (나중에 404 처리)
+                        valid_file_url = build_file_url(file_url)
+                        logger.warning(f"동영상 파일을 찾을 수 없음: {file_name} (원본: {original_filename}, 변환: {converted_filename})")
+            else:
+                # FILE_URL이 없으면 빈 문자열
+                logger.warning(f"FILE_URL이 없음: video_id={video_id}, file_name={file_name}")
+            
             videos.append({
-                "id": row[0],
-                "title": row[1],
-                "file_url": build_file_url(row[2]),
-                "fileSize": row[3],
-                "width": row[4],
-                "height": row[5],
-                "duration": row[6],
-                "date": row[7].strftime("%Y-%m-%d") if row[7] else None,
-                "video_id": row[8]
+                "id": video_id,
+                "title": file_name,
+                "file_url": valid_file_url,
+                "fileSize": file_size,
+                "width": width,
+                "height": height,
+                "duration": duration,
+                "date": created_at.strftime("%Y-%m-%d") if created_at else None,
+                "video_id": via_video_id
             })
         
         return {"success": True, "videos": videos}

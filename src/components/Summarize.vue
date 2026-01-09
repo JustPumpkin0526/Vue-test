@@ -557,7 +557,7 @@ import Setting from '@/components/Setting.vue';
 import settingIcon from '@/assets/icons/setting.png';
 
 // ==================== 상수 정의 ====================
-const API_BASE_URL = 'http://localhost:8001';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
 
 // VIA 파일 목록 조회 함수
 async function loadViaFiles() {
@@ -980,14 +980,31 @@ async function restoreMissingFile(video) {
   if (!video || video.file instanceof File) return;
   const src = video.displayUrl || video.originUrl;
   if (!src) return;
+  
+  // blob: URL은 복원하지 않음 (이미 무효화되었을 수 있음)
+  if (src.startsWith('blob:')) {
+    return;
+  }
+  
+  // 서버 URL인 경우에만 복원 시도
+  if (!src.startsWith('http://') && !src.startsWith('https://')) {
+    return;
+  }
+  
   try {
     const resp = await fetch(src);
+    if (!resp.ok) {
+      // 404 등 에러는 조용히 무시 (서버 URL을 직접 사용)
+      console.warn(`비디오 파일 복원 실패 (HTTP ${resp.status}): ${src}. 서버 URL을 직접 사용합니다.`);
+      return;
+    }
     const blob = await resp.blob();
     // 파일명 추론: name/title/기본값
     const filename = (video.name || video.title || 'video') + (blob.type && !blob.type.includes('mp4') ? '' : '.mp4');
     video.file = new File([blob], filename, { type: blob.type || 'video/mp4' });
   } catch (e) {
-    // File 복원 실패 시 무시
+    // File 복원 실패 시 무시 (서버 URL을 직접 사용)
+    console.warn(`비디오 파일 복원 실패: ${src}. 서버 URL을 직접 사용합니다.`, e);
   }
 }
 

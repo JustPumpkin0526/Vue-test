@@ -229,6 +229,9 @@ import { ref, computed, onMounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import axios from "axios";
 
+// API 설정
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
+
 const router = useRouter();
 const route = useRoute();
 const id = ref("");
@@ -309,7 +312,7 @@ async function sendVerificationCode() {
   successMessage.value = "";
 
   try {
-    const res = await axios.post("http://localhost:8001/send-reset-password-code", {
+    const res = await axios.post(`${API_BASE_URL}/send-reset-password-code`, {
       username: id.value.trim(),
       email: email.value.trim()
     });
@@ -351,7 +354,7 @@ async function verifyEmailCode() {
   successMessage.value = "";
 
   try {
-    const res = await axios.post("http://localhost:8001/verify-reset-password-code", {
+    const res = await axios.post(`${API_BASE_URL}/verify-reset-password-code`, {
       username: id.value.trim(),
       email: email.value.trim(),
       code: verificationCode.value.trim()
@@ -398,7 +401,7 @@ async function resetPassword() {
   successMessage.value = "";
 
   try {
-    const res = await axios.post("http://localhost:8001/reset-password", {
+    const res = await axios.post(`${API_BASE_URL}/reset-password`, {
       username: id.value.trim(),
       email: email.value.trim(),
       verification_code: verificationCode.value.trim(),

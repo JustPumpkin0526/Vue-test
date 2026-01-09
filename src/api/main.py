@@ -26,15 +26,9 @@ def ignore_connection_reset(loop, context):
     loop.default_exception_handler(context)
 
 # asyncio 이벤트 루프에 예외 핸들러 설정
-if sys.platform == 'win32':
-    # Windows에서만 설정 (ProactorBasePipeTransport는 Windows에서만 사용)
-    try:
-        loop = asyncio.get_event_loop()
-        if loop is not None:
-            loop.set_exception_handler(ignore_connection_reset)
-    except RuntimeError:
-        # 이벤트 루프가 아직 생성되지 않은 경우, 나중에 설정
-        pass
+# Python 3.10+에서는 get_event_loop()가 deprecated되었으므로
+# lifespan에서 get_running_loop()를 사용하도록 변경
+# (모듈 레벨에서는 이벤트 루프가 없을 수 있으므로 여기서는 설정하지 않음)
 
 # 설정 import
 from config.settings import (
@@ -79,6 +73,13 @@ async def lifespan(app: FastAPI):
             logger.warning("첫 요청 시 연결을 다시 시도합니다.")
     
     logger.info("애플리케이션이 시작되었습니다. VIA 서버의 query_video를 사용합니다.")
+    logger.info("=" * 60)
+    logger.info("서버가 정상적으로 시작되었습니다.")
+    logger.info(f"서버 주소: http://0.0.0.0:8001")
+    logger.info(f"로컬 접속: http://localhost:8001")
+    logger.info("API 문서: http://localhost:8001/docs")
+    logger.info("=" * 60)
+    logger.info("서버가 요청을 기다리는 중입니다... (정상 상태)")
     
     yield  # 애플리케이션이 실행되는 동안 여기서 대기
     
@@ -262,12 +263,16 @@ try:
                       "/register", "/send-reset-password-code", "/verify-reset-password-code",
                       "/reset-password", "/debug/email-check"}
     
+    # FastAPI 기본 엔드포인트 제외 (중복 방지)
+    fastapi_default_paths = {"/docs", "/redoc", "/openapi.json", "/openapi"}
+    
     loaded_routes = []
     for route in vss_api.app.routes:
         # auth와 users 라우터에 포함된 경로는 제외
         if hasattr(route, 'path'):
             route_path = route.path
-            if any(route_path.startswith(excluded) for excluded in excluded_paths):
+            # FastAPI 기본 엔드포인트 제외
+            if route_path in fastapi_default_paths or any(route_path.startswith(excluded) for excluded in excluded_paths):
                 continue
             # /user/ 경로도 제외
             if route_path.startswith("/user/"):

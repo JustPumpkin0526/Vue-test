@@ -229,6 +229,9 @@ import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
 import axios from "axios";
 
+// API 설정
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
+
 const router = useRouter();
 const id = ref("");
 const pw = ref("");
@@ -299,7 +302,7 @@ async function sendVerificationCode() {
   successMessage.value = "";
 
   try {
-    const res = await axios.post("http://localhost:8001/send-verification-code", {
+    const res = await axios.post(`${API_BASE_URL}/send-verification-code`, {
       email: email.value.trim()
     });
     
@@ -340,7 +343,7 @@ async function verifyEmailCode() {
   successMessage.value = "";
 
   try {
-    const res = await axios.post("http://localhost:8001/verify-email-code", {
+    const res = await axios.post(`${API_BASE_URL}/verify-email-code`, {
       email: email.value.trim(),
       code: verificationCode.value.trim()
     });
@@ -386,7 +389,7 @@ async function register() {
   successMessage.value = "";
 
   try {
-      const res = await axios.post("http://localhost:8001/register", {
+      const res = await axios.post(`${API_BASE_URL}/register`, {
       username: id.value.trim(),
       password: pw.value,
       email: email.value.trim(),
